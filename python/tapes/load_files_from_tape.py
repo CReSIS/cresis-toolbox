@@ -1,4 +1,4 @@
-#!.venv/bin/python
+#!/root/utilities/cresis-toolbox/python/tapes/.venv/bin/python
 """
 Automatically load tapes in the Qualstar Q40 and pull the files from the given list.
 
@@ -19,20 +19,20 @@ import tarfile
 import time
 from getpass import getpass
 
-TAPES_FILE = '/root/utilities/tapes.txt'  # Produced from run_get_raw_files.m
-TAPE_LIB_DEV = "/dev/sg4"
+TAPES_FILE = '/root/utilities/tapes_harry_frames2.txt'  # Produced from run_get_raw_files.m
+TAPE_LIB_DEV = "/dev/sg9"
 TAPE_MOUNT_PATH = "/mnt/ltfs"
 RESFS_TAPE_LIST = "resfs_tapes.txt"
 
 # Determine with `lsscsi -g`
 TAPE_DRIVE_DEVS = {
-    "0": "/dev/sg3",
-    "1": "/dev/sg5",
+    "0": "/dev/sg8",
+    "1": "/dev/sg7",
 }
 SKIP_EXISTING = True  # Do not ask to overwrite existing files and just skip instead
 FS_PATH_SUBS = {  # Path subsitutions for destinations on the filesystem
    "/N/dc2/projects/cresis/": "/cresis/snfs1/data/Accum_Data/",
-   "/N/dcwan/projects/cresis/": "/cresis/snfs1/data/Accum_Data/"
+   "/N/dcwan/projects/cresis/": "/cresis/snfs1/data/Accum_Data/",
 }
 
 SSH_SERVER = "dtn.ku.edu"
@@ -259,6 +259,10 @@ def scp_file_from_server(remote_file_path, fs_file_path, attempts=3):
             print(f"**Failed to copy {e.args} file from server: " + remote_file_path)
             return
 
+        if type(e.args) is tuple and len(e.args) > 0 and "Permission denied" in e.args[0]:
+            print(f"User does not have access permissions on file: {remote_file_path}")
+            return
+
         print("Timeout during SCP, waiting and trying again")
         time.sleep(.5)
         get_ssh_client.scp_client.close()
@@ -372,6 +376,8 @@ if __name__ == "__main__":
     tape_mapping, path_mapping = parse_tapes_file()
     resfs_tapes = read_resfs_tapes()
     load_tapes(tape_mapping, path_mapping, resfs_tapes)
+
+    print("Finished restoring files.")
 
     try:
         # Close scp connection if it was opened
