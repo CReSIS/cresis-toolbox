@@ -1,4 +1,5 @@
 % script run_layer_tracker_tune
+%
 % Runs layer_tracker.m for tuning layer tracking hyperparameters.
 %
 % Authors: Anjali Pare, John Paden
@@ -14,9 +15,11 @@ param_override = [];
 % params = read_param_xls(ct_filename_param('rds_param_2011_Greenland_P3.xls'));
 params = read_param_xls(ct_filename_param('rds_param_2014_Greenland_P3.xls'));
 % params = read_param_xls(ct_filename_param('rds_param_2018_Greenland_P3.xls'))
+
 params = ct_set_params(params,'cmd.generic',1);%|20140415_05|20140421_01|20140516_01');%'20140415_05|20140421_01|20140514_01|20140313_09');
-%params = ct_set_params(params,'cmd.generic',0,'day_seg','20140310_01');
+params = ct_set_params(params,'cmd.generic',0, 'day_seg', '20140423_01');
 params = ct_set_params(params,'cmd.generic',0,'cmd.notes','Do not process');
+
 params = ct_set_params(params,'cmd.frms',[]); % Specify specific frames (or leave empty/undefined to do all frames)
 % params = ct_set_params(params,'cmd.generic',1,'day_seg','20110331_02');
 % params = ct_set_params(params,'cmd.frms',19); % Specify specific frames (or leave empty/undefined to do all frames)
@@ -31,14 +34,23 @@ param_override.layer_tracker.echogram_img = 0; % To choose an image besides the 
 % param_override.layer_tracker.echogram_source = 'CSARP_post/mvdr';
 param_override.layer_tracker.echogram_source = 'CSARP_post/standard';
 
+% temp_name: set to any string value as a unique identifier to save the
+% parameters
+param_override.layer_tracker.temp_name = 'test_anj'; % Set this name as a  unique identifier to save the parameters
+
 % layer_params: layerparams structure of where to store the output using
 % opsCopyLayers.m
 param_override.layer_tracker.layer_params = [];
-% Uncomment to enable layerdata storage
-param_override.layer_tracker.layer_params.layerdata_source = 'layer_tune_vit_season';
-% Uncomment to enable OPS storage
-% param_override.layer_tracker.layer_params.source = 'ops';
+if 1
+  % Uncomment to enable layerdata storage
+  % layer_tracker.layer_params.layerdate_source: Set the name of the layer
+  param_override.layer_tracker.layer_params.layerdata_source = 'layer_tune_vit_season_C_test';
+else
+  % Uncomment to enable OPS storage
+  % param_override.layer_tracker.layer_params.source = 'ops';
+end
 
+% tracker_method: Set which tracking method you want to use 'lsm' or 'viterbi'
 tracker_method = 'viterbi'; % Choose the tracking method
 % block_size_frms: Number of frames to be loaded at a time
 param_override.layer_tracker.block_size_frms = 1;
@@ -137,7 +149,7 @@ elseif strcmpi(tracker_method,'viterbi')
     track.filter_trim           = [0 120];
     track.norm.scale            = [-40 90];
     track.xcorr                 = echo_xcorr_profile('short_unitstep');
-    track.ground_truth.en = true;
+    track.ground_truth.en = false;
     track.ground_truth.layers.source = 'layerdata';
     track.ground_truth.layers.layerdata_source = 'layer';
     track.ground_truth.layers.name = 'bottom_mc';
@@ -188,9 +200,7 @@ for param_idx = 1:length(params)
     end
     [ctrl_chain{end+1},param] = layer_tracker(param,param_override);
     % Since we are tuning, save the parameters
-    out_param_fn = [ct_filename_ct_tmp(param,'','layer_tracker','') ...
-      sprintf('_%s_t%03d_%s.mat',datestr(now,'yyyymmdd_HHMMSS'), ...
-      length(param.layer_tracker.track), param.layer_tracker.track{1}.method)];
+    out_param_fn = [ct_filename_ct_tmp(param,'','layer_tracker',param.layer_tracker.temp_name),sprintf('_%s_t%03d_%s.mat',datestr(now,'yyyymmdd_HHMMSS'),length(param.layer_tracker.track), param.layer_tracker.track{1}.method)];
     fprintf('Saving tuning parameters %s\n',out_param_fn);
     ct_save(out_param_fn,'param');
   end

@@ -206,16 +206,18 @@ elseif strcmpi(example_str,'mass_conservation')
   insert_param = [];
   
   % params = read_param_xls(ct_filename_param('rds_param_2018_Greenland_P3.xls'),'');
-  params = read_param_xls(ct_filename_param('accum_param_2019_Antarctica_TObas.xls'),'');
+  params = read_param_xls(ct_filename_param('rds_param_2014_Greenland_P3.xls'),'');
+  params = ct_set_params(params,'cmd.generic',0);
   params = ct_set_params(params,'cmd.generic',1);
   params = ct_set_params(params,'cmd.generic',0,'cmd.notes','do not process');
+  params = ct_set_params(params,'cmd.generic',0, 'day_seg', '20140423_01');
   params = ct_set_params(params,'cmd.frms',[]);
-  % params = ct_set_params(params,'cmd.generic',0);
-  % params = ct_set_params(params,'cmd.generic',1,'day_seg','20200127_01');
-  % params = ct_set_params(params,'cmd.frms',[28:33]);
+%   params = ct_set_params(params,'cmd.generic',0);
+%   params = ct_set_params(params,'cmd.generic',1,'day_seg','20140313_08');
+%   params = ct_set_params(params,'cmd.frms',[]);
   
   proj_load_standard;
-  if 0
+  if 1
     % Greenland Mass Conservation
     grid_fn = ct_filename_gis(fullfile('greenland','mass_conservation','BedMachineGreenland-2017-09-20.nc'));
     insert_param.proj = arctic_proj;
@@ -251,14 +253,14 @@ elseif strcmpi(example_str,'mass_conservation')
     opsInsertLayer(params, insert_param);
   end
   
-  if 1
+  if 0
     % Mass conservation estimate, lower (minimum elevation) bound
     insert_param.data = max(0,(double(ncread(grid_fn,'thickness')) - ncread(grid_fn,'errbed')).' / (c/2/sqrt(er_ice))); % bottom_mc_top
     insert_param.layer_dest.name = 'bottom_mc_top';
     opsInsertLayer(params, insert_param);
   end
   
-  if 1
+  if 0
     % Mass conservation estimate, upper (maximum elevation) bound
     insert_param.data = max(0,(double(ncread(grid_fn,'thickness')) + ncread(grid_fn,'errbed')).' / (c/2/sqrt(er_ice))); % bottom_mc_bottom
     insert_param.layer_dest.name = 'bottom_mc_bot';
