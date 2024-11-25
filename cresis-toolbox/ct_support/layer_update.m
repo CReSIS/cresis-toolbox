@@ -21,16 +21,15 @@ fprintf('=====================================================================\n
 
 %% Input checks
 
+% param.layer_update.in_path: input path string, default is 'layer'
 if ~isfield(param.layer_update,'in_path') || isempty(param.layer_update.in_path)
   param.layer_update.in_path = 'layer';
 end
 
+% param.layer_update.out_path: output path string, default is for out_path to
+% equal in_path
 if ~isfield(param.layer_update,'out_path') || isempty(param.layer_update.out_path)
   param.layer_update.out_path = param.layer_update.in_path;
-end
-
-if ~isfield(param.layer_update,'frames_records_en') || isempty(param.layer_update.frames_records_en)
-  param.layer_update.frames_records_en = true;
 end
 
 %% Update layers

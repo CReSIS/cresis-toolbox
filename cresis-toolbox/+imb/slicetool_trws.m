@@ -30,11 +30,22 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       %  .slice: current slice in 3D image (third index of .data)
       %  .surf_idx: active surface
       % slices: array of slices to operate on (overrides sb.slice)
+      if sb.surf_idx < 1 || sb.surf_idx > length(sb.sd.surf)
+        return
+      end
       control_idx = sb.sd.surf(sb.surf_idx).gt;
       active_idx = sb.sd.surf(sb.surf_idx).active;
       surf_idx = sb.sd.surf(sb.surf_idx).top;
       mask_idx = sb.sd.surf(sb.surf_idx).mask;
       
+      physical_constants;
+      
+      try
+        max_loops = eval(get(obj.gui.max_loopsLE,'String'));
+      catch ME
+        error('Error in number of loops: %s', ME.getReport);
+      end
+      max_loops = uint32(max_loops);
       try
         eval_cmd = get(obj.gui.slice_rangeLE,'String');
         slice_range = eval(eval_cmd);
@@ -43,37 +54,45 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
           eval_cmd, ME.message);
       end
       try
-        num_loops = eval(get(obj.gui.numloopsLE,'String'));
+        normalization = eval(get(obj.gui.normalizationLE,'String'));
       catch ME
-        error('Error in number of loops: %s', ME.getReport);
+        error('Error in normalization: %s', ME.getReport);
       end
       try
-        threshold = eval(get(obj.gui.thresholdLE,'String'));
+        gt_range = eval(get(obj.gui.gt_rangeLE,'String'));
+        gt_range = gt_range(1);
       catch ME
-        error('Error in threshold: %s', ME.getReport);
+        error('Error in ground truth range: %s', ME.getReport);
       end
       try
-        range = eval(get(obj.gui.rangeLE,'String'));
+        ct_weight_max = eval(get(obj.gui.ct_weightLE,'String'));
+        ct_weight_max = ct_weight_max(1);
       catch ME
-        error('Error in range: %s', ME.getReport);
+        error('Error in cross-track smoothness weight: %s', ME.getReport);
       end
       try
-        polynomial = eval(get(obj.gui.polynomialLE,'String'));
+        at_weight = eval(get(obj.gui.at_weightLE,'String'));
+        at_weight = single(at_weight(1));
       catch ME
-        error('Error in polynomial: %s', ME.getReport);
+        error('Error in along-track smoothness weight: %s', ME.getReport);
       end
       try
-        mu_size = eval(get(obj.gui.correlationLE,'String'));
+        eval_cmd = get(obj.gui.tomo_layersLE,'String');
+        if isempty(eval_cmd)
+          tomo_params = [];
+        else
+          tomo_params = eval(eval_cmd);
+        end
       catch ME
-        error('Error in correlation: %s', ME.getReport);
-      end
-      try
-        smooth = eval(get(obj.gui.smoothLE,'String'));
-      catch ME
-        error('Error in smooth: %s', ME.getReport);
+        error('Error in tomography layers: %s', ME.getReport);
       end
       if get(obj.gui.select_maskCB,'Value')
         cols = find(sb.select_mask);
+        if isempty(cols)
+          % Nothing to be done
+          cmd = [];
+          return;
+        end
       else
         cols = 1:size(sb.data,2);
       end
@@ -99,139 +118,163 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       end
       fprintf('Apply %s to surface %d slices %d - %d\n', obj.tool_name, active_idx, slices(1), slices(end));
       
-      gt = [];
-      if ~isempty(control_idx)
-        % Create ground truth input
-        % 1. Each column is one ground truth input
-        % 2. Row 1: relative slice/range-line, Row 2: x, Row 3: y
-        for idx = 1:length(slices)
-          slice = slices(idx);
-          mask = isfinite(sb.sd.surf(control_idx).x(:,slice)) ...
-            & isfinite(sb.sd.surf(control_idx).y(:,slice));
-          mask(1:sb.bounds_relative(1)) = 0;
-          mask(end-sb.bounds_relative(2)+1:end) = 0;
-          gt = cat(2,gt,[(idx-1)*ones(1,sum(mask)); ...
-            sb.sd.surf(control_idx).x(mask,slice).'-1; ...
-            sb.sd.surf(control_idx).y(mask,slice).'+0.5]);
-          bottom_bin = sb.sd.surf(control_idx).y(33,slices);
-        end
-      else
-        bottom_bin = NaN*zeros(1,length(slices));
+      % Get 3D image data
+      % -------------------------------------------------------------------
+      trws_data = single(sb.data(:,:,slices));
+      Nt = size(trws_data,1);
+      Nsv = size(trws_data,2);
+      Nx = size(trws_data,3);
+      
+      theta = sb.sd.theta;
+      
+      % Find the bin closest to nadir
+      [min_nadir,nadir_col] = min(abs(theta));
+      if theta(nadir_col)~=0
+        warning('Nadir steering vector column (theta == 0) not present, closest steering vector is theta = %.3f.', theta(nadir_col));
       end
       
+      % Get surfaces needed to apply tool
+      % -------------------------------------------------------------------
+      if isempty(control_idx)
+        gt_bins = NaN*sb.sd.surf(control_idx).y(:,slices);
+      else
+        gt_bins = round(sb.sd.surf(control_idx).y(:,slices));
+      end
       if isempty(surf_idx)
         surf_bins = NaN*sb.sd.surf(active_idx).y(:,slices);
+        Surface = ones(1,Nt);
       else
-        surf_bins = sb.sd.surf(surf_idx).y(:,slices);
+        surf_bins = round(sb.sd.surf(surf_idx).y(:,slices));
+        Surface = interp_finite(sb.sd.surf(surf_idx).y(nadir_col,:),1);
+        Surface = round(Surface(slices));
       end
-      surf_bins(isnan(surf_bins)) = -1;
-      
-      bottom_bin(isnan(bottom_bin)) = -1;
-      
+      if isempty(active_idx)
+        active_bins = NaN*sb.sd.surf(active_idx).y(:,slices);
+        Bottom = Surface;
+      else
+        active_bins = (sb.sd.surf(active_idx).y(:,slices));
+        Bottom = interp_finite(sb.sd.surf(active_idx).y(nadir_col,:),NaN);
+        Bottom = round(Bottom(slices));
+        Bottom(isnan(Bottom)) = Surface(isnan(Bottom));
+      end
       if isempty(mask_idx)
-        mask = ones(size(sb.data,2),length(slices));
+        ice_mask = ones(size(sb.data,2),length(slices));
       else
-        mask = sb.sd.surf(mask_idx).y(:,slices);
+        ice_mask = sb.sd.surf(mask_idx).y(:,slices);
+      end
+
+      theta_ice = asin(sin(theta(:))/sqrt(er_ice));
+      
+      master.GPS_time = sb.sd.gps_time(slices);
+      [master.Latitude,master.Longitude,master.Elevation] = ecef2geodetic(sb.sd.fcs.origin(1,slices),sb.sd.fcs.origin(2,slices),sb.sd.fcs.origin(3,slices),WGS84.ellipsoid);
+      master.Latitude = master.Latitude/180*pi;
+      master.Longitude = master.Longitude/180*pi;
+
+      dt = sb.sd.time(2)-sb.sd.time(1);
+      dr = dt*c/2;
+      at_slope = single([diff(master.Elevation / dr) 0]);
+      
+      H = interp_finite(sb.sd.time(Surface))*c/2;
+      T = interp_finite(sb.sd.time(Bottom))*c/2/sqrt(er_ice);
+      theta_threshold = theta(:);
+      %theta_threshold(theta_threshold > pi/2*0.75) = pi/2*0.75;
+      %theta_threshold(theta_threshold < -pi/2*0.75) = -pi/2*0.75;
+      theta_threshold(theta_threshold > pi/2*0.75) = NaN;
+      theta_threshold(theta_threshold < -pi/2*0.75) = NaN;
+      R = 1./cos(theta_threshold) * H(:).' + 1./cos(theta_ice) * T(:).';
+      %ct_slope = single([zeros(1,Nx); diff(R)/dr]+[diff(R)/dr; zeros(1,Nx)]);
+      %ct_slope(2:end-1,:) = ct_slope(2:end-1,:)/2;
+      ct_slope = [diff(R)/dr; nan(1,Nx)];
+      %ct_slope = interp_finite(ct_slope,0,@(x,y,z) interp1(x,y,z,'linear','extrap'),[],'interp');
+      ct_slope = single(interp_finite(ct_slope,0));
+      
+      ct_weight = 1./(3+mean(abs(ct_slope),2));
+      ct_weight = ct_weight_max*ct_weight./max(ct_weight);
+      ct_weight = single(ct_weight);
+      
+      if isempty(tomo_params)
+        bounds = uint32([ones(1,Nx); Nt*ones(1,Nx)]);
+        
+      else
+        for lay_idx = 1:length(tomo_params)
+          tomo_params(lay_idx).existence_check = false;
+        end
+        tomo_layers = opsLoadLayers(sb.sd.param,tomo_params);
+        
+        %% Interpolate tomo_layers information to mdata
+        for lay_idx = 1:length(tomo_layers)
+          ops_layer = [];
+          ops_layer{1}.gps_time = tomo_layers(lay_idx).gps_time;
+          
+          ops_layer{1}.type = tomo_layers(lay_idx).type;
+          ops_layer{1}.quality = tomo_layers(lay_idx).quality;
+          ops_layer{1}.twtt = tomo_layers(lay_idx).twtt;
+          ops_layer{1}.type(isnan(ops_layer{1}.type)) = 2;
+          ops_layer{1}.quality(isnan(ops_layer{1}.quality)) = 1;
+          lay = opsInterpLayersToMasterGPSTime(master,ops_layer,[300 60]);
+          tomo_layers(lay_idx).twtt_ref = lay.layerData{1}.value{2}.data;
+        end
+        tomo_top_bin = round(interp_finite(interp1(sb.sd.time,1:length(sb.sd.time),tomo_layers(1).twtt_ref),NaN));
+        tomo_bottom_bin = round(interp_finite(interp1(sb.sd.time,1:length(sb.sd.time),tomo_layers(2).twtt_ref),NaN));
+        
+        tomo_top_bin(isnan(tomo_top_bin)) = 1;
+        tomo_bottom_bin(isnan(tomo_bottom_bin)) = Nt;
+        bounds = uint32([tomo_top_bin; tomo_bottom_bin]);
+        bounds(bounds<1) = 1;
+        bounds(bounds>Nt) = Nt;
+        bounds = bounds - 1;
       end
       
+      % Apply ground truth, surface, surface suppression and ice mask
+      % -------------------------------------------------------------------
       begin_slice = max(1, min(slices)-1);
       end_slice = min(size(sb.data,3), max(slices)+1);
-      edge = [sb.sd.surf(active_idx).y(:,begin_slice), sb.sd.surf(active_idx).y(:,end_slice)];
-      edge(mask(:,1) == 0,1) = surf_bins(mask(:,1) == 0,1);
-      edge(mask(:,end) == 0,2) = surf_bins(mask(:,end) == 0,end);
-      
-      trws_data = sb.data(:,:,slices);
-      trws_data(trws_data>threshold(2)) = threshold(2);
-      for idx = 1:length(slices)
-        for col = 1:size(sb.data,2)
-          tmp = trws_data(1:min(end,round(surf_bins(col,idx))+70),col,idx);
-          tmp(tmp>threshold(1)) = threshold(1);
-          trws_data(1:min(end,round(surf_bins(col,idx))+70),col,idx) = tmp;
+      surf_bins = round(sb.sd.surf(surf_idx).y(:,slices));
+      surf_weight = 30;
+      surf_range = 110;
+      for idx = 1:Nx
+        slice = slices(idx);
+        for col = 1:Nsv
+          if idx == 1 && left_edge_en && isfinite(active_bins(col,idx)) ...
+            || idx == Nx && right_edge_en && isfinite(active_bins(col,idx)) ...
+            || col ~= 1 && col == cols(1) && top_edge_en && isfinite(active_bins(col,idx)) ...
+            || col ~= Nsv && col == cols(end) && bottom_edge_en && isfinite(active_bins(col,idx))
+            % No change for edge
+            trws_data([1:active_bins(col,idx)-1 active_bins(col,idx)+1:end], col, idx) = -10e9;
+          elseif ice_mask(col,idx)
+            if isfinite(gt_bins(col,idx))
+              % Ground truth
+              trws_data([1:gt_bins(col,idx)-gt_range, gt_bins(col,idx)+gt_range:end], col, idx) = -10e9;
+            end
+            if isfinite(surf_bins(col,idx))
+              if surf_bins(col,idx) < Nt
+                % Bottom below top
+                trws_data(1:surf_bins(col,idx), col, idx) = -10e9;
+                % Surface suppression
+                cur_surf_range = max(0,min(surf_range,Nt-surf_bins(col,idx)));
+                trws_data(surf_bins(col,idx) + (1:cur_surf_range), col, idx) ...
+                  = trws_data(surf_bins(col,idx) + (1:cur_surf_range), col, idx) ...
+                  -surf_weight/surf_range * (cur_surf_range:-1:1).';
+              elseif surf_bins(col,idx) >= Nt
+                % Handle special case when surface is more than the last row
+                trws_data(1:Nt-1, col, idx) = -10e9;
+              end
+            end
+          elseif isfinite(surf_bins(col,idx))
+            % Bottom equals top because there is no ice here
+            trws_data([1:surf_bins(col,idx)-1 surf_bins(col,idx)+1:end], col, idx) = -10e9;
+          end
         end
       end
-      if ~left_edge_en
-        edge(:,1) = -1;
-      end
-      if ~right_edge_en
-        edge(:,end) = -1;
-      end
-      if ~isempty(polynomial)
-        smooth_slope = polyval(polynomial, linspace(-1,1,size(sb.data,2)-1));
-      else
-        smooth_slope = [];
-      end
       
-      smooth_weight = smooth(1:2);
-      smooth_var = smooth(3);
-      mu = sinc(linspace(-1.5,1.5,mu_size));
-      sigma = sum(mu)/20*ones(1,mu_size);
-      mask_dist      = round(bwdist(mask == 0));
-      bounds = [sb.bounds_relative(1) size(trws_data,2)-sb.bounds_relative(2)-1 -1 -1];  
-      mask_dist = round(mask_dist .* 9);
-      
-      clear DIM DIM_costmatrix;
-      global gRadar;
-      DIM = load(fullfile(gRadar.path, '+tomo', 'Layer_tracking_3D_parameters_Matrix.mat'));
-      DIM_costmatrix = DIM.Layer_tracking_3D_parameters;
-      DIM_costmatrix = DIM_costmatrix .* (200 ./ max(DIM_costmatrix(:)));
-
-      
-      %% DoA-to-DoA transition model
-      % Obtained from geostatistical analysis of 2014 Greenland P3
-      transition_mu = [0.000000, 0.000000, 2.590611, 3.544282, 4.569263, 5.536577, 6.476430, 7.416807, 8.404554, 9.457255, 10.442658, 11.413710, 12.354409, 13.332689, 14.364614, 15.381671, 16.428969, 17.398906, 18.418794, 19.402757, 20.383026, 21.391834, 22.399259, 23.359765, 24.369957, 25.344982, 26.301805, 27.307530, 28.274756, 28.947572, 29.691010, 32.977387, 34.203212, 34.897994, 35.667128, 36.579019, 37.558978, 38.548659, 39.540715, 40.550138, 41.534781, 42.547407, 43.552700, 44.537758, 45.553618, 46.561057, 47.547331, 48.530976, 49.516588, 50.536075, 51.562886, 52.574938, 53.552979, 54.554206, 55.559657, 56.574029, 57.591999, 58.552986, 59.562937, 60.551616, 61.549909, 62.551092, 63.045791, 63.540490];
-      transition_sigma = [0.457749, 0.805132, 1.152514, 1.213803, 1.290648, 1.370986, 1.586141, 1.626730, 1.785789, 1.791043, 1.782936, 1.727153, 1.770210, 1.714973, 1.687484, 1.663294, 1.633185, 1.647318, 1.619522, 1.626555, 1.649593, 1.628138, 1.699512, 1.749184, 1.809822, 1.946782, 2.126822, 2.237959, 2.313358, 2.280555, 1.419753, 1.112363, 1.426246, 2.159619, 2.140899, 2.083267, 1.687420, 1.574745, 1.480296, 1.443887, 1.415708, 1.356100, 1.401891, 1.398477, 1.365730, 1.418647, 1.407810, 1.430151, 1.391357, 1.403471, 1.454194, 1.470535, 1.417235, 1.455086, 1.436509, 1.378037, 1.415834, 1.333177, 1.298108, 1.277559, 1.358260, 1.483521, 1.674642, 1.865764];
-      
-      if length(transition_mu) ~= size(sb.data, 2)
-        transition_mu = imresize(transition_mu, [1 size(sb.data, 2)]);
-      end
-      
-      if length(transition_sigma) ~= size(sb.data, 2)
-        transition_sigma = imresize(transition_sigma, [1 size(sb.data, 2)]);
-      end
-      
-      if top_edge_en && ~isempty(cols) && cols(1) > bounds(1)+1
-        % Add ground truth from top edge as long as top edge is bounded
-        gt = cat(2,gt,[slices-slices(1); ...
-          sb.sd.surf(active_idx).x(cols(1)-1,slices)-1; ...
-          sb.sd.surf(active_idx).y(cols(1)-1,slices)+0.5]);
-      end
-      
-      if bottom_edge_en && ~isempty(cols) && cols(end) < bounds(2)
-        % Add ground truth from top edge as long as top edge is bounded
-        gt = cat(2,gt,[slices-slices(1); ...
-          sb.sd.surf(active_idx).x(cols(end)+1,slices)-1; ...
-          sb.sd.surf(active_idx).y(cols(end)+1,slices)+0.5]);
-      end
-      
-      rows = [];
-      if isfinite(range) && size(gt,2) > 0
-        % Restrict search to range of rows around ground truth
-        rows = max(1,min(round(gt(3,:)-range))) : min(size(trws_data,1),max(round(gt(3,:)+range)));
-        if length(rows) < length(mu)+1
-          error('Error: Range restriction leaves too few rows of data. Increase "Row range" option.');
-        end
-        trws_data = trws_data(rows,:,:);
-        surf_bins = surf_bins - rows(1) + 1;
-        bottom_bin = bottom_bin - rows(1) + 1;
-        gt(3,:) = gt(3,:) - rows(1) + 1;
-      end
-
+      % TRW-S
+      % -------------------------------------------------------------------
       tic;
-      correct_surface = tomo.trws(double(trws_data), ...
-        double(surf_bins), double(bottom_bin), double(gt), double(mask), ...
-        double(mu), double(sigma), double(smooth_weight), double(smooth_var), ...
-        double(smooth_slope), double(edge), double(num_loops), int64(bounds), ...
-        double(mask_dist), double(DIM_costmatrix), ...
-        double(transition_mu), double(transition_sigma));
-      toc;
-      
+      correct_surface = tomo.trws2(trws_data,at_slope,at_weight,ct_slope,ct_weight,max_loops,bounds);
       fprintf('  %.2f sec per slice\n', toc/size(trws_data,3));
       
-      if ~isempty(rows)
-        correct_surface = correct_surface + rows(1) - 1;
-      end
-      
       % Create cmd for surface change
+      % -------------------------------------------------------------------
       cmd = [];
       for idx = start_slice_idx:end_slice_idx
         slice = slices(idx);
@@ -245,8 +288,19 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
         cmd{end}.redo.y = correct_surface(cols,idx);
         cmd{end}.type = 'standard';
       end
-      cmd{end+1}.redo.slice = sb.slice;
-      cmd{end}.undo.slice = sb.slice;
+      if any(sb.slice == slices(start_slice_idx:end_slice_idx))
+        % Current slice in slice browser is one of the affected slices, my
+        % placing it first in the list this is the one the viewer will jump
+        % to when the undo or redo operation are run
+        cmd{end+1}.redo.slice = [sb.slice slices(start_slice_idx:end_slice_idx)];
+        cmd{end}.undo.slice = [sb.slice slices(start_slice_idx:end_slice_idx)];
+      else
+        % Current slice in slice browser is NOT one of the affected slices.
+        % During the undo or redo operation, the browser will now jump to
+        % the first affected slice.
+        cmd{end+1}.redo.slice = slices(start_slice_idx:end_slice_idx);
+        cmd{end}.undo.slice = slices(start_slice_idx:end_slice_idx);
+      end
       cmd{end}.type = 'slice_dummy';
       
     end
@@ -267,16 +321,17 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       set(obj.h_fig,'CloseRequestFcn',@obj.close_win);
       pos = get(obj.h_fig,'Position');
       pos(3) = 220;
-      pos(4) = 240;
+      pos(4) = 215;
       set(obj.h_fig,'Position',pos);
       
       % Number of loops
-      obj.gui.numloopsTXT = uicontrol('Style','text','string','Loops');
+      obj.gui.max_loopsTXT = uicontrol('Style','text','string','Max Loops');
+      set(obj.gui.max_loopsTXT,'TooltipString','Maximum number of iterations that TRW-S will run. Default is 10.');
       
-      obj.gui.numloopsLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.numloopsLE,'style','edit')
-      set(obj.gui.numloopsLE,'string','10')
-      set(obj.gui.numloopsLE,'TooltipString','Number of iterations.');
+      obj.gui.max_loopsLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.max_loopsLE,'style','edit')
+      set(obj.gui.max_loopsLE,'string','10')
+      set(obj.gui.max_loopsLE,'TooltipString',get(obj.gui.max_loopsTXT,'TooltipString'));
       
       % Slice range
       obj.gui.slice_rangeTXT = uicontrol('Style','text','string','Slice range');
@@ -285,59 +340,60 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       obj.gui.slice_rangeLE = uicontrol('parent',obj.h_fig);
       set(obj.gui.slice_rangeLE,'style','edit')
       set(obj.gui.slice_rangeLE,'string','-5:6')
-      set(obj.gui.slice_rangeLE,'TooltipString','Enter a vector specifying relative range in slices. E.g. "-5:7".');
+      set(obj.gui.slice_rangeLE,'TooltipString','Enter a vector specifying relative range in slices. Default is -5:6.');
+      set(obj.gui.slice_rangeLE,'TooltipString',get(obj.gui.slice_rangeTXT,'TooltipString'));
       
-      % Threshold
-      obj.gui.thresholdTXT = uicontrol('Style','text','string','Threshold');
-      set(obj.gui.thresholdTXT,'TooltipString','Specify image threshold. First number is surface. Second number is whole column.');
+      % Normalization
+      obj.gui.normalizationTXT = uicontrol('Style','text','string','Normalization');
+      set(obj.gui.normalizationTXT,'TooltipString','Specify image thresholds for echo_norm function. First number is the minimum noise value. Second number is the maximum signal value. Default is [-inf inf] which allows the noise floor and maximum signal level to be estimated from the data.');
       
-      obj.gui.thresholdLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.thresholdLE,'style','edit')
-      set(obj.gui.thresholdLE,'string','[13.5 inf]')
-      set(obj.gui.thresholdLE,'TooltipString','Specify image threshold. First number is surface. Second number is whole column.');
+      obj.gui.normalizationLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.normalizationLE,'style','edit')
+      set(obj.gui.normalizationLE,'string','[-inf inf]')
+      set(obj.gui.normalizationLE,'TooltipString',get(obj.gui.normalizationTXT,'TooltipString'));
       
-      % Row range
-      obj.gui.rangeTXT = uicontrol('Style','text','string','Row range');
-      set(obj.gui.rangeTXT,'TooltipString','Specify a number of rows beyond the ground truth to search.');
+      % Ground truth row range
+      obj.gui.gt_rangeTXT = uicontrol('Style','text','string','GT Range');
+      set(obj.gui.gt_rangeTXT,'TooltipString','Specify a number of rows around the ground truth to search. Default is 5 bins.');
       
-      obj.gui.rangeLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.rangeLE,'style','edit')
-      set(obj.gui.rangeLE,'string','inf')
-      set(obj.gui.rangeLE,'TooltipString','Specify a number of rows beyond the ground truth to search.');
+      obj.gui.gt_rangeLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.gt_rangeLE,'style','edit')
+      set(obj.gui.gt_rangeLE,'string','5')
+      set(obj.gui.gt_rangeLE,'TooltipString',get(obj.gui.gt_rangeTXT,'TooltipString'));
       
-      % Polynomial Shape
-      obj.gui.polynomialTXT = uicontrol('Style','text','string','Shape poly');
-      set(obj.gui.polynomialTXT,'TooltipString','Specify a polynomial coefficients (e.g. -5x^2 is [-5 0 0]).');
+      % Crosstrack Smoothness
+      obj.gui.ct_weightTXT = uicontrol('Style','text','string','CT Smooth');
+      set(obj.gui.ct_weightTXT,'TooltipString','Specify weight for surface smoothness in cross-track dimension. Default is 0.01.');
       
-      obj.gui.polynomialLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.polynomialLE,'style','edit')
-      set(obj.gui.polynomialLE,'string','[]')
-      set(obj.gui.polynomialLE,'TooltipString','Specify polynomial coefficients (e.g. -5x^2 is [-5 0 0]).');
+      obj.gui.ct_weightLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.ct_weightLE,'style','edit')
+      set(obj.gui.ct_weightLE,'string','0.01')
+      set(obj.gui.ct_weightLE,'TooltipString',get(obj.gui.ct_weightTXT,'TooltipString'));
       
-      % Correlation length
-      obj.gui.correlationTXT = uicontrol('Style','text','string','Correlation');
-      set(obj.gui.correlationTXT,'TooltipString','Specify a correlation length for surface impulse template.');
+      % Alongtrack Smoothness
+      obj.gui.at_weightTXT = uicontrol('Style','text','string','AT Smooth');
+      set(obj.gui.at_weightTXT,'TooltipString','Specify weight for surface smoothness in along-track dimension. Default is 0.01.');
       
-      obj.gui.correlationLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.correlationLE,'style','edit')
-      set(obj.gui.correlationLE,'string','11')
-      set(obj.gui.correlationLE,'TooltipString','Specify a correlation length for surface impulse template.');
+      obj.gui.at_weightLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.at_weightLE,'style','edit')
+      set(obj.gui.at_weightLE,'string','0.01')
+      set(obj.gui.at_weightLE,'TooltipString',get(obj.gui.at_weightTXT,'TooltipString'));
       
-      % Smooth
-      obj.gui.smoothTXT = uicontrol('Style','text','string','Smoothness');
-      set(obj.gui.smoothTXT,'TooltipString','Specify surface smoothness ["slice weight" "column weight" "edges weight"].');
+      % Tomography layers
+      obj.gui.tomo_layersTXT = uicontrol('Style','text','string','Tomo Layers');
+      set(obj.gui.tomo_layersTXT,'TooltipString','Specify layers to constrain the top row and bottom row of the surface. Default is struct(''name'',{''tomo_top'',''tomo_bottom''}).');
       
-      obj.gui.smoothLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.smoothLE,'style','edit')
-      set(obj.gui.smoothLE,'string','[22 22 32]')
-      set(obj.gui.smoothLE,'TooltipString','Specify surface smoothness ["slice weight" "column weight" "edges weight"].');
+      obj.gui.tomo_layersLE = uicontrol('parent',obj.h_fig);
+      set(obj.gui.tomo_layersLE,'style','edit')
+      set(obj.gui.tomo_layersLE,'string','struct(''name'',{''tomo_top'',''tomo_bottom''})')
+      set(obj.gui.tomo_layersLE,'TooltipString',get(obj.gui.tomo_layersTXT,'TooltipString'));
       
       % Select mask
       obj.gui.select_maskCB = uicontrol('parent',obj.h_fig);
       set(obj.gui.select_maskCB,'style','checkbox')
       set(obj.gui.select_maskCB,'string','Select')
       set(obj.gui.select_maskCB,'value',1)
-      set(obj.gui.select_maskCB,'TooltipString','Check to operate only on the selected region.');
+      set(obj.gui.select_maskCB,'TooltipString','Check to operate only on the selected cross-track bins.');
       
       % Left edge
       obj.gui.leftEdgeCB = uicontrol('parent',obj.h_fig);
@@ -376,13 +432,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       obj.gui.table.offset = [0 0];
       row = 1;
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.numloopsTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.max_loopsTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.numloopsLE;
+      obj.gui.table.handles{row,col}   = obj.gui.max_loopsLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
@@ -404,13 +460,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       
       row = row + 1;
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.thresholdTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.normalizationTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.thresholdLE;
+      obj.gui.table.handles{row,col}   = obj.gui.normalizationLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
@@ -418,13 +474,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       row = row + 1;
       
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.rangeTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.gt_rangeTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.rangeLE;
+      obj.gui.table.handles{row,col}   = obj.gui.gt_rangeLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
@@ -432,13 +488,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       
       row = row + 1;
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.polynomialTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.ct_weightTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.polynomialLE;
+      obj.gui.table.handles{row,col}   = obj.gui.ct_weightLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
@@ -446,13 +502,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       
       row = row + 1;
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.correlationTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.at_weightTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.correlationLE;
+      obj.gui.table.handles{row,col}   = obj.gui.at_weightLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
@@ -460,13 +516,13 @@ classdef (HandleCompatible = true) slicetool_trws < imb.slicetool
       
       row = row + 1;
       col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.smoothTXT;
+      obj.gui.table.handles{row,col}   = obj.gui.tomo_layersTXT;
       obj.gui.table.width(row,col)     = 70;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;
       obj.gui.table.height_margin(row,col) = 1;
       col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.smoothLE;
+      obj.gui.table.handles{row,col}   = obj.gui.tomo_layersLE;
       obj.gui.table.width(row,col)     = inf;
       obj.gui.table.height(row,col)    = 20;
       obj.gui.table.width_margin(row,col) = 1;

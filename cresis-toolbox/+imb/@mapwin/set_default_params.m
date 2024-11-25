@@ -248,12 +248,12 @@ end
 default_params.prefwin.sources = sort({'standard','qlook','mvdr','CSARP_post/standard','CSARP_post/mvdr','CSARP_post/qlook'});
 default_params.prefwin.season_names = {};
 default_params.prefwin.layer_names = {'surface'};
-default_params.prefwin.system = 'layerdata';
+default_params.prefwin.system = 'tracks';
 default_params.prefwin.map_name = '';
-default_params.prefwin.flightlines = 'layerdata Flightlines';
+default_params.prefwin.flightlines = 'tracks files Flightlines';
 %
 default_params.prefwin.layer_source = 'layerdata';
-default_params.prefwin.layer_data_source = 'layerData';
+default_params.prefwin.layer_data_source = 'layer';
 %
 default_params.prefwin.x = tmp.pref_x;
 default_params.prefwin.y = tmp.pref_y;
@@ -273,8 +273,11 @@ default_params.mapwin.h = tmp.map_h_arctic;
 
 %% Load user passed in file and override the default parameters with the contents of this file
 if exist(picker_param_fn,'file')
+  fprintf('Loading user parameters file: %s\n', picker_param_fn);
   default_params_override = load(picker_param_fn);
   default_params = merge_structs(default_params,default_params_override);
+else
+  fprintf('Loading user parameters file, but not found: %s\n', picker_param_fn);
 end
 default_params.picker_param_fn = picker_param_fn;
 
@@ -289,7 +292,8 @@ if ~exist(picker_param_fn_dir,'dir')
   end
 end
 try
-  save(picker_param_fn,'-struct','default_params');
+  fprintf('Saving user parameters file: %s\n', picker_param_fn);
+  ct_save(picker_param_fn,'-append','-struct','default_params');
 catch ME
   warning('Failed to save default parameters file %s', picker_param_fn);
 end

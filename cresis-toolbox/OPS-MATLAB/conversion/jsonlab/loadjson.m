@@ -44,6 +44,7 @@ elseif(exist(fname,'file'))
    string = fscanf(fid,'%c');
    fclose(fid);
 else
+  fprintf('Server returned:\n%s\n', fname);
    error('input file does not exist');
 end
 

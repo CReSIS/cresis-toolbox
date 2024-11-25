@@ -3,13 +3,8 @@ function load_info = get_raw_files_sub(param,wf_adc_list,records,recs)
 %
 % Support function for get_raw_files
 
-% adc_headers: the actual adc headers that were loaded
-if ~isfield(param.records.file,'adc_headers') || isempty(param.records.file.adc_headers)
-  param.records.file.adc_headers = param.records.file.adcs;
-end
-
 % boards_headers: the boards that the actual adc headers were loaded from
-[boards,board_idx,profile] = wf_adc_to_board(param,wf_adc_list);
+[boards,board_idx,~] = wf_adc_to_board(param,wf_adc_list);
 
 % Populate load_info struct
 load_info = [];
@@ -76,7 +71,7 @@ for idx = 1:length(boards)
   else
     for fn_idx = 1:length(load_info.filenames{idx})
       % Get the file's name
-      fn_name = records.relative_filename{board_idx(idx)}{fn_idx};
+      fn_name = load_info.filenames{idx}{fn_idx};
       [fn_dir] = get_segment_file_list(param,board_idx(idx));
       fn = fullfile(fn_dir,fn_name);
       %fprintf('%s\n', fn);

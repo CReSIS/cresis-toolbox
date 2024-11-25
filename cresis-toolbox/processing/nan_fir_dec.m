@@ -107,7 +107,7 @@ else
         out_data(:,out_idx) = nansum(bsxfun(@times, data(:,idx_rng(1):idx_rng(2)), Bfilter.*dphase),2);
       end
       nan_normalize = sum(Bfilter,2) ./ sum(bsxfun(@times,Bfilter,~isnan(data(:,idx_rng(1):idx_rng(2)))),2);
-      nan_normalize(~isfinite(nan_normalize) | nan_normalize>=nan_normalize_threshold) = NaN;
+      nan_normalize(~isfinite(nan_normalize) | nan_normalize>nan_normalize_threshold) = NaN;
       out_data(:,out_idx) = out_data(:,out_idx) .* nan_normalize;
     else
       Bfilter_tmp = Bfilter(filter_rng(1):filter_rng(2));
@@ -121,7 +121,7 @@ else
           Bfilter_tmp.*dphase), 2);
       end
       nan_normalize = sum(Bfilter_tmp,2) ./ sum(bsxfun(@times,Bfilter_tmp,~isnan(data(:,idx_rng(1):idx_rng(2)))),2);
-      nan_normalize(~isfinite(nan_normalize) | nan_normalize>=nan_normalize_threshold) = NaN;
+      nan_normalize(~isfinite(nan_normalize) | nan_normalize>nan_normalize_threshold) = NaN;
       out_data(:,out_idx) = out_data(:,out_idx) .* nan_normalize;
       
       if renormalize_en

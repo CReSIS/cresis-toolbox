@@ -90,7 +90,7 @@ user_variables.ext = ext;
 
 % --------- STEP 5: SELECT THE DESTINATION WHERE THE FIGURE IS TO BE SAVED AT ---------
 if user_variables.save_img == 1
-  out_dir = 'Y:\rohan\coverage_maps_loader\';
+  out_dir = fullfile(gRadar.out_path,'coverage_maps');
   
   if ~exist(out_dir,'dir')
     mkdir(out_dir);

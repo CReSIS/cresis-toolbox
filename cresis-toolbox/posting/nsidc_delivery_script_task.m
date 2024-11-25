@@ -26,7 +26,7 @@ supplement_netcdf_param = param.nsidc.supplement_netcdf_param;
 
 %% Load the frames information
 frames_fn = ct_filename_support(param,'','frames');
-load(frames_fn);
+frames = frames_load(frames_fn);
 if isempty(param.cmd.frms)
   param.cmd.frms = 1:length(frames.frame_idxs);
 end
@@ -79,6 +79,9 @@ elseif strcmpi(platform,'Basler')
 elseif strcmpi(platform,'SO')
   premet_param.nsidc_platform_short_name = 'DHC-3';
   premet_param.nsidc_aircraft_id = 'N226UT';
+elseif strcmpi(platform,'GV')
+  premet_param.nsidc_platform_short_name = 'G-V';
+  premet_param.nsidc_aircraft_id = 'N95NA';
 else
   error('Unsupported platform %s\n', platform);
 end
@@ -188,8 +191,7 @@ if L1B_cmd
   data_type = '1B';
   
   % Find the records information for updating global attributes
-  records_fn = ct_filename_support(param,'','records');
-  records = load(records_fn);
+  records = records_load(param);
   
   % Remove frames that do not exist from param.cmd.frms list
   [valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
@@ -302,7 +304,7 @@ if L1B_cmd
     end
     
     % create extra image filenames
-    for extra_idx = 1:size(image_extra,1)
+    for extra_idx = 1:size(image_extra,2)
         echogram_fn = fullfile(ct_filename_out(param,'post','',1),'images', ...
             param.day_seg, sprintf('%s_%03d_1echo_%s.jpg',param.day_seg,frm,image_extra{extra_idx}));
         new_echogram_fn = fullfile(out_data_dir, ...
@@ -410,7 +412,7 @@ if L1B_supplement_cmd
     
     netcdf_from_mat(out_fn_netcdf,supplement,supplement_netcdf_param);
     if exist('L1B_supplement_name_extra','var') || ~isempty(L1B_supplement_name_extra)
-        for extra_idx = 1:size(L1B_supplement_name_extra,1)
+        for extra_idx = 1:size(L1B_supplement_name_extra,2)
             out_fn_netcdf = fullfile(ct_filename_out(param,USER_SPECIFIED_DIRECTORY,'',1), ...
                 sprintf('%s%s_Files', radar_type, data_type),data_files_dir, ...
                 sprintf('%s%s_%s_%03d_%s_%s.nc',radar_type, data_type, param.day_seg, frm,L1B_supplement_name_extra{extra_idx}, L1B_supplement_name));

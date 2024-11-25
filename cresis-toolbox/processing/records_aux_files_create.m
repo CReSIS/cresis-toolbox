@@ -1,4 +1,6 @@
 function records_aux_files_create(records_fn,print_flag)
+% DEPRECATED
+%
 % records_aux_files_create(records_fn,print_flag)
 %
 % Creates the auxilliary files to the main records file.  These files
@@ -15,35 +17,4 @@ function records_aux_files_create(records_fn,print_flag)
 % See also: records_aux_files_create, records_aux_files_read,
 % records_create_sync
 
-if ~exist('print_flag','var') || isempty(print_flag)
-  print_flag = true;
-end
-
-% =====================================================================
-% Create records netcdf file
-%   -- This file allows quick loading of specific records rather than
-%      having to load the entire file.
-% =====================================================================
-
-[path name] = fileparts(records_fn);
-cdf_fn = fullfile(path, sprintf('%s.nc', name));
-if print_flag
-  fprintf('  Creating file %s\n  from %s\n', cdf_fn, records_fn);
-end
-netcdf_from_mat(cdf_fn,records_fn);
-
-return;
-
-
-% =====================================================================
-% =====================================================================
-% Examples
-% =====================================================================
-% =====================================================================
-
-records_path = '/cresis/scratch1/mdce/csarp_support/records/mcords/2009_Antarctica_DC8/';
-records_fns = get_filenames(records_path,'records','','.mat');
-
-for file_idx = 1:length(records_fns)
-  records_aux_files_create(records_fns{file_idx});
-end
+error('This function is deprecated. Just use ct_save() since the NetCDF file is no longer used.');

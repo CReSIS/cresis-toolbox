@@ -5,10 +5,11 @@ function ctrl_chain = qlook(param,param_override)
 % surface, and (optionally) stores the surface to a layer data destination
 % (default is layerData).
 %
-% param = struct with processing parameters
-% param_override = parameters in this struct will override parameters
-%         in param.  This struct must also contain the gRadar fields.
-%         Typically global gRadar; param_override = gRadar;
+% param: struct with processing parameters
+%
+% param_override: parameters in this struct will override parameters in
+% param.  This struct must also contain the gRadar fields. Typically global
+% gRadar; param_override = gRadar;
 %
 % Example:
 %  See run_qlook.m for how to run this function directly.
@@ -21,28 +22,23 @@ function ctrl_chain = qlook(param,param_override)
 
 %% General Setup
 % =====================================================================
-param = merge_structs(param, param_override);
+if exist('param_override','var') 
+  param = merge_structs(param, param_override);
+end
 
 fprintf('=====================================================================\n');
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
 fprintf('=====================================================================\n');
+
+% Get the standard radar name and radar type
+[~,radar_type,radar_name] = ct_output_dir(param.radar_name);
 
 %% Input Checks: cmd
 % =====================================================================
 
 % Remove frames that do not exist from param.cmd.frms list
 frames = frames_load(param);
-if ~isfield(param.cmd,'frms') || isempty(param.cmd.frms)
-  param.cmd.frms = 1:length(frames.frame_idxs);
-end
-[valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-if length(valid_frms) ~= length(param.cmd.frms)
-  bad_mask = ones(size(param.cmd.frms));
-  bad_mask(keep_idxs) = 0;
-  warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-    param.cmd.frms(find(bad_mask,1)));
-  param.cmd.frms = valid_frms;
-end
+param.cmd.frms = frames_param_cmd_frms(param,frames);
 
 %% Input Checks: records
 % =====================================================================
@@ -57,6 +53,12 @@ end
 
 %% Input Checks: qlook
 % =====================================================================
+
+if ~isfield(param.qlook,'bit_mask') || isempty(param.qlook.bit_mask)
+  % Remove bad records (bit_mask==1), leave stationary records
+  % (bit_mask==2), and remove bad records (bit_mask==4)
+  param.qlook.bit_mask = 1 + 4;
+end
 
 if ~isfield(param.qlook,'block_size') || isempty(param.qlook.block_size)
   error('param.qlook.block_size must be specified. This is the number of range lines or records to process at a time.');
@@ -77,7 +79,7 @@ if ~mod(length(param.qlook.B_filter),2)
   error('param.qlook.B_filter must be odd length.');
 end
 param.qlook.B_filter = param.qlook.B_filter(:).'; % Must be row vector
-if abs(sum(param.qlook.B_filter)-1) > 1e4*eps
+if abs(sum(param.qlook.B_filter)-1) > 1e4*eps % Ensure filter weights sum to 1 to preserve radiometry
   param.qlook.B_filter = param.qlook.B_filter / sum(param.qlook.B_filter);
 end
 
@@ -98,6 +100,8 @@ if ~isempty(param.qlook.img_comb) && length(param.qlook.img_comb) ~= 3*(length(p
   error('param.qlook.img_comb not the right length. Since it is not empty, there should be 3 entries for each image combination interface ([Tpd second image for surface saturation, -inf for second image blank, Tpd first image to avoid roll off] is typical).');
 end
 
+param = img_combine_input_check(param,'qlook');
+
 % Incoherent decimation (inc_dec, inc_B_filter) input check
 % Setting inc_dec = 0: returns coherent data
 % Setting inc_dec = 1: returns power detected data with no decimation
@@ -116,7 +120,7 @@ if ~mod(length(param.qlook.inc_B_filter),2)
   error('param.qlook.inc_B_filter must be odd length.');
 end
 param.qlook.inc_B_filter = param.qlook.inc_B_filter(:).'; % Must be row vector
-if abs(sum(param.qlook.inc_B_filter)-1) > 1e4*eps
+if abs(sum(param.qlook.inc_B_filter)-1) > 1e4*eps % Ensure filter weights sum to 1 to preserve radiometry
   param.qlook.inc_B_filter = param.qlook.inc_B_filter / sum(param.qlook.inc_B_filter);
 end
 
@@ -130,17 +134,33 @@ end
 [~,out_path_dir] = fileparts(param.qlook.out_path);
 
 % nan_fir_dec: if true, function uses the slower nan_fir_dec function on
-% the data instead of fir_dec for the dec and inc_dec functions.
+% the data instead of fir_dec for the dec and inc_dec functions. Default is
+% true for deramp systems and false for non-deramp systems.
 if ~isfield(param.qlook,'nan_dec') || isempty(param.qlook.nan_dec)
-  param.qlook.nan_dec = false;
+  if strcmpi(radar_type,'deramp')
+    param.qlook.nan_dec = true;
+  else
+    param.qlook.nan_dec = false;
+  end
+end
+
+if ~isfield(param.qlook,'nan_dec_normalize_threshold') || isempty(param.qlook.nan_dec_normalize_threshold)
+  param.qlook.nan_dec_normalize_threshold = 2;
 end
 
 if ~isfield(param.qlook,'presums') || isempty(param.qlook.presums)
   param.qlook.presums = 1;
 end
 
+if ~isfield(param.qlook,'radiometric_corr_dB') || isempty(param.qlook.radiometric_corr_dB)
+  param.qlook.radiometric_corr_dB = NaN;
+end
+
 if ~isfield(param.qlook,'resample') || isempty(param.qlook.resample)
   param.qlook.resample = [1 1; 1 1];
+end
+if numel(param.qlook.resample) == 2
+  param.qlook.resample = [param.qlook.resample(1) param.qlook.resample(2); 1 1];
 end
 
 if ~isfield(param.qlook,'surf') || isempty(param.qlook.surf)
@@ -161,19 +181,18 @@ end
 %% Setup Processing
 % =====================================================================
 
-% Get the standard radar name
-[~,~,radar_name] = ct_output_dir(param.radar_name);
-
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-if ~exist(records_fn)
-  error('You must run create the records file before running anything else:\n  %s', records_fn);
-end
-records = load(records_fn);
+records = records_load(param);
 
 % Quick look radar echogram output directory
 out_fn_dir = ct_filename_out(param, param.qlook.out_path);
 tmp_out_fn_dir_dir = ct_filename_out(param, param.qlook.out_path,'qlook_tmp');
+
+%% Collect waveform information into one structure
+%  - This is used to break the frame up into chunks
+% =====================================================================
+[wfs,~] = data_load_wfs(setfield(param,'load',struct('imgs',{param.qlook.imgs})),records);
+param.radar.wfs = merge_structs(param.radar.wfs,wfs);
 
 %% Setup cluster
 % =====================================================================
@@ -181,8 +200,7 @@ ctrl = cluster_new_batch(param);
 cluster_compile({'qlook_task.m','qlook_combine_task.m'},ctrl.cluster.hidden_depend_funs,ctrl.cluster.force_compile,ctrl);
 
 total_num_sam = [];
-[wfs,~] = data_load_wfs(setfield(param,'load',struct('imgs',{param.qlook.imgs})),records);
-if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3'}))
+if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3','accum'}))
   for img = 1:length(param.qlook.imgs)
     wf = abs(param.qlook.imgs{img}(1,1));
     total_num_sam(img) = wfs(wf).Nt_raw;
@@ -192,6 +210,11 @@ if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3
   
 elseif any(strcmpi(radar_name,{'snow','kuband','snow2','kuband2','snow3','kuband3','kaband','kaband3','snow5','snow8'}))
   total_num_sam = 32000 * ones(size(param.qlook.imgs));
+  cpu_time_mult = 8e-8;
+  mem_mult = 64;
+
+elseif strcmpi(radar_name,'snow9')
+  total_num_sam = 45000 * ones(size(param.qlook.imgs));
   cpu_time_mult = 8e-8;
   mem_mult = 64;
   
@@ -263,6 +286,11 @@ for frm_idx = 1:length(param.cmd.frms)
   block_size = param.qlook.block_size(1);
   blocks = 1:block_size:length(recs)-0.5*block_size;
   if isempty(blocks)
+    warning('%s: The frame is smaller than usual. For best results, it is often best to have frames with a number of records that is more than or equal to half the block size (%d), but there are only %d records in this frame. If this is unexpected it may 1) be due to GPS errors since these can create artifically long paths over very short time periods; 2) the frame generation process needs to be revised with run_frames_create to make the frames longer; or 3) the param.qlook.block_size=%d needs to be reduced. qlook will try to process the frame, but it may fail.', mfilename, 0.5*block_size, length(recs), block_size);
+    if length(recs) < 50
+      warning('This frame is unusually short (<50 records). This is usually caused by a too short data segment (in which case it should be marked "do not process" in the param.cmd.notes field and not enabled) or an error in preprocessing, GPS, or records generation. Unless you know the frame is very short (e.g. lab calibration measurement where only a very small amount of data was needed), it is probably best to dbquit and fix the situation. Type "dbcont" to continue and ignore the issue. qlook processing may fail for this frame.');
+      keyboard
+    end
     blocks = 1;
   end
   
@@ -335,13 +363,18 @@ for frm_idx = 1:length(param.cmd.frms)
     dparam.cpu_time = 0;
     dparam.mem = 250e6;
     for img = 1:length(param.qlook.imgs)
+      wf = abs(param.qlook.imgs{img}(1,1));
+      adc = abs(param.qlook.imgs{img}(1,2));
       dparam.cpu_time = dparam.cpu_time + 10 + Nx*size(param.qlook.imgs{img},1)*total_num_sam(img)*log2(total_num_sam(img))*cpu_time_mult;
+      data_pulse_compress_mult = 1;
       if isfield(param.radar.wfs(wf),'deconv') ...
           && isfield(param.radar.wfs(wf).deconv,'en') && any(param.radar.wfs(wf).deconv.en)
-        dparam.mem = dparam.mem + Nx*size(param.qlook.imgs{img},1)*total_num_sam(img)*mem_mult*1.7;
-      else
-        dparam.mem = dparam.mem + Nx*size(param.qlook.imgs{img},1)*total_num_sam(img)*mem_mult;
+        data_pulse_compress_mult = data_pulse_compress_mult + 0.7;
       end
+      if strcmpi(param.radar.wfs(wf).coh_noise_method,'analysis')
+        data_pulse_compress_mult = data_pulse_compress_mult + 0.7;
+      end
+      dparam.mem = dparam.mem + Nx*size(param.qlook.imgs{img},1)*total_num_sam(img)*mem_mult*data_pulse_compress_mult;
     end
     
     ctrl = cluster_new_task(ctrl,sparam,dparam,'dparam_save',0);
@@ -394,7 +427,7 @@ if param.qlook.surf.en && strcmpi(param.qlook.surf_layer.source,'records')
   ctrl.cluster.type = 'debug';
 end
 
-if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3'}))
+if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3','accum'}))
   cpu_time_mult = 12e-7;
   mem_mult = 24;
   
@@ -428,14 +461,16 @@ end
 % Account for averaging
 Nx_max = Nx_max / param.qlook.dec / max(1,param.qlook.inc_dec);
 Nx = Nx / param.qlook.dec / max(1,param.qlook.inc_dec);
+
+records_var = whos('records');
 for img = 1:length(param.qlook.imgs)
   sparam.cpu_time = sparam.cpu_time + (Nx*total_num_sam(img)*cpu_time_mult);
   if isempty(param.qlook.img_comb)
     % Individual images, so need enough memory to hold the largest image
-    sparam.mem = max(sparam.mem,250e6 + Nx_max*total_num_sam(img)*mem_mult);
+    sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_max*total_num_sam(img)*mem_mult);
   else
     % Images combined into one so need enough memory to hold all images
-    sparam.mem = 250e6 + Nx*sum(total_num_sam)*mem_mult;
+    sparam.mem = 350e6 + records_var.bytes + Nx*sum(total_num_sam)*mem_mult;
   end
 end
 if param.qlook.surf.en

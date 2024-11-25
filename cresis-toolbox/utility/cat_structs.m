@@ -1,5 +1,5 @@
-function S_out = cat_structs(dim,S1,S2)
-% S_out = cat_structs(dim,S1,S2)
+function S_out = cat_structs(dim,S1,S2,cat_fields_flag)
+% S_out = cat_structs(dim,S1,S2,cat_fields_flag)
 %
 % Concatenates two structures. Allows for dissimilar fields. Fields that do
 % not exist just get a [] put in them.
@@ -40,6 +40,10 @@ function S_out = cat_structs(dim,S1,S2)
 
 % Input check
 
+if ~exist('cat_fields_flag','var')
+  cat_fields_flag = false;
+end
+
 % Handle simple cases
 if isempty(S2)
   S_out = S1;
@@ -68,4 +72,16 @@ for idx = 1:length(missfields)
   S2(1).(missfields{idx}) = [];
 end
 
-S_out = cat(dim,S1,S2);
+if ~cat_fields_flag
+  S_out = cat(dim,S1,S2);
+else
+  for idx = 1:length(S_out_fields)
+    try
+      S_out.(S_out_fields{idx}) = cat(dim,S1.(S_out_fields{idx}),S2.(S_out_fields{idx}));
+    catch
+      try
+        S_out.(S_out_fields{idx}) = S1.(S_out_fields{idx});
+      end
+    end
+  end
+end

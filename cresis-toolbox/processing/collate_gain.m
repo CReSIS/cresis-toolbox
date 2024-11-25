@@ -1,12 +1,22 @@
 % function collate_gain(param,param_override)
 %
-% Collects waveform results from run_analysis.m specified in analysis sheet
-% Requires the param.analysis.cmd{1} is waveform
-% Generates plots to verify fast-time gain for specified/all wf-adc pairs
-% Normalized gain (dB) vs relative time for wf-adc pair
+% Analyzes waveform results from run_analysis_gain.m. These waveforms
+% should be collected with a continuous single frequency constant modulus
+% input into the wf-adc receivers of interest. The amplitude should be low
+% enough that the receiver does not saturate. The control/gain settings of
+% the receiver should follow regular operation typically since the main
+% purpose of the script is to measure the receiver gain as a function of
+% fast-time.
+%
+% Debug plots and a gain curve that is usable by data_load.m are generated
+% for each wf-adc pair that is specified.
+%
+% Analysis waveform should be run without pulse compression (i.e.
+% param.analysis.pulse_comp = false).
 %
 % Example:
-%   See run_collate_gain for how to run.
+%
+% See run_collate_gain for how to run.
 %
 % Authors: John Paden, Hara Madhav Talasila
 
@@ -23,407 +33,228 @@ fprintf('=============================================================\n');
 %% Input Checks
 % =========================================================================
 
-if ~isfield(param.analysis, 'enable_visible_plot')
-  param.analysis.enable_visible_plot = 0;
+if ~isfield(param,'collate_gain') || isempty(param.collate_gain)
+  param.collate_gain = [];
 end
 
-if ~isfield(param.analysis, 'raw_plot_en')
-  param.analysis.raw_plot_en = 0;
+% .debug_out_dir: string containing the output folder name to use for the
+% debug outputs. This is input to ct_filename_ct_tmp().
+if ~isfield(param.collate_gain,'debug_out_dir') || isempty(param.collate_gain.debug_out_dir)
+  param.collate_gain.debug_out_dir = 'collate_gain';
+end
+debug_out_dir = param.collate_gain.debug_out_dir;
+
+% .debug_out_fn: string containing a word to insert into the output file
+% name to identify files for  this specific run.
+if ~isfield(param.collate_gain,'debug_out_fn') || isempty(param.collate_gain.debug_out_fn)
+  param.collate_gain.debug_out_fn = 'collate_gain';
 end
 
-if ~isfield(param.analysis, 'ftg_plot_en')
-  param.analysis.ftg_plot_en = 1;
+% .debug_plots: cell array of strings containing commands for which debug
+% plots to create.
+if ~isfield(param.collate_gain,'debug_plots')
+  param.collate_gain.debug_plots = {'input_check','gain','combined_plot','visible'};
+end
+enable_visible_plot = any(strcmp('visible',param.collate_gain.debug_plots));
+
+% .echo_filt_args_coherent: 1x2 vector holding the echo_filt.m filter
+% arguments [ROW COL] for filtering the coherent data. Default is [1 101]
+% meaning no fast-time coherent averages and 101 along-track averages.
+% Coherent averaging is the first operation that is applied and is used to
+% reduce the noise.
+if ~isfield(param.collate_gain,'echo_filt_args_coherent') || isempty(param.collate_gain.echo_filt_args_coherent)
+  param.collate_gain.echo_filt_args_coherent = [1 101];
 end
 
-wf_dir = ct_filename_out(param,param.analysis.cmd{1}.out_path,'',1);
-if ~exist(wf_dir, 'dir')
-  fprintf('Empty directory --> run_analysis results (%s)\n',wf_dir);
-  return;
+% .echo_filt_args_incoherent: 1x2 vector holding the echo_filt.m filter
+% arguments [ROW COL] for filtering the incoherent data. This filter is
+% applied after coherent filtering, power detection, and the slow-time
+% mean. Default is [5 1] (5 fast-time averages, 1 along-track average).
+% Along-track averages have no effect.
+if ~isfield(param.collate_gain,'echo_filt_args_incoherent') || isempty(param.collate_gain.echo_filt_args_incoherent)
+  param.collate_gain.echo_filt_args_incoherent = [1 1];
 end
 
-out_dir = ct_filename_ct_tmp(param,'','waveform','gain');
-if ~exist(out_dir, 'dir')
-  mkdir(out_dir);
+% .imgs: which images and wf-adc pairs to load for collating. The default
+% is to set it equal to the current param.analysis.imgs value.
+if ~isfield(param.collate_gain,'imgs') || isempty(param.collate_gain.imgs)
+  param.collate_gain.imgs = param.analysis.imgs;
 end
 
-%% Collate the ftg reults
+% .in_path: argument to ct_filename_out to control which analysis outputs
+% the function will try to read in. Default is 'analysis_gain' for
+% CSARP_analysis_gain.
+if ~isfield(param.collate_gain,'in_path') || isempty(param.collate_gain.in_path)
+  param.collate_gain.in_path = 'analysis_gain';
+end
+wf_dir = fileparts(ct_filename_out(param,param.collate_gain.in_path));
+
+% out_path: string containing the output path for the collate_gain/fast
+% time gain results. Passed to ct_filename_out. Default is 'gain' for
+% CSARP_gain.
+if ~isfield(param.collate_gain,'out_path') || isempty(param.collate_gain.out_path)
+  param.collate_gain.out_path = 'gain';
+end
+
+%% Debug Figure Setup
 % =========================================================================
 
-% For figure handles
-fig_count = 0;
-leg=[];
-for idx =1:length(param.analysis.imgs)
-  fig_count = fig_count + size(param.analysis.imgs{idx},1);
-end
-h_fig = get_figures(fig_count+1,param.analysis.enable_visible_plot);
-fig_idx=0;
-comb_plot = fig_count+1;
-clf(h_fig(comb_plot));
+% Create figure handles
+h_fig = get_figures(1,enable_visible_plot);
+clf(h_fig(1));
+set(h_fig(1),'WindowStyle','docked');
 
-if param.analysis.raw_plot_en
-  fig2_count = 0;
-  leg2=[];
-  for idx =1:length(param.analysis.imgs)
-    fig2_count = fig2_count + size(param.analysis.imgs{idx},1);
-  end
-  h_fig2 = get_figures(fig2_count+1,param.analysis.enable_visible_plot);
-  fig2_idx=0;
-  comb_plot2 = fig2_count+1;
-  clf(h_fig2(comb_plot2));
-end
-
-% The big loop for each img-wf_adc pair
-for img = 1:length(param.analysis.imgs)
-  for wf_adc = 1:size(param.analysis.imgs{img},1)
-    wf = param.analysis.imgs{img}(wf_adc,1);
-    adc = param.analysis.imgs{img}(wf_adc,2);
+%% wf-adc Loop
+% =====================================================================
+fig_idx = 0;
+all_time = {};
+all_wf_dB = {};
+all_legend = {};
+for img = 1:length(param.collate_gain.imgs)
+  for wf_adc = 1:size(param.collate_gain.imgs{img},1)
+    % Process one wf-adc pair at a time
+    % ---------------------------------------------------------------------
+    wf = param.collate_gain.imgs{img}(wf_adc,1);
+    adc = param.collate_gain.imgs{img}(wf_adc,2);
     fig_idx = fig_idx +1;
-    %% Load the waveform file
+    
+    %% wf-adc Loop: Load Waveform File
     % =====================================================================
-    dd = load(fullfile(wf_dir, sprintf('waveform_%s_wf_%d_adc_%d.mat',param.day_seg,wf,adc)));
-    % Initialization
-    Nt = size(dd.wf_data,1);
-    r_lines = size(dd.wf_data,2);
-%     if size(dd.time_rng,1) == 2 && size(dd.time_rng,2) == r_lines && all(all(diff(dd.time_rng,1,2)))==0
-%       time_axis = dd.time_rng(1,1):dd.dt:dd.time_rng(2,1);
-%     else
-%       fprintf('Time rannge not equal in all range lines');
-%       continue;
-%     end
-
-%     [time_zero, time_zero_idx] = min(abs(time_axis));
-
-    time_axis = dd.param_analysis.radar.wfs(wf).time;
-    time_zero_idx = find(time_axis==0);
-    time_axis_length = time_axis(end)-time_axis(1);
+    gain_wf_data = load(fullfile(wf_dir, sprintf('waveform_%s_wf_%d_adc_%d.mat',param.day_seg,wf,adc)));
     
+    time = gain_wf_data.param_analysis.radar.wfs(wf).time_raw;
+    gain_wf_data.wf_data = echo_filt(gain_wf_data.wf_data,param.collate_gain.echo_filt_args_coherent);
+    mean_wf_raw_dB = 10*log10(mean(abs(gain_wf_data.wf_data).^2,2));
+    mean_wf = mean(abs(gain_wf_data.wf_data).^2,2);
+    mean_wf = echo_filt(mean_wf,param.collate_gain.echo_filt_args_incoherent);
+    mean_wf_dB = 10*log10(mean_wf);
+    max_gain_dB = max(mean_wf_dB(isfinite(mean_wf_dB)));
     
-    TTL_start =   param.radar.wfs(wf).TTL_start * 1/param.radar.TTL_clock ;
-    TTL_length =   param.radar.wfs(wf).TTL_length * 1/param.radar.TTL_clock ;
-    TTL_end =  (param.radar.wfs(wf).TTL_start + param.radar.wfs(wf).TTL_length) * 1/param.radar.TTL_clock ;
-
-    rec_start = param.radar.wfs(1).record_start*1/param.radar.fs ;
-    rec_stop = param.radar.wfs(1).record_stop*1/param.radar.fs ;
-    rec_length = rec_stop-rec_start;
-    
-    % Collate
-    mean_wf_data = mean(abs(dd.wf_data),2);
-    gain_dB = lp(mean_wf_data,2);
-    
-    low_Tlim = TTL_end - rec_start - dd.param_analysis.radar.wfs(wf).Tadc_adjust...
-      -dd.param_analysis.radar.wfs(wf).time_correction;
-    upper_Tlim = rec_length*0.8;
-    low_idxs = find(dd.param_analysis.radar.wfs(wf).time>low_Tlim);
-    upper_idxs = find(dd.param_analysis.radar.wfs(wf).time>upper_Tlim);
-    
-    Gain_trunc = mean_wf_data(low_idxs(1):upper_idxs(1));
-    Gain = ( Gain_trunc ./ max(Gain_trunc) );
-    Time = dd.param_analysis.radar.wfs(wf).time(low_idxs(1):upper_idxs(1));
-    % Gain, Gain_trunc and Time have same size
-    % Gain_raw and time_axis ( or dd.param_analysis.radar.wfs(wf).time) have same size
-    
-    % Below equation works. 
-    % In data_load, 1./Inf = zero before low_Tlim
-%     Gain_raw = [Gain(1)*Inf*ones(low_idxs(1)-1,1); Gain; Gain(end)*ones(upper_idxs(end)-upper_idxs(1),1) ]; 
-
-    % Below equation doesnot work. 
-    % In data_load, 1./Gain = amplified noise before low_Tlim
-%     Gain_raw = [mean_wf_data(1:low_idxs(1)-1)./max(Gain_trunc); Gain; Gain(end)*ones(upper_idxs(end)-upper_idxs(1),1) ];
-
-    Gain_raw = [ones(low_idxs(1)-1,1); Gain; Gain(end)*ones(upper_idxs(end)-upper_idxs(1),1) ];
-    
-    
-    % dB
-    gain_max_dB = lp(max(Gain_trunc),2);
-    norm_gain_dB = gain_dB-gain_max_dB;
-    
-    % To save and use
-    param_analysis = dd.param_analysis;
-    param_records = dd.param_records;
-    param_ftg = param;
-    %% Generate the plots
+    %% wf-adc Loop: Input-Check Plot
     % =====================================================================
-    cur_fig = h_fig(fig_idx);
-    clf(cur_fig);
-    if param.analysis.enable_visible_plot
-      figure(cur_fig); % Brings the current figure to the top
-    end
-    h_axes = axes('parent',cur_fig);
-    plot(h_axes, time_axis/1e-6,mean_wf_data, 'LineWidth', 1)
-    hold(h_axes, 'on');
-    plot(h_axes, Time/1e-6, Gain_trunc,'--', 'LineWidth', 3);
-    xlabel(h_axes,'Fast Time (relative), us');
-    ylabel(h_axes,'Gain');
-    colors = get(h_axes,'ColorOrder');
-    grid(h_axes, 'on');
-    axis(h_axes, 'tight');
-    line(h_axes, [low_Tlim low_Tlim]/1e-6, h_axes.YLim, 'Color','g', 'LineWidth',1);
-    line(h_axes, [upper_Tlim upper_Tlim]/1e-6, h_axes.YLim, 'Color','g', 'LineWidth',1);
-    legend(h_axes,sprintf('[%d-%d] G_m_a_x=%.2f',wf,adc,gain_max_dB), 'Location', 'South');
-    hold(h_axes, 'off');
-    if ~param_analysis.radar.wfs(wf).gain_en
-      title(h_axes,sprintf('For [ %d-%d ] Fast Time Gain Curve ORIGINAL',wf,adc));
-    else
-      title(h_axes,sprintf('For [ %d-%d ] Fast Time Gain Curve CORRECTED',wf,adc));
-    end
-
-    %% Save the plots
-    if ~dd.param_analysis.radar.wfs(wf).gain_en
-      saveas(cur_fig, fullfile(out_dir,sprintf('gain_wf_%d_adc_%d.fig',wf,adc)));
-      saveas(cur_fig, fullfile(out_dir,sprintf('gain_wf_%d_adc_%d.jpg',wf,adc)));
-    else
-      saveas(cur_fig, fullfile(out_dir,sprintf('gain_wf_%d_adc_%d_2.fig',wf,adc)));
-      saveas(cur_fig, fullfile(out_dir,sprintf('gain_wf_%d_adc_%d_2.jpg',wf,adc)));
-    end
-
-    if ~param_analysis.radar.wfs(wf).gain_en
-      file_version = '1';
-      file_type = 'gain';
-      ct_save( fullfile(out_dir,sprintf('gain_wf_%d_adc_%d',wf,adc)), '-v7.3', ...
-        'Gain', 'Time', 'low_Tlim', 'upper_Tlim', 'low_idxs', 'upper_idxs',...
-        'param_ftg', 'param_analysis', 'param_records', 'Gain_raw', 'time_axis', 'file_type', 'file_version');
-    else
-      fprintf('Data was compensated for ftg. Therefore, new ftg datafile is not saved for wf-adc %d-%d\n',wf,adc);
-    end
-    %% Generate the RAW plots
-    % =====================================================================
-    if param.analysis.raw_plot_en
-      fig2_idx = fig2_idx +1;
-      cur_fig = h_fig2(fig2_idx);
-      clf(cur_fig);
-      if param.analysis.enable_visible_plot
-        figure(cur_fig); % Brings the current figure to the top
+    if any(strcmp('input_check',param.collate_gain.debug_plots))
+      clf(h_fig(1));
+      set(h_fig(1),'Name',sprintf('%d: Data %d-%d',h_fig(1).Number, wf,adc));
+      set(h_fig(1),'WindowStyle','docked');
+      h_axes = subplot(1,2,1,'parent',h_fig(1));
+      imagesc(h_axes(1), [], time*1e6, mean_wf_raw_dB)
+      grid(h_axes(1),'on');
+      xlabel(h_axes(1),'Range lines');
+      ylabel(h_axes(1),'Time ({\mu}s)');
+      h_axes(2) = subplot(1,2,2,'parent',h_fig(1));
+      plot(h_axes(2), time*1e6, mean_wf_dB, 'LineWidth', 2);
+      grid(h_axes(2),'on');
+      xlabel(h_axes(2),'Time ({\mu}s)');
+      ylabel(h_axes(2),'Normalized power (dB)');
+      title(h_axes(2),sprintf('Max gain %.1f dB\n', max_gain_dB));
+      legend(h_axes(2), 'Raw');
+      if enable_visible_plot
+        keyboard;
       end
-      h_axes = axes('parent',cur_fig);
-      plot(h_axes, time_axis/1e-6,gain_dB,'LineWidth',2);
-      hold(h_axes, 'on');
-      xlabel(h_axes,'Fast Time (relative), us');
-      ylabel(h_axes,'Gain, dB');
-      colors = get(h_axes,'ColorOrder');
-      grid(h_axes, 'on');
-      axis(h_axes, 'tight');
-      hold(h_axes, 'off');
-      if ~param_analysis.radar.wfs(wf).gain_en
-        title(h_axes,sprintf('For [ %d-%d ] Fast Time Gain Curve ORIGINAL',wf,adc));
-      else
-        title(h_axes,sprintf('For [ %d-%d ] Fast Time Gain Curve CORRECTED',wf,adc));
+      fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_input_check_%02d_%02d',param.collate_gain.debug_out_fn,wf,adc)) '.fig'];
+      fprintf('Saving %s\n', fig_fn);
+      fig_fn_dir = fileparts(fig_fn);
+      if ~exist(fig_fn_dir,'dir')
+        mkdir(fig_fn_dir);
       end
-    %% Save the RAW plots
-      saveas(cur_fig, fullfile(out_dir,sprintf('ftg2_wf_%d_adc_%d.fig',wf,adc)));
-      saveas(cur_fig, fullfile(out_dir,sprintf('ftg2_wf_%d_adc_%d.jpg',wf,adc)));
+      ct_saveas(h_fig(1),fig_fn);
+      fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_input_check_%02d_%02d',param.collate_gain.debug_out_fn,wf,adc)) '.jpg'];
+      fprintf('Saving %s\n', fig_fn);
+      ct_saveas(h_fig(1),fig_fn);
     end
     
-    %% Generate the COMBINED plot
+    %% wf-adc Loop: Process Gain Waveform
     % =====================================================================
-    cur_fig = h_fig(comb_plot);
-    if param.analysis.enable_visible_plot
-      figure(cur_fig); % Brings the current figure to the top
+    
+    % Force relative gain to be constant after user defined end time
+    time_end_idx = find(time>=param.collate_gain.time_end{img},1);
+    if ~isempty(time_end_idx)
+      mean_wf_dB(time_end_idx+1:end) = mean_wf_dB(time_end_idx);
     end
-    h_axes = gca(cur_fig);
-    plot(h_axes, time_axis/1e-6,norm_gain_dB,'LineWidth',2);
-    hold(h_axes, 'on');
-    leg{fig_idx} = sprintf('[%d-%d] G_m_a_x=%.2f',wf,adc,gain_max_dB) ; 
-
-    %% Generate the COMBINED RAW plot
+    
+    % Force relative gain to be constant after user defined end time
+    time_start_idx = find(time<=param.collate_gain.time_start{img},1,'last');
+    if ~isempty(time_start_idx)
+      mean_wf_dB(1:time_start_idx-1) = mean_wf_dB(time_start_idx);
+    end
+    
+    % Normalize gain to maximum gain
+    mean_wf_raw_dB = mean_wf_raw_dB - max_gain_dB;
+    mean_wf_dB = mean_wf_dB - max_gain_dB;
+    
+    % Force relative gain to be no less than user defined minimum relative
+    % gain
+    mean_wf_dB(mean_wf_dB < param.collate_gain.min_gain_dB{img}) = NaN;
+    mean_wf_dB = interp_finite(mean_wf_dB,0);
+    
+    %% wf-adc Loop: Fast Gain Plot
     % =====================================================================
-    if param.analysis.raw_plot_en
-      cur_fig = h_fig2(comb_plot2);
-      if param.analysis.enable_visible_plot
-        figure(cur_fig); % Brings the current figure to the top
+    if any(strcmp('gain',param.collate_gain.debug_plots))
+      plot(h_axes(2), time*1e6, mean_wf_raw_dB, 'LineWidth', 2);
+      hold(h_axes(2),'on');
+      grid(h_axes(2),'on');
+      plot(h_axes(2), time*1e6, mean_wf_dB, 'LineWidth', 2);
+      legend(h_axes(2), 'Raw', 'Final');
+      if enable_visible_plot
+        keyboard;
       end
-      h_axes = gca(cur_fig);
-      plot(h_axes, time_axis/1e-6,gain_dB,'LineWidth',2);
-      hold(h_axes, 'on');
-      leg2{fig2_idx} = sprintf('[%d-%d] G_m_a_x=%.2f',wf,adc,gain_max) ; 
+      fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_%02d_%02d',param.collate_gain.debug_out_fn,wf,adc)) '.fig'];
+      fprintf('Saving %s\n', fig_fn);
+      fig_fn_dir = fileparts(fig_fn);
+      if ~exist(fig_fn_dir,'dir')
+        mkdir(fig_fn_dir);
+      end
+      ct_saveas(h_fig(1),fig_fn);
+      fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_%02d_%02d',param.collate_gain.debug_out_fn,wf,adc)) '.jpg'];
+      fprintf('Saving %s\n', fig_fn);
+      ct_saveas(h_fig(1),fig_fn);
     end
     
+    all_time{end+1} = time;
+    all_wf_dB{end+1} = mean_wf_dB;
+    all_legend{end+1} = sprintf('%d-%d',wf,adc);
     
-    % To see the progress of current segment
-    if wf_adc == 1
-      fprintf('wf-adc %d-%d',wf,adc);
-    else
-      fprintf(' %d-%d',wf,adc);
+    %% wf-adc Loop: Save Results
+    % =========================================================================
+    gain_fn_dir = ct_filename_out(param,param.collate_gain.out_path,'',1);
+    if ~exist(gain_fn_dir)
+      mkdir(gain_fn_dir);
     end
-    
+    gain_fn = fullfile(gain_fn_dir,sprintf('gain_%s_%02d_%02d.mat',param.day_seg,wf,adc));
+    gain = [];
+    gain.time = time;
+    gain.gain = mean_wf_dB;
+    gain.param_equal = param;
+    gain.in_fn = dir(fn);
+    gain.sw_version = current_software_version;
+    gain.file_version = '1';
+    gain.file_type = 'gain';
+    fprintf('Saving %s\n', gain_fn);
+    ct_save(gain_fn,'-struct','gain');
   end
-  fprintf('\n');
 end
 
-%% Wrap up the COMBINED plot
-% =========================================================================
-cur_fig = h_fig(comb_plot);
-if param.analysis.enable_visible_plot
-  figure(cur_fig); % Brings the current figure to the top
+%% Plot All Waveforms Combined
+if any(strcmp('combined_plot',param.collate_gain.debug_plots))
+  clf(h_fig(1));
+  set(h_fig(1),'visible','on');
+  h_axes = axes('parent',h_fig(1));
+  for idx = 1:length(all_time)
+    plot(h_axes, all_time{idx}*1e6, all_wf_dB{idx});
+    hold(h_axes,'on');
+  end
+  grid(h_axes,'on');
+  xlabel(h_axes,'Time ({\mu}s)');
+  ylabel(h_axes,'Normalized power (dB)');
+  legend(h_axes, all_legend);
+  fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_combined',param.collate_gain.debug_out_fn)) '.fig'];
+  fprintf('Saving %s\n', fig_fn);
+  fig_fn_dir = fileparts(fig_fn);
+  if ~exist(fig_fn_dir,'dir')
+    mkdir(fig_fn_dir);
+  end
+  ct_saveas(h_fig(1),fig_fn);
+  fig_fn = [ct_filename_ct_tmp(param,'',debug_out_dir,sprintf('%s_combined',param.collate_gain.debug_out_fn)) '.jpg'];
+  fprintf('Saving %s\n', fig_fn);
+  ct_saveas(h_fig(1),fig_fn);
 end
-h_axes = gca(cur_fig);
-colors = get(h_axes,'ColorOrder');
-xlabel(h_axes,'Fast Time (relative), us');
-ylabel(h_axes,'Normalized Gain');
-grid(h_axes, 'on');
-axis(h_axes, 'tight');
-hold(h_axes, 'off');
-if ~param_analysis.radar.wfs(wf).gain_en
-  title(h_axes,sprintf('Combined Fast Time Gain Curve ORIGINAL'));
-else
-  title(h_axes,sprintf('Combined Fast Time Gain Curve CORRECTED'));
-end
-legend(h_axes,leg, 'Location', 'South');
-
-%% Save the combined plot plot
-if ~dd.param_analysis.radar.wfs(wf).gain_en
-  saveas(cur_fig, fullfile(out_dir,sprintf('gain_combined_ch_%d.fig',adc)));
-  saveas(cur_fig, fullfile(out_dir,sprintf('gain_combined_ch_%d.jpg',adc)));
-else
-  saveas(cur_fig, fullfile(out_dir,sprintf('gain_combined_ch_%d_2.fig',adc)));
-  saveas(cur_fig, fullfile(out_dir,sprintf('gain_combined_ch_%d_2.jpg',adc)));
-end
-
-%% Wrap up the COMBINED RAW plot
-% =========================================================================
-if param.analysis.raw_plot_en
-  cur_fig = h_fig2(comb_plot2);
-  if param.analysis.enable_visible_plot
-    figure(cur_fig); % Brings the current figure to the top
-  end
-  h_axes = gca(cur_fig);
-  colors = get(h_axes,'ColorOrder');
-  xlabel(h_axes,'Fast Time (relative), us');
-  ylabel(h_axes,'Gain, dB');
-  grid(h_axes, 'on');
-  axis(h_axes, 'tight');
-  hold(h_axes, 'off');
-  if ~param_analysis.radar.wfs(wf).gain_en
-    title(h_axes,sprintf('Combined Fast Time Gain Curve ORIGINAL'));
-  else
-    title(h_axes,sprintf('Combined Fast Time Gain Curve CORRECTED'));
-  end
-  legend(h_axes,leg2, 'Location', 'South');
-
-  %% Save the combined RAW plot plot
-  saveas(cur_fig, fullfile(out_dir,sprintf('ftg2_combined_ch_%d.fig',adc)));
-  saveas(cur_fig, fullfile(out_dir,sprintf('ftg2_combined_ch_%d.jpg',adc)));
-end
-
-fprintf('=============================================================\n');
-fprintf('%s: %s (%s)\n', param.season_name, param.day_seg, datestr(now));
-fprintf('Output directory -->\n %s\n',out_dir);
-fprintf('=============================================================\n');
-
-% 
-
-
-%%
-
-%Surprise!
-% plot_ftg;
-if param.analysis.ftg_plot_en
-% script plot_ftg
-%
-% Plots results from run_collate_ftg
-%
-% Authors: John Paden, Hara Madhav Talasila
-
-%% USER SETTINGS
-% =========================================================================
-
-% param_override = [];
-% param_sheet_name = 'rds_param_2019_Greenland_P3.xls';
-% param_fn = ct_filename_param(param_sheet_name);
-% params = read_param_xls(param_fn,'',{'analysis_gain' 'analysis'});
-
-% param_override.analysis.enable_visible_plot = 0; % Set 1/0; Default: 1
-
-%% Automated Section
-% =========================================================================
-% 
-% % Input checking
-% global gRadar;
-% if exist('param_override','var')
-%   param_override = merge_structs(gRadar,param_override);
-% else
-%   param_override = gRadar;
-% end
-
-% Process each of the segments
-for param_idx =param_idx
-  param = params(param_idx);
-  if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) || ischar(param.cmd.generic) || ~param.cmd.generic
-    continue;
-  end
-  %% General Setup
-  % =======================================================================
-
-%   param = merge_structs(param, param_override);
-  physical_constants;
-
-  fprintf('=============================================================\n');
-  fprintf('%s: %s (%s)\n', param.season_name, param.day_seg, datestr(now));
-  fprintf('=============================================================\n');
-  %% Input Checks
-  % =======================================================================
-
-  if ~isfield(param.analysis, 'enable_visible_plot')
-    param.analysis.enable_visible_plot = 1;
-  end
-
-  ftg_dir = ct_filename_ct_tmp(param,'','waveform','gain');
-  if ~exist(ftg_dir, 'dir')
-    fprintf('Empty directory --> run_collate_ftg (%s)\n',ftg_dir);
-    return;
-  end
-  %% PLOT
-  % For figure handles
-  leg=[];
-  leg_idx=0;
-  color_idx=0;
-  h_fig = get_figures(1,param.analysis.enable_visible_plot);
-  cur_fig = h_fig(1);
-  clf(cur_fig);
-  if param.analysis.enable_visible_plot
-    figure(cur_fig); % Brings the current figure to the top
-  end
-  h_axes = axes('parent',cur_fig);
-  hold(h_axes, 'on');
-  colors = get(h_axes,'ColorOrder');
-  dd={};
-  % The loop for each img-wf_adc pair
-  for img = 1:length(param.analysis.imgs)
-    for wf_adc = 1:size(param.analysis.imgs{img},1)
-      wf = param.analysis.imgs{img}(wf_adc,1);
-      adc = param.analysis.imgs{img}(wf_adc,2);
-      %% Load the ftg file
-      % =====================================================================
-      dd{wf,adc} = load(fullfile(ftg_dir, sprintf('gain_wf_%d_adc_%d.mat',wf,adc)));
-      color_idx = color_idx+1;
-      plot(h_axes, dd{wf,adc}.Time/1e-6,dd{wf,adc}.Gain,'LineWidth', 2, 'Color', colors(color_idx,:));
-      leg_idx = leg_idx+1;
-      leg{leg_idx} = sprintf('[%d-%d] Truncated',wf,adc) ;
-      plot(h_axes, dd{wf,adc}.param_analysis.radar.wfs(wf).time/1e-6, dd{wf,adc}.Gain_raw,':', 'LineWidth', 2, 'Color', colors(color_idx,:));
-      leg_idx = leg_idx+1;
-      leg{leg_idx} = sprintf('[%d-%d] Extrapolated',wf,adc) ;
-      line(h_axes, [dd{wf,adc}.low_Tlim dd{wf,adc}.low_Tlim]/1e-6, [dd{wf,adc}.Gain(1), 0.00],'Color', 'k', 'LineWidth',1);
-      leg_idx = leg_idx+1;
-      leg{leg_idx} = sprintf('[%d-%d] Limits',wf,adc) ;
-      line(h_axes, [dd{wf,adc}.upper_Tlim dd{wf,adc}.upper_Tlim]/1e-6, [dd{wf,adc}.Gain(end), 0.94],'Color', 'g', 'LineWidth',2);
-      leg_idx = leg_idx+1;
-      leg{leg_idx} = sprintf('[%d-%d] Limits',wf,adc) ;
-      
-    end
-  end
-  xlabel(h_axes,'Fast Time (relative), us');
-  ylabel(h_axes,'Normalized Gain');
-  colors = get(h_axes,'ColorOrder');
-  grid(h_axes, 'on');
-  axis(h_axes, 'tight');
-
-
-  legend(h_axes,leg, 'Location', 'South');
-  hold(h_axes, 'off');
-  title(h_axes,sprintf('For chan [ %d ] Fast Time Gain Curve',adc));
-
-  %% Save the plots
-  saveas(cur_fig, fullfile(ftg_dir,sprintf('gain_norm_chan_%d.fig',adc)));
-  saveas(cur_fig, fullfile(ftg_dir,sprintf('gain_norm_chan_%d.jpg',adc)));
-end
-
-end % if param.analysis.ftg_plot_en

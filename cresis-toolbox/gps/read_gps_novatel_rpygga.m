@@ -40,7 +40,7 @@ function gps = read_gps_novatel_rpygga(in_fn, param)
 %
 % Author: William Blake, John Paden, Anthony Hoch, Logan Smith
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 global gRadar
 

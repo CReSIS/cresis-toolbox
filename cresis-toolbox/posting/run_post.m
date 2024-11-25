@@ -44,7 +44,7 @@ concatenate_csv_kml = false;
 for param_idx = 1:length(params)
   param = params(param_idx);
   cmd = param.cmd;
-  if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) || ischar(param.cmd.generic) || ~param.cmd.generic
+  if ct_generic_en(param)
     continue;
   end
   if param.post.concat_en

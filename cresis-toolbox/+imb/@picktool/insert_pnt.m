@@ -27,12 +27,17 @@ end
   
 % Find the closest point in the image
 [~,image_x_idx] = min(abs(image_x-x));
-[~,image_y_idx] = min(abs(image_y-y));
-% Prevent search range from searching outside bounds of param.image_c
-search_range = search_range(image_y_idx+search_range >= 1 ...
-  & image_y_idx+search_range < size(param.image_c,1));
-[~,max_idx] = max(param.image_c(image_y_idx+search_range,image_x_idx));
-max_idx = search_range(max_idx) + image_y_idx;
+dy = image_y(2)-image_y(1);
+image_y_idx = 1 + round((y-image_y(1))/dy);
+if image_y_idx < 1 || image_y_idx > size(param.image_c,1)
+  max_idx = image_y_idx;
+else
+  % Prevent search range from searching outside bounds of param.image_c
+  search_range = search_range(image_y_idx+search_range >= 1 ...
+    & image_y_idx+search_range < size(param.image_c,1));
+  [~,max_idx] = max(param.image_c(image_y_idx+search_range,image_x_idx));
+  max_idx = search_range(max_idx) + image_y_idx;
+end
 
 [~,point_idxs] = min(abs(param.layer.x-x));
 new_y = interp1(1:length(image_y),image_y,max_idx,'linear','extrap');

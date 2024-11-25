@@ -44,8 +44,8 @@ classdef (HandleCompatible = true) mapwin < handle
     % cur_map_pref_settings.layers.lyr_name: string, OPS layer name
     % cur_map_pref_settings.layers.lyr_group_name: string, OPS group name
     % cur_map_pref_settings.layers.lyr_id: OPS layer ID
-    % cur_map_pref_settings.seasons: cell array of strings containing seasons loaded (layerdata flightlines include system in the season name)
-    % cur_map_pref_settings.system: string, system name if OPS flight lines, otherwise 'layerdata'
+    % cur_map_pref_settings.seasons: cell array of strings containing seasons loaded (tracks files flightlines include system in the season name)
+    % cur_map_pref_settings.system: string, system name if OPS flight lines, otherwise 'tracks'
     % cur_map_pref_settings.sources: echogram sources to load
     % cur_map_pref_settings.map_zone: string, 'antarctic' or 'arctic'
     % cur_map_pref_settings.map_name: string, name of map
@@ -54,7 +54,7 @@ classdef (HandleCompatible = true) mapwin < handle
     map
     % map.source % 0 for OPS map, 1 for blank, 2 for Google
     % map.scale % 1e3 (km to meters for OPS/Blank), 1 for Google
-    % map.fline_source % 0 for OPS flight lines, 1 for season layerdata
+    % map.fline_source % 0 for OPS flight lines, 1 for csarp_support/tracks files
     % map.proj % Matlab Projection Structure
     % map.xaxis_default % Current xaxis default bounds
     % map.yaxis_default % Current yaxis default bounds
@@ -77,16 +77,16 @@ classdef (HandleCompatible = true) mapwin < handle
     google
     % google.map % Stores imp info about the google map obj
     
-    % Season layerdata:
-    % (.../csarp_support/layers/layer_MAPZONE_SYSTEM_SEASON.mat)
-    layerdata
-    % layerdata.x
-    % layerdata.y
-    % layerdata.frm_id
-    % layerdata.season_idx
-    % layerdata.frm_info().frm_id
-    % layerdata.frm_info().start_gps_time
-    % layerdata.frm_info().stop_gps_time
+    % Tracks files:
+    % (.../csarp_support/tracks/tracks_MAPZONE_SYSTEM_SEASON.mat)
+    trackdata
+    % trackdata.x
+    % trackdata.y
+    % trackdata.frm_id
+    % trackdata.season_idx
+    % trackdata.frm_info().frm_id
+    % trackdata.frm_info().start_gps_time
+    % trackdata.frm_info().stop_gps_time
 
     
   end
@@ -140,7 +140,7 @@ classdef (HandleCompatible = true) mapwin < handle
       obj.map.scale = []; % 1e3 (km to meters for OPS), 1 for Google
       % Currently selected flight line information
       obj.map.sel.frm_str = ''; % Current frame name
-      obj.map.sel.seg_id = []; % Current segment ID (Database ID for OPS layer source, index into obj.cur_map_pref_settings.seasons for layerdata source)
+      obj.map.sel.seg_id = []; % Current segment ID (Database ID for OPS layer source, index into obj.cur_map_pref_settings.seasons for csarp_support/tracks files source)
       obj.map.sel.season_name = ''; % Current season name
       obj.map.sel.radar_name = ''; % Current radar name
       obj.map.xaxis = [];
@@ -162,17 +162,17 @@ classdef (HandleCompatible = true) mapwin < handle
       obj.google = [];
       obj.google.map = []; % Stores imp info about the google map obj
       
-      % layerdata properties
+      % csarp_support/tracks files properties
       % -------------------------------------------------------------------
-      obj.layerdata = [];
-      obj.layerdata.x = []; % Nx length vector of flightlines in local map coordinates
-      obj.layerdata.y = []; % Nx length vector of flightlines in local map coordinates
-      obj.layerdata.frm_id = []; % Nx length vector of frame ids (as numeric)
-      obj.layerdata.season_idx = []; % Nx length vector of season indices into obj.cur_map_pref_settings.seasons
-      obj.layerdata.frm_info = []; % Frame information struct array (one struct per entry in obj.cur_map_pref_settings.seasons)
-      obj.layerdata.frm_info.frm_id = []; % Nf length vector of frames, frame id (numeric)
-      obj.layerdata.frm_info.start_gps_time = []; % Nf length vector, start GPS time of frame (ANSI-C seconds since Jan 1, 1970)
-      obj.layerdata.frm_info.stop_gps_time = []; % Nf length vector, stop GPS time of frame (ANSI-C seconds since Jan 1, 1970)
+      obj.trackdata = [];
+      obj.trackdata.x = []; % Nx length vector of flightlines in local map coordinates
+      obj.trackdata.y = []; % Nx length vector of flightlines in local map coordinates
+      obj.trackdata.frm_id = []; % Nx length vector of frame ids (as numeric)
+      obj.trackdata.season_idx = []; % Nx length vector of season indices into obj.cur_map_pref_settings.seasons
+      obj.trackdata.frm_info = []; % Frame information struct array (one struct per entry in obj.cur_map_pref_settings.seasons)
+      obj.trackdata.frm_info.frm_id = []; % Nf length vector of frames, frame id (numeric)
+      obj.trackdata.frm_info.start_gps_time = []; % Nf length vector, start GPS time of frame (ANSI-C seconds since Jan 1, 1970)
+      obj.trackdata.frm_info.stop_gps_time = []; % Nf length vector, stop GPS time of frame (ANSI-C seconds since Jan 1, 1970)
 
       % Set default parameters
       % -------------------------------------------------------------------

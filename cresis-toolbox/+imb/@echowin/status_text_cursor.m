@@ -23,13 +23,13 @@ if isempty(cur_layers)
 else
   physical_constants;
   elev = obj.eg.image_elev(rline);
-  [~,unique_idxs] = unique(obj.eg.layers.x{1});
+  [~,unique_idxs] = unique(obj.eg.layers.x);
   warning off;
-  surf_y = interp1(obj.eg.layers.x{1}(unique_idxs), ...
+  surf_y = interp1(obj.eg.layers.x(unique_idxs), ...
     obj.eg.layers.y{1}(unique_idxs),obj.cursor.gps_time);
-  [~,unique_idxs] = unique(obj.eg.layers.x{cur_layers(1)});
+  [~,unique_idxs] = unique(obj.eg.layers.x);
   try
-    layer_y = interp1(obj.eg.layers.x{cur_layers(1)}(unique_idxs), ...
+    layer_y = interp1(obj.eg.layers.x(unique_idxs), ...
       obj.eg.layers.y{cur_layers(1)}(unique_idxs),obj.cursor.gps_time);
     if ~all(isfinite(layer_y))
       error('');

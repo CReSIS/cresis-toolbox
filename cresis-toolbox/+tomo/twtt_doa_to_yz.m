@@ -1,4 +1,4 @@
-function [y,z] = twtt_doa_to_yz(doa,theta,surface,er_ice,twtt,doa_method_flag,doa_limits)
+function [y,z] = twtt_doa_to_yz(doa,theta,surface,er_surf,er_ice,twtt,doa_method_flag,doa_limits)
 % [y,z] = tomo.twtt_doa_to_yz(doa,theta,surface,er_ice,twtt)
 %
 % Converts twtt,doa coordinates (the standard synthetic aperture radar
@@ -16,6 +16,7 @@ function [y,z] = twtt_doa_to_yz(doa,theta,surface,er_ice,twtt,doa_method_flag,do
 %   Direction of arrival vector corresponding to the surface matrix
 % surface: Nsv by Nx array or 1 by Nx [seconds]
 %   The two way travel time to the ice top.
+% er_surf: the relative dielectric of the medium of initial transmission
 % er_ice: scalar containing relative dielectric of ice
 % twtt: Nsig by Nx array [seconds]
 %   The two way travel to the target (top or bottom)
@@ -30,7 +31,7 @@ function [y,z] = twtt_doa_to_yz(doa,theta,surface,er_ice,twtt,doa_method_flag,do
 % theta = mdata.param_combine.array_param.theta; theta = reshape(theta,[Nsig 1]);
 % [y,z] = tomo.twtt_doa_to_yz(mdata.Time,repmat(theta,[1 Nx]),theta,mdata.twtt,3.15);
 %
-% Author: John Paden
+% Author: John Paden, Nick Holschuh
 
 % Load in standard constants like speed of light, c
 physical_constants;
@@ -60,14 +61,14 @@ if ~doa_method_flag
     % Determine the time to the surface and the position of incidence
     twtt_to_surf = interp1(theta, surface(:,rline), doa(:,rline));
     for doa_idx = 1:Nsig
-      inc_y = sin(doa(doa_idx,rline)) * twtt_to_surf(doa_idx) * c/2;
-      inc_z = -cos(doa(doa_idx,rline)) * twtt_to_surf(doa_idx) * c/2;
+      inc_y = sin(doa(doa_idx,rline)) * twtt_to_surf(doa_idx) * c/2/sqrt(er_surf);
+      inc_z = -cos(doa(doa_idx,rline)) * twtt_to_surf(doa_idx) * c/2/sqrt(er_surf);
       
       % For each time position up to the surface, finding y,z is a cylindrical to
       % cartesian coordinate conversion.
       if twtt(doa_idx,rline) <= twtt_to_surf(doa_idx)
-        y(doa_idx,rline) = sin(doa(doa_idx,rline)) * twtt(doa_idx,rline) * c/2;
-        z(doa_idx,rline) = -cos(doa(doa_idx,rline)) * twtt(doa_idx,rline) * c/2;
+        y(doa_idx,rline) = sin(doa(doa_idx,rline)) * twtt(doa_idx,rline) * c/2/sqrt(er_surf);
+        z(doa_idx,rline) = -cos(doa(doa_idx,rline)) * twtt(doa_idx,rline) * c/2/sqrt(er_surf);
         
       elseif twtt(doa_idx,rline) > twtt_to_surf(doa_idx)
         
@@ -89,7 +90,7 @@ if ~doa_method_flag
         if abs(theta_inc) >= pi/2
           continue;
         end
-        theta_tx = asin(sin(theta_inc)/sqrt(er_ice));
+        theta_tx = asin(sin(theta_inc)*sqrt(er_surf)/sqrt(er_ice));
         
         y(doa_idx,rline) = inc_y + sin(theta_tx) ...
           * (twtt(doa_idx,rline)-twtt_to_surf(doa_idx)) * c/2/sqrt(er_ice);
@@ -124,8 +125,8 @@ else
 %       Nsig = length(tmp_twtt);
 %       Nsv = Nsig;
       % Convert surface for this along-track slope to y,z coordinates
-      surf_y = sin(tmp_theta) .* tmp_surface * c/2;
-      surf_z = -cos(tmp_theta) .* tmp_surface * c/2;
+      surf_y = sin(tmp_theta) .* tmp_surface * c/2/sqrt(er_surf);
+      surf_z = -cos(tmp_theta) .* tmp_surface * c/2/sqrt(er_surf);
       p = polyfit(surf_y,surf_z,1);
       
       % Determine the time to the surface and the position of incidence
@@ -160,14 +161,14 @@ else
       for tmp_doa_idx = 1:Nsig
         doa_idx = dood_theta_idx(tmp_doa_idx);
 %         tmp_doa(doa_idx) * 180/pi
-          inc_y = sin(tmp_doa(doa_idx)) * twtt_to_surf(doa_idx) * c/2;
-          inc_z = -cos(tmp_doa(doa_idx)) * twtt_to_surf(doa_idx) * c/2;
+          inc_y = sin(tmp_doa(doa_idx)) * twtt_to_surf(doa_idx) * c/2/sqrt(er_surf);
+          inc_z = -cos(tmp_doa(doa_idx)) * twtt_to_surf(doa_idx) * c/2/sqrt(er_surf);
           
           % For each time position up to the surface, finding y,z is a cylindrical to
           % cartesian coordinate conversion.
           if tmp_twtt(doa_idx) <= twtt_to_surf(doa_idx)
-            y(doa_idx,rline) = sin(tmp_doa(doa_idx)) * tmp_twtt(doa_idx) * c/2;
-            z(doa_idx,rline) = -cos(tmp_doa(doa_idx)) * tmp_twtt(doa_idx) * c/2;
+            y(doa_idx,rline) = sin(tmp_doa(doa_idx)) * tmp_twtt(doa_idx) * c/2/sqrt(er_surf);
+            z(doa_idx,rline) = -cos(tmp_doa(doa_idx)) * tmp_twtt(doa_idx) * c/2/sqrt(er_surf);
             
           elseif tmp_twtt(doa_idx) > twtt_to_surf(doa_idx)
             
@@ -189,7 +190,7 @@ else
             if abs(theta_inc) >= pi/2
               continue;
             end
-            theta_tx = asin(sin(theta_inc)/sqrt(er_ice));
+            theta_tx = asin(sin(theta_inc)*sqrt(er_surf)/sqrt(er_ice));
             
             y(doa_idx,rline) = inc_y + sin(theta_tx) ...
               * (tmp_twtt(doa_idx)-twtt_to_surf(doa_idx)) * c/2/sqrt(er_ice);

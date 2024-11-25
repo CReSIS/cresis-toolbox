@@ -1,5 +1,5 @@
-function out = mle_initialization(DCM,param)
-% out = mle_initialization(DCM,param)
+function out = mle_initialization(Rxx,param)
+% out = mle_initialization(Rxx,param)
 %
 % Function used to initialize maximum likelihood stimator called in
 % array_proc.m. Uses the alternating projection approach to initialize.
@@ -8,7 +8,7 @@ function out = mle_initialization(DCM,param)
 % refine that estimate.
 %
 % Inputs:
-%   DCM = data covariance matrix
+%   Rxx = data covariance matrix
 %
 %   param = control struction containing the following fields:
 %     .Nsig   = number of sources specified by array_param.Nsrc field,
@@ -26,7 +26,7 @@ function out = mle_initialization(DCM,param)
 %     .theta  = coarse grid used to evaluate cost function.  The number of
 %               elements in S.theta is set by the Nsv field in the combine
 %               spreadsheet.  S.theta is the FFTSHIFTED theta vector output
-%               by the array_proc_sv call in array_proc.
+%               by the array_proc_sv call in array_proc. RADIANS
 %     .search_type = string indicating search type. 'grid' for grid search
 %               (most expensive) or 'ap' for alternating projection search
 %     .theta_guard = double scalar that gives the minimum separation
@@ -39,6 +39,37 @@ function out = mle_initialization(DCM,param)
 %
 % See Also:  array_proc.m, mle_cost_function.m, mle_compute_cost.cpp
 % =========================================================================
+
+%% mle_initialization:  Input Checks
+% =========================================================================
+if ~isfield(param,'sv_dielectric') || isempty(param.sv_dielectric)
+  param.sv_dielectric = 1;
+end
+
+if ~isfield(param,'sv_fh') || isempty(param.sv_fh) 
+  param.sv_fh = @array_proc_sv;
+end
+
+if ~isfield(param,'lut') || isempty(param.lut) 
+  param.lut = [];
+end
+
+if ~isfield(param,'lut_roll') || isempty(param.lut_roll)
+  param.lut_roll = [];
+end
+
+if ~isfield(param,'search_type') || isempty(param.search_type)
+  param.search_type = 'grid';
+end
+
+if ~isfield(param,'doa_seq') || isempty(param.doa_seq)
+  param.doa_seq = false;
+end
+
+if ~isfield(param,'apriori') || isempty(param.apriori)
+  param.apriori.en = false;
+end
+
 c = 2.997924580003452e+08; % physical_constants too slow
 
 k = 4*pi*param.fc/c;
@@ -86,15 +117,17 @@ if isfield(param,'search_type') && strcmpi(param.search_type,'grid')
     
     if good
       % Evaluate cost function
-      Nsv2{1} = 'theta';
-      Nsv2{2} = theta.';
-      [~,A] = array_proc_sv(Nsv2,param.fc,param.y_pc,param.z_pc);
+      sv_opt_arg.theta = theta.';
+      sv_arg = {param.fc*sqrt(param.sv_dielectric),param.y_pc,param.z_pc, sv_opt_arg, param.lut, param.lut_roll};
+      [~,A] = param.sv_fh(sv_arg{:});
+
+%       [~,A] = array_proc_sv(Nsv2,param.fc*param.sv_dielectric,param.y_pc,param.z_pc);
 %       A = sqrt(1/length(param.y_pc)) * exp(1i*k*(-param.z_pc*cos(theta).' + param.y_pc*sin(theta).'));
       Pa  = A * inv(A'*A) * A';
       if  param.doa_seq && param.apriori.en
-        J(idx) = -(M*size(A,1)) * log(abs(sum(sum((eye(size(Pa))-Pa) .* DCM.'))));
+        J(idx) = -(M*size(A,1)) * log(abs(sum(sum((eye(size(Pa))-Pa) .* Rxx.'))));
       else
-        J(idx) = abs(sum(sum(Pa .* DCM.')));
+        J(idx) = abs(sum(sum(Pa .* Rxx.')));
       end
       
       % Incorporate the a priori pdf if available
@@ -154,11 +187,11 @@ else
   
   % Initialize first source
   % -------------------------------------------------------------------------
-  B             = Cb ./ (repmat(sqrt(sum(abs(Cb).^2,1)),size(DCM,1),1));
+  B             = Cb ./ (repmat(sqrt(sum(abs(Cb).^2,1)),size(Rxx,1),1));
   L = zeros(size(B,2),1);
   for theta_idx = 1:size(B,2)
     b = B(:,theta_idx);
-    L(theta_idx) = abs(b'*DCM*b);
+    L(theta_idx) = abs(b'*Rxx*b);
   end
   [~,max_idx]   = max(L);
   
@@ -209,10 +242,13 @@ else
       
       % Setup steering vectors
       theta_eval  = [out(:).',search_theta]; % search range has same meaning as   theta_i in [Ziskind and Wax]
-      k           = 4*pi*param.fc/c;
-      ky          = k*sin(theta_eval);
-      kz          = k*cos(theta_eval);
-      SVs         = sqrt(1/length(param.y_pc)) * exp(1i*(-param.z_pc*kz + param.y_pc*ky));
+      sv_opt_arg.theta = theta_eval;
+      sv_arg = {param.fc*sqrt(param.sv_dielectric),param.y_pc,param.z_pc, sv_opt_arg, param.lut, param.lut_roll};
+      [~,SVs] = param.sv_fh(sv_arg{:});
+%       k           = 4*pi*param.fc/c;
+%       ky          = k*sin(theta_eval);
+%       kz          = k*cos(theta_eval);
+%       SVs         = sqrt(1/length(param.y_pc)) * exp(1i*(-param.z_pc*kz + param.y_pc*ky));
       A           = SVs(:,1:numel(out));
       C           = SVs(:,numel(out)+1:end);
       Pa          = A * inv(A'*A) * A';
@@ -220,7 +256,7 @@ else
       B           = bsxfun(@rdivide, Cb, sqrt(sum(abs(Cb).^2,1)));
 
       % Evaluate likelihood function
-      L           = abs(diag(B'*DCM*B));
+      L           = abs(diag(B'*Rxx*B));
       
       % Maximize cost function
       [~,max_idx] = max(L);

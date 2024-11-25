@@ -31,12 +31,15 @@ function [surface,pnt] = tracker_snake_simple(data,surf)
 if ~exist('surf','var')
   surf = struct();
 end
-if ~isfield(surf,'min_bin')
-  surf.min_bin = 1;
+if ~isfield(surf,'min_bin') || isempty(surf.min_bin)
+  surf.min_bin = ones(1,size(data,2));
 end
-if ~isfield(surf,'max_bin') || isempty(surf.max_bin) || ~isfinite(surf.max_bin)
-  surf.max_bin = size(data,1);
+surf.min_bin(~isfinite(surf.min_bin)) = 1;
+if ~isfield(surf,'max_bin') || isempty(surf.max_bin)
+  surf.max_bin = size(data,1)*ones(1,size(data,2));
 end
+surf.max_bin(~isfinite(surf.max_bin)) = size(data,1);
+
 if ~isfield(surf,'search_rng')
   surf.search_rng = -1:1;
 end

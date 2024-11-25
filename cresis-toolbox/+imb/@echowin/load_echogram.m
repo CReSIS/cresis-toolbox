@@ -25,8 +25,24 @@ source_idx = find(strcmp(current_sources{source_idx},obj.eg.sources));
 
 % Determine the desired image
 sourceMenus = get(obj.left_panel.sourceCM,'Children');
-img = length(sourceMenus)-strmatch('on',get(sourceMenus,'Checked'))-3;
-
+img = [];
+for idx = 1:length(sourceMenus)
+  if strncmp(sourceMenus(idx).Label,'Image',5)
+    if isequal(sourceMenus(idx).Checked,'on')
+      img = str2double(sourceMenus(idx).Label(7:end));
+    end
+  elseif strcmp(sourceMenus(idx).Label,'Combined')
+    if isequal(sourceMenus(idx).Checked,'on')
+      img = 0;
+    end
+    % Combined is the last one so break
+    break;
+  end
+end
+if isempty(img)
+  sourceMenus(idx).Checked = 'on';
+end
+  
 % Determine if the sources exist for the desired frames, source, and image
 desire_exists = obj.eg.source_fns_existence(desire_frame_idxs,source_idx,img+1);
 
@@ -42,6 +58,12 @@ if any(~desire_exists)
     if isempty(img)
       first_match = find(obj.eg.source_fns_existence(most_desire_frame_idx,:,:),1);
       if isempty(first_match)
+        fprintf('Searching for echogram source files in:\n');
+        for source_idx = 1:length(obj.eg.sources)
+          fn_dir = ct_filename_out(obj.eg.cur_sel,obj.eg.sources{source_idx});
+          fprintf('  %s\n', fn_dir);
+        end
+        errordlg(sprintf('Searched echogram sources specified in preferences and no matching echogram files exist for frame %03d.', most_desire_frame_idx), 'No matching echograms found.')
         error('No source files exist for frame %03d.', most_desire_frame_idx);
       else
         warning('Source %s does not exist for frame %03d.', obj.eg.sources{source_idx}, most_desire_frame_idx);
@@ -108,7 +130,59 @@ obj.eg.gps_time = obj.eg.gps_time(valid_mask);
 obj.eg.lat = obj.eg.lat(valid_mask);
 obj.eg.lon = obj.eg.lon(valid_mask);
 obj.eg.elev = obj.eg.elev(valid_mask);
+obj.eg.roll = obj.eg.roll(valid_mask);
 obj.eg.surf_twtt = obj.eg.surf_twtt(valid_mask);
+
+%% Determine new time axis
+min_time = inf;
+max_time = -inf;
+dt = 0;
+for frame_idx = 1:length(desire_frame_idxs)
+  cur_frame = desire_frame_idxs(frame_idx);
+  
+  % load EG
+  fn = fullfile(ct_filename_out(obj.eg.cur_sel,obj.eg.sources{source_idx},'',0),sprintf('Data_%s%s.mat',fn_img_str,obj.eg.frm_strs{cur_frame}));
+  if ~exist(fn,'file')
+    warning('File %s not found', fn);
+    keyboard
+  end
+  % Load EG data and metadata
+  tmp_vars = whos('-file',fn);
+  if any(strcmp('Truncate_Bins',{tmp_vars.name}))
+    tmp = load(fn,'Time','Truncate_Bins','Elevation_Correction');
+  else
+    tmp = load(fn);
+  end
+  tmp = uncompress_echogram(tmp);
+  if isempty(tmp.Time)
+    % Handle special case of file with all bad data
+    warning('File does not have any good data so skipping for obj.eg.time axis creation: %s', fn);
+  else
+    if tmp.Time(1) < min_time
+      min_time = tmp.Time(1);
+    end
+    if tmp.Time(end) > max_time
+      max_time = tmp.Time(end);
+    end
+    if length(tmp.Time) >= 2
+      if dt == 0 || dt < tmp.Time(2) - tmp.Time(1)
+        dt = tmp.Time(2) - tmp.Time(1);
+      end
+    end
+  end
+end
+if dt == 0
+  dt = 1;
+end
+if ~isfinite(min_time)
+  min_time = 0;
+  max_time = dt;
+end
+new_time = (dt*round(min_time/dt) : dt : max_time).';
+if ~isempty(obj.eg.data)
+  obj.eg.data = interp1(obj.eg.time, obj.eg.data, new_time);
+end
+obj.eg.time = new_time;
 
 %% Loading new data
 fprintf(' Loading echogram (%s)\n',datestr(now,'HH:MM:SS'));
@@ -126,8 +200,15 @@ for frame_idx = 1:length(loading_frame_idxs)
   end
   % Load EG data and metadata
   tmp = load(fn);
+  if ~isfield(tmp,'Roll')
+    tmp.Roll = zeros(size(tmp.GPS_time));
+  end
   tmp.Time = reshape(tmp.Time,[length(tmp.Time) 1]); % Fixes a bug in some echograms
   tmp = uncompress_echogram(tmp);
+  if length(tmp.Time) < 2
+    tmp.Time = min_time+[0 dt];
+    tmp.Data(1:2,:) = nan;
+  end
   
   % Remove any data in echogram that is not part of the frame being loaded
   %   (e.g. some echograms were created with some data from neighboring
@@ -138,6 +219,7 @@ for frame_idx = 1:length(loading_frame_idxs)
   tmp.Latitude = tmp.Latitude(valid_mask);
   tmp.Longitude = tmp.Longitude(valid_mask);
   tmp.Elevation = tmp.Elevation(valid_mask);
+  tmp.Roll = tmp.Roll(valid_mask);
   tmp.GPS_time = tmp.GPS_time(valid_mask);
   if isfield(tmp,'Surface') && ~isempty(tmp.Surface)
     tmp.Surface = tmp.Surface(valid_mask);
@@ -178,6 +260,7 @@ for frame_idx = 1:length(loading_frame_idxs)
     obj.eg.lat = cat(2,obj.eg.lat,tmp.Latitude);
     obj.eg.lon = cat(2,obj.eg.lon,tmp.Longitude);
     obj.eg.elev = cat(2,obj.eg.elev,tmp.Elevation);
+    obj.eg.roll = cat(2,obj.eg.roll,tmp.Roll);
     obj.eg.gps_time = cat(2,obj.eg.gps_time,tmp.GPS_time);
     obj.eg.surf_twtt = cat(2,obj.eg.surf_twtt,tmp.Surface);
     obj.eg.data = cat(2,obj.eg.data,tmp.Data);
@@ -189,6 +272,8 @@ for frame_idx = 1:length(loading_frame_idxs)
       obj.eg.lon(splice_idx:end));
     obj.eg.elev = cat(2,obj.eg.elev(1:splice_idx-1),tmp.Elevation, ...
       obj.eg.elev(splice_idx:end));
+    obj.eg.roll = cat(2,obj.eg.roll(1:splice_idx-1),tmp.Roll, ...
+      obj.eg.roll(splice_idx:end));
     obj.eg.gps_time = cat(2,obj.eg.gps_time(1:splice_idx-1),tmp.GPS_time, ...
       obj.eg.gps_time(splice_idx:end));
     obj.eg.surf_twtt = cat(2,obj.eg.surf_twtt(1:splice_idx-1),tmp.Surface, ...

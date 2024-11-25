@@ -12,18 +12,23 @@ function update_surface_twtt_delta(param,param_override)
 % param_{qlook,sar}radar.wfs(wf).Tsys,
 % param_{qlook,sar}radar.wfs(wf).t_ref, Surface, and Bottom variables.
 %
-% Optionally updates adc_gains_dB. If enabled and there has been a change
-% in the adc_gains_dB field, this will cause
-% param_{qlook,sar}radar.wfs(wf).adc_gains_dB and Data to be updated.
+% Optionally updates radiometric fields adc_gains_dB, system_dB, and
+% radiometric_corr_dB. If enabled and there has been a change in the
+% radiometric field, this will cause these fields to be updated:
+%  param_{qlook,sar}.radar.wfs(wf).adc_gains_dB
+%  param_{qlook,sar}.radar.wfs(wf).system_dB
+%  param_{qlook,array}.radiometric_corr_dB
+%  Data
 %
-% Note that only the param_{qlook,sar} field that matters gets updated. For
-% example, param_records and param_combine will not be used or updated
-% because Tadc, Tadc_adjust and Tsys are not used during these processes
-% and so their value does not matter when those processes are applied.
+% Note that only the param_{qlook,sar,array} field that matters gets
+% updated. For example, param_records and param_array will not be used or
+% updated because Tadc, Tadc_adjust and Tsys are not used during these
+% processes and so their value does not matter when those processes are
+% applied.
 %
-% Tsys, t_ref, Tadc, Tadc_adjust, and adc_gains_dB changes can only be
-% corrected when the same change is applied to all waveform-adc pairs used
-% in the data product.
+% Tsys, t_ref, Tadc, Tadc_adjust, adc_gains_dB, system_dB, and
+% radiometric_corr_dB changes can only be corrected when the same change is
+% applied to all waveform-adc pairs used in the data product.
 %
 % Note that Tadc, Tadc_adjust and t_ref are opposite sign to Tsys
 %  - Tsys is subtracted away from time
@@ -35,6 +40,7 @@ function update_surface_twtt_delta(param,param_override)
 % Author: John Paden
 
 %% Setup
+param = merge_structs(param, param_override);
 
 fprintf('=====================================================================\n');
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
@@ -48,9 +54,14 @@ if ~isfield(param.update_surface_twtt_delta,'imgs') ...
   return;
 end
 
-if ~isfield(param.update_surface_twtt_delta,'update_adc_gains_dB') ...
-    || isempty(param.update_surface_twtt_delta.update_adc_gains_dB)
-  param.update_surface_twtt_delta.update_adc_gains_dB = false;
+if ~isfield(param.update_surface_twtt_delta,'update_radiometric') ...
+    || isempty(param.update_surface_twtt_delta.update_radiometric)
+  param.update_surface_twtt_delta.update_radiometric = false;
+end
+
+if ~isfield(param.update_surface_twtt_delta,'update_Tsys') ...
+    || isempty(param.update_surface_twtt_delta.update_Tsys)
+  param.update_surface_twtt_delta.update_Tsys = true;
 end
 
 if ~isfield(param.update_surface_twtt_delta,'data_types') ...
@@ -60,7 +71,7 @@ if ~isfield(param.update_surface_twtt_delta,'data_types') ...
 end
 
 % Remove frames that do not exist from param.cmd.frms list
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 if isempty(param.cmd.frms)
   param.cmd.frms = 1:length(frames.frame_idxs);
 end
@@ -111,8 +122,10 @@ for frm_idx = 1:length(param.cmd.frms)
       
       if isfield(mdata,'param_qlook')
         param_field = 'param_qlook';
+        echo_param_field = 'qlook';
       elseif isfield(mdata,'param_sar')
         param_field = 'param_sar';
+        echo_param_field = 'array';
       else
         error('Data file contained neither param_qlook or param_sar, but should contain one or the other.');
       end
@@ -129,10 +142,15 @@ for frm_idx = 1:length(param.cmd.frms)
       delta_offset_Tadc_mask = logical([]);
       delta_offset_adc_gains_dB = [];
       delta_offset_adc_gains_dB_mask = logical([]);
+      delta_offset_system_dB = [];
+      delta_offset_system_dB_mask = logical([]);
+      delta_offset_radiometric_corr_dB = [];
+      delta_offset_radiometric_corr_dB_mask = logical([]);
       for img = 1:length(mdata.(param_field).(param_field(7:end)).imgs)
         for wf_adc_pair = 1:size(mdata.(param_field).(param_field(7:end)).imgs{img},1)
           wf = abs(mdata.(param_field).(param_field(7:end)).imgs{img}(wf_adc_pair,1));
           adc = abs(mdata.(param_field).(param_field(7:end)).imgs{img}(wf_adc_pair,2));
+          rx_path = mdata.(param_field).radar.wfs(wf).rx_paths(adc);
           
           % t_ref correction
           if ~isfield(param.radar.wfs(wf),'t_ref') ...
@@ -150,16 +168,18 @@ for frm_idx = 1:length(param.cmd.frms)
           % Tsys correction
           if ~isfield(param.radar.wfs(wf),'Tsys') ...
               || numel(param.radar.wfs(wf).Tsys) < adc
-            param.radar.wfs(wf).Tsys(adc) = 0;
+            param.radar.wfs(wf).Tsys(rx_path) = 0;
           end
           if ~isfield(mdata.(param_field).radar.wfs(wf),'Tsys') ...
               || numel(mdata.(param_field).radar.wfs(wf).Tsys) < adc
-            mdata.(param_field).radar.wfs(wf).Tsys(adc) = 0;
+            mdata.(param_field).radar.wfs(wf).Tsys(rx_path) = 0;
           end
           
-          delta_offset_Tsys(img,wf_adc_pair) = param.radar.wfs(wf).Tsys(adc) ...
-            - mdata.(param_field).radar.wfs(wf).Tsys(adc);
-          delta_offset_Tsys_mask(img,wf_adc_pair) = true;
+          if param.update_surface_twtt_delta.update_Tsys
+            delta_offset_Tsys(img,wf_adc_pair) = param.radar.wfs(wf).Tsys(rx_path) ...
+              - mdata.(param_field).radar.wfs(wf).Tsys(rx_path);
+            delta_offset_Tsys_mask(img,wf_adc_pair) = true;
+          end
           
           % Tadc correction
           if ~isfield(param.radar.wfs(wf),'Tadc') ...
@@ -187,8 +207,8 @@ for frm_idx = 1:length(param.cmd.frms)
             - mdata.(param_field).radar.wfs(wf).Tadc_adjust;
           delta_offset_Tadc_adjust_mask(wf) = true;
           
-          % adc_gains_dB correction
-          if param.update_surface_twtt_delta.update_adc_gains_dB
+          if param.update_surface_twtt_delta.update_radiometric
+            % adc_gains_dB correction
             if ~isfield(param.radar.wfs(wf),'adc_gains_dB') ...
                 || numel(param.radar.wfs(wf).adc_gains_dB) < adc
               param.radar.wfs(wf).adc_gains_dB(adc) = 0;
@@ -200,6 +220,33 @@ for frm_idx = 1:length(param.cmd.frms)
             delta_offset_adc_gains_dB(img,wf_adc_pair) = param.radar.wfs(wf).adc_gains_dB(adc) ...
               - mdata.(param_field).radar.wfs(wf).adc_gains_dB(adc);
             delta_offset_adc_gains_dB_mask(img,wf_adc_pair) = true;
+            
+            % system_dB correction
+            if ~isfield(param.radar.wfs(wf),'system_dB') ...
+                || numel(param.radar.wfs(wf).system_dB) < rx_path
+              param.radar.wfs(wf).system_dB(rx_path) = 0;
+            end
+            if ~isfield(mdata.(param_field).radar.wfs(wf),'system_dB') ...
+                || numel(mdata.(param_field).radar.wfs(wf).system_dB) < rx_path
+              mdata.(param_field).radar.wfs(wf).system_dB(rx_path) = 0;
+            end
+            delta_offset_system_dB(img,wf_adc_pair) = param.radar.wfs(wf).system_dB(rx_path) ...
+              - mdata.(param_field).radar.wfs(wf).system_dB(rx_path);
+            delta_offset_system_dB_mask(img,wf_adc_pair) = true;
+            
+            % radiometric_corr_dB correction
+            if ~isfield(param.(echo_param_field),'radiometric_corr_dB') ...
+                || isempty(param.(echo_param_field).radiometric_corr_dB)
+              param.(echo_param_field).radiometric_corr_dB = NaN;
+            end
+            if ~isfield(mdata.(['param_' echo_param_field]).(echo_param_field),'radiometric_corr_dB') ...
+                || isempty(mdata.(['param_' echo_param_field]).(echo_param_field).radiometric_corr_dB)
+              mdata.(['param_' echo_param_field]).(echo_param_field).radiometric_corr_dB = NaN;
+            end
+            delta_offset_radiometric_corr_dB(img,wf_adc_pair) = param.(echo_param_field).radiometric_corr_dB ...
+              - mdata.(['param_' echo_param_field]).(echo_param_field).radiometric_corr_dB;
+            delta_offset_radiometric_corr_dB_mask(img,wf_adc_pair) = true;
+            
           end
         end
       end
@@ -212,13 +259,15 @@ for frm_idx = 1:length(param.cmd.frms)
       end
       delta_offset_t_ref = delta_offset_t_ref(first_idx);
       
-      first_idx = find(delta_offset_Tsys_mask,1);
-      delta_offset_Tsys(~delta_offset_Tsys_mask) = NaN;
-      if ~all(delta_offset_Tsys(delta_offset_Tsys_mask) == delta_offset_Tsys(first_idx))
-        delta_offset_Tsys
-        error('Different Tsys delta offsets for each waveform-adc-pair, cannot proceed: reprocess data.');
+      if param.update_surface_twtt_delta.update_Tsys
+        first_idx = find(delta_offset_Tsys_mask,1);
+        delta_offset_Tsys(~delta_offset_Tsys_mask) = NaN;
+        if ~all(delta_offset_Tsys(delta_offset_Tsys_mask) == delta_offset_Tsys(first_idx))
+          delta_offset_Tsys
+          error('Different Tsys delta offsets for each waveform-adc-pair, cannot proceed: reprocess data.');
+        end
+        delta_offset_Tsys = delta_offset_Tsys(first_idx);
       end
-      delta_offset_Tsys = delta_offset_Tsys(first_idx);
       
       first_idx = find(delta_offset_Tadc_mask,1);
       delta_offset_Tadc(~delta_offset_Tadc_mask) = NaN;
@@ -236,7 +285,7 @@ for frm_idx = 1:length(param.cmd.frms)
       end
       delta_offset_Tadc_adjust = delta_offset_Tadc_adjust(first_idx);
       
-      if param.update_surface_twtt_delta.update_adc_gains_dB
+      if param.update_surface_twtt_delta.update_radiometric
         first_idx = find(delta_offset_adc_gains_dB_mask,1);
         delta_offset_adc_gains_dB(~delta_offset_adc_gains_dB_mask) = NaN;
         if ~all(delta_offset_adc_gains_dB(delta_offset_adc_gains_dB_mask) == delta_offset_adc_gains_dB(first_idx))
@@ -244,36 +293,67 @@ for frm_idx = 1:length(param.cmd.frms)
           error('Different adc_gains_dB delta offsets for each waveform, cannot proceed: reprocess data.');
         end
         delta_offset_adc_gains_dB = delta_offset_adc_gains_dB(first_idx);
+        
+        first_idx = find(delta_offset_system_dB_mask,1);
+        delta_offset_system_dB(~delta_offset_system_dB_mask) = NaN;
+        if ~all(delta_offset_system_dB(delta_offset_system_dB_mask) == delta_offset_system_dB(first_idx))
+          delta_offset_system_dB
+          error('Different system_dB delta offsets for each waveform, cannot proceed: reprocess data.');
+        end
+        delta_offset_system_dB = delta_offset_system_dB(first_idx);
+        
+        first_idx = find(delta_offset_radiometric_corr_dB_mask,1);
+        delta_offset_radiometric_corr_dB(~delta_offset_radiometric_corr_dB_mask) = NaN;
+        if ~all(delta_offset_radiometric_corr_dB(delta_offset_radiometric_corr_dB_mask) == delta_offset_radiometric_corr_dB(first_idx)) ...
+          && any(~isnan(delta_offset_radiometric_corr_dB(delta_offset_radiometric_corr_dB_mask)))
+          delta_offset_radiometric_corr_dB
+          error('Different radiometric_corr_dB delta offsets for each waveform, cannot proceed: reprocess data.');
+        end
+        delta_offset_radiometric_corr_dB = delta_offset_radiometric_corr_dB(first_idx);
       end
       
       for img = 1:length(mdata.(param_field).(param_field(7:end)).imgs)
         for wf_adc_pair = 1:size(mdata.(param_field).(param_field(7:end)).imgs{img},1)
           wf = abs(mdata.(param_field).(param_field(7:end)).imgs{img}(wf_adc_pair,1));
           adc = abs(mdata.(param_field).(param_field(7:end)).imgs{img}(wf_adc_pair,2));
+          rx_path = mdata.(param_field).radar.wfs(wf).rx_paths(adc);
           
           mdata.(param_field).radar.wfs(wf).t_ref = param.radar.wfs(wf).t_ref;
-          mdata.(param_field).radar.wfs(wf).Tsys(adc) = param.radar.wfs(wf).Tsys(adc);
+          mdata.(param_field).radar.wfs(wf).Tsys(rx_path) = param.radar.wfs(wf).Tsys(rx_path);
           mdata.(param_field).radar.wfs(wf).Tadc = param.radar.wfs(wf).Tadc;
           mdata.(param_field).radar.wfs(wf).Tadc_adjust = param.radar.wfs(wf).Tadc_adjust;
-          if param.update_surface_twtt_delta.update_adc_gains_dB
+          if param.update_surface_twtt_delta.update_radiometric
             mdata.(param_field).radar.wfs(wf).adc_gains_dB(adc) = param.radar.wfs(wf).adc_gains_dB(adc);
+            mdata.(param_field).radar.wfs(wf).system_dB(rx_path) = param.radar.wfs(wf).system_dB(rx_path);
+            mdata.(['param_' echo_param_field]).(echo_param_field).radiometric_corr_dB = param.(echo_param_field).radiometric_corr_dB;
           end
         end
       end
       
       %% Update Data File
-      if delta_offset_t_ref ~= 0 || delta_offset_Tsys ~= 0 ...
+      if delta_offset_t_ref ~= 0 ...
+          || (param.update_surface_twtt_delta.update_Tsys ...
+          && delta_offset_Tsys ~= 0) ...
           || delta_offset_Tadc ~= 0 || delta_offset_Tadc_adjust ~= 0 ...
-          || (param.update_surface_twtt_delta.update_adc_gains_dB && delta_offset_adc_gains_dB ~= 0)
+          || (param.update_surface_twtt_delta.update_radiometric ...
+          && (delta_offset_adc_gains_dB ~= 0 || delta_offset_system_dB ~= 0 || delta_offset_radiometric_corr_dB ~= 0))
         fprintf('  t_ref Offset  %g %s (%s)\n', delta_offset_t_ref, echo_fn, datestr(now,'HH:MM:SS'));
-        fprintf('  Tsys Offset %g %s (%s)\n', delta_offset_Tsys, echo_fn, datestr(now,'HH:MM:SS'));
+        if param.update_surface_twtt_delta.update_Tsys
+          fprintf('  Tsys Offset %g %s (%s)\n', delta_offset_Tsys, echo_fn, datestr(now,'HH:MM:SS'));
+        end
         fprintf('  Tadc Offset %g %s (%s)\n', delta_offset_Tadc, echo_fn, datestr(now,'HH:MM:SS'));
         fprintf('  Tadc_adjust Offset %g %s (%s)\n', delta_offset_Tadc_adjust, echo_fn, datestr(now,'HH:MM:SS'));
-        if param.update_surface_twtt_delta.update_adc_gains_dB
+        if param.update_surface_twtt_delta.update_radiometric
           fprintf('  adc_gains_dB Offset %g %s (%s)\n', delta_offset_adc_gains_dB, echo_fn, datestr(now,'HH:MM:SS'));
-          if delta_offset_adc_gains_dB ~= 0
+          fprintf('  system_dB Offset %g %s (%s)\n', delta_offset_system_dB, echo_fn, datestr(now,'HH:MM:SS'));
+          fprintf('  radiometric_corr Offset %g %s (%s)\n', delta_offset_radiometric_corr_dB, echo_fn, datestr(now,'HH:MM:SS'));
+          if delta_offset_adc_gains_dB + delta_offset_system_dB + delta_offset_radiometric_corr_dB ~= 0
             tmp = load(echo_fn,'Data');
-            tmp.Data = tmp.Data * 10^(-delta_offset_adc_gains_dB/10);
+            if isfinite(delta_offset_radiometric_corr_dB)
+              tmp.Data = tmp.Data * 10^((-delta_offset_adc_gains_dB + delta_offset_system_dB + delta_offset_radiometric_corr_dB)/10);
+            else
+              tmp.Data = tmp.Data * 10^((-delta_offset_adc_gains_dB + delta_offset_system_dB)/10);
+            end
             mdata.Data = tmp.Data;
             fields_to_update{end+1} = 'Data';
           end
@@ -282,7 +362,11 @@ for frm_idx = 1:length(param.cmd.frms)
         % Note that Tadc_adjust is opposite sign to Tsys
         %  - Tsys is subtracted away
         %  - Tadc_adjust is added on
-        delta_offset = delta_offset_Tsys - delta_offset_Tadc - delta_offset_Tadc_adjust - delta_offset_t_ref;
+        if param.update_surface_twtt_delta.update_Tsys
+          delta_offset = delta_offset_Tsys - delta_offset_Tadc - delta_offset_Tadc_adjust - delta_offset_t_ref;
+        else
+          delta_offset = -delta_offset_Tadc - delta_offset_Tadc_adjust - delta_offset_t_ref;
+        end
         
         mdata.Time = mdata.Time - delta_offset;
         if isfield(mdata,'Surface')

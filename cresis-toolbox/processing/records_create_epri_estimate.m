@@ -11,7 +11,7 @@ function [init_EPRI_estimate,first_file] = records_create_epri_estimate(param,fi
 %   .vectors.gps.utc_time_halved
 %   .radar.fs
 %   .radar_name
-%   .records.presum_bug_fixed
+%   .records.presum_mode
 %  file_idxs: indexes into fns filename list corresponding to this segment
 %  fns: cell vector of filenames
 %  adc_folder_name: only required for using temporary files
@@ -22,8 +22,8 @@ function [init_EPRI_estimate,first_file] = records_create_epri_estimate(param,fi
 %
 % Author: John Paden
 
-if ~isfield(param.records,'presum_bug_fixed') || isempty(param.records.presum_bug_fixed)
-  param.records.presum_bug_fixed = false;
+if ~isfield(param.records,'presum_mode') || isempty(param.records.presum_mode)
+  param.records.presum_mode = 1;
 end
 
 [output_dir,radar_type,radar_name] = ct_output_dir(param.radar_name);
@@ -118,7 +118,7 @@ while first_run || abs(init_EPRI_estimate-init_EPRI_estimate_median)/init_EPRI_e
       struct('clk',param.radar.fs/4,'first_byte',first_byte));
   elseif strcmp(radar_name,'mcords5')
     [first_file,tmp] = basic_load_mcords5(fns{file_idxs(init_EPRI_file_idx)}, ...
-      struct('clk',param.radar.fs,'first_byte',first_byte,'presum_bug_fixed',param.records.presum_bug_fixed));
+      struct('clk',param.radar.fs,'first_byte',first_byte,'presum_mode',param.records.presum_mode));
     
     % Check for the temporary file
     [~,fn_name] = fileparts(fns{file_idxs(init_EPRI_file_idx)});

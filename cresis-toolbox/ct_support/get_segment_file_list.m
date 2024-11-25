@@ -6,16 +6,35 @@ function [base_dir,board_folder_name,fns,file_idxs] = get_segment_file_list(para
 % using run_get_segment_file_list.m.
 %
 % param: struct from param spreadsheet read in by read_param_xls
+%
 %  .records
+%
 %   .file
-%    .version: raw file version (see "raw file guide" on wiki)
-%    .board_folder_name: board folder name (%b in the filename will be
-%      replaced by the board number)
+%
 %    .base_dir: base directory
-%    .prefix: beginning filename search term
-%    .midfix: middle filename search term
-%    .regexp: additional regular expression to run after the initial file
-%      search
+%
+%    .board_folder_name: board folder name (%b in the filename will be
+%    replaced by the corresponding string for the current board from the
+%    cell array of strings param.records.file.boards)
+%
+%    .boards: cell array of strings containing the board folder names (e.g.
+%    {'board0','board1',...} or {'chan1','chan2',...})
+%
+%    .midfix: string containing middle filename search term. Default is
+%    empty string.
+%
+%    .prefix: string containing beginning filename search term. Default is
+%    empty string.
+%
+%    .regexp: optional regular expression string that runs after the
+%    initial file search if not empty. Default is empty string.
+%
+%    .suffix: string containing end filename search term. Default is empty
+%    string.
+%
+%    .version: integer scaler containing the raw file version (see "raw
+%    file guide" on wiki)
+%
 % board: optional parameter used with some radars that have multiple adcs
 %
 % Author: John Paden
@@ -51,7 +70,7 @@ if ~isfield(param.records.file,'regexp') || isempty(param.records.file.regexp)
 end
 
 % Determine raw filename extension and check file version
-if any(param.records.file.version == [1 9:10 101 103 401 412])
+if any(param.records.file.version == [1 9:10 101 103 401 412 415 420])
   ext = '.dat';
 elseif any(param.records.file.version == [2:8 11 102 402:408 411])
   ext = '.bin';
@@ -144,9 +163,21 @@ if nargout > 2
     % A stop index of -N says to include all but the last N files
     stop_idx = length(fns) + param.records.file.stop_idx;
   else
-    stop_idx = param.records.file.stop_idx(board_idx);
+    if board_idx > 1 && length(param.records.file.stop_idx) == 1
+      % Old parameter spreadsheet format only contained a single entry for
+      % all boards in param.records.file.stop_idx
+      stop_idx = param.records.file.stop_idx;
+    else
+      stop_idx = param.records.file.stop_idx(board_idx);
+    end
   end
-  file_idxs = param.records.file.start_idx(board_idx):stop_idx;
+  if board_idx > 1 && length(param.records.file.start_idx) == 1
+    % Old parameter spreadsheet format only contained a single entry for
+    % all boards in param.records.file.start_idx
+    file_idxs = param.records.file.start_idx:stop_idx;
+  else
+    file_idxs = param.records.file.start_idx(board_idx):stop_idx;
+  end
   
   if isempty(file_idxs)
     error('No files selected to load out of %i files', length(fns));

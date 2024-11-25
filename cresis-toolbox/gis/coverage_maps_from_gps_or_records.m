@@ -23,24 +23,31 @@ fig_h = 1;
 dt = 1;
 
 % data_source: string 'gps' or 'records' (which files in csarp_support to use)
-data_source = 'gps';
+data_source = 'records';
+
+% South Dakota
+% geotiff_fn = ct_filename_gis(gRadar,fullfile('SouthDakota','Model_Landsat_UTM.tif'));
+% axis_limits = [567         622        4856        4907];
 
 % Greenland
-geotiff_fn = ct_filename_gis(gRadar,fullfile('arctic','NaturalEarth_Data','Arctic_NaturalEarth.tif')); % (use for OIB coverage maps)
+% geotiff_fn = ct_filename_gis(gRadar,fullfile('arctic','NaturalEarth_Data','Arctic_NaturalEarth.tif')); % (use for OIB coverage maps)
 % geotiff_fn = ct_filename_gis(gRadar,fullfile('arctic','Landsat-7','arctic_natural_90m.tif'));
 % geotiff_fn = ct_filename_gis(gRadar,fullfile('greenland','Landsat-7','Greenland_natural.tif'));
 % geotiff_fn = ct_filename_gis(gRadar,fullfile('canada','Landsat-7','Canada_90m.tif'));
-axis_limits = [-2300 1000 -3500 1500]; % All of Arctic (use for OIB coverage maps)
+% axis_limits = [-2300 1000 -3500 1500]; % All of Arctic (use for OIB coverage maps)
 
 % Antarctica
-% geotiff_fn = ct_filename_gis(gRadar,fullfile('antarctica','NaturalEarth_Data','Antarctica_NaturalEarth.tif')); % (use for OIB coverage maps)
-% axis_limits = [-3000 1000 -1500 2500]; % All of Antarctica (use for OIB coverage maps)
+geotiff_fn = ct_filename_gis(gRadar,fullfile('antarctica','NaturalEarth_Data','Antarctica_NaturalEarth.tif')); % (use for OIB coverage maps)
+axis_limits = [-3000 1000 -1500 2500]; % All of Antarctica (use for OIB coverage maps)
+% axis_limits = [808 873 996 1060]; % 2018 Antarctica Ground
 
 % Cell vector of param spreadsheet filenames
-param_fns = {ct_filename_param('rds_param_2016_Greenland_P3.xls'),ct_filename_param('rds_param_2017_Greenland_P3.xls')};
+param_fns = {'rds_param_2018_Antarctica_Ground.xls'};
+% run_all
 
 % plot_args: cell array of argument to plot function (e.g. 'b.' for blue dots)
-plot_args = {'LineWidth',1};
+% plot_args = {'LineWidth',2,'Color','black'};
+plot_args = {'LineWidth',2};
 
 % along_track_sampling: desired along track sampling of plot (m)
 along_track_sampling = 100;
@@ -49,12 +56,15 @@ along_track_sampling = 100;
 %  .day_seg: cell list of day segments to match
 %  .frm: equal length cell vector to .day_seg with specific frames to label
 %  .text: equal length cell vector to .day_seg with string for text label
-label.day_seg = {};
-label.frm = {};
-label.text = {};
+label = [];
+% label.day_seg = {'20140325_07','20140401_03','20140506_01','20140325_07'};
+% label.frm = {1,1,1,2};
+% label.text = {'20140325\_07','20140401\_03','20140506\_01','20140325\_07\_002'};
+% label.first_point_only = {true,true,true,false};
 % label.day_seg = {'20091102_02','20091016_01','20091016_01','20091102_02','20091102_02'};
 % label.frm = {8, 21, 26, 23, 32};
 % label.text = {' 1',' 2',' 3',' 4',' 5'};
+% label.first_point_only = {false,false,false,false,false};
 
 % figure_position: Set figure Position property (leave empty to use default/current figure size)
 figure_position = [];
@@ -65,7 +75,7 @@ figure(fig_h); clf;
 if exist(figure_position,'var') && ~isempty(figure_position)
   set(fig_h,'Position',figure_position);
 end
-proj = plot_geotiff(geotiff_fn,[],[],fig_h);
+proj = geotiff_plot(geotiff_fn,[],[],fig_h);
 axis normal; axis equal;
 if ~isempty(axis_limits)
   axis(axis_limits);
@@ -78,7 +88,12 @@ for param_fn_idx = 1:length(param_fns)
   param_fn = param_fns{param_fn_idx};
   fprintf('Parameters %s\n', param_fn);
   
-  params = read_param_xls(param_fn);
+  params = read_param_xls(ct_filename_param(param_fn));
+  
+  if 0
+    % Specify segments
+    params = ct_set_params(params,'cmd.generic',1,'day_seg','20140325_07|20140401_03|20140506_01');
+  end
   
   yyyymmdd_list = {};
   for param_idx = 1:length(params)
@@ -89,49 +104,42 @@ for param_fn_idx = 1:length(param_fns)
       % Already done this segment
       continue;
     end
-    
-%     if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) || ischar(param.cmd.generic) || ~param.cmd.generic
-%       continue;
-%     end
+  
+    if 0
+      % Only plot specific segments
+      if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) || ischar(param.cmd.generic) || ~param.cmd.generic
+        continue;
+      end
+    end
     
     if isempty(regexpi(param.cmd.notes,'do not process'))
       yyyymmdd_list{end+1} = param.yyyymmdd;
       if strcmp(data_source,'gps')
         gps_fn = ct_filename_support(param,[],'gps',1);
-        fprintf('  Processing %s: %s (%s)\n', param.day_seg, gps_fn, datestr(now,'HH:MM:SS'));
-        gps = load(gps_fn,'gps_time','lat','lon');
+        %fprintf('  Processing %s: %s (%s)\n', param.day_seg, gps_fn, datestr(now,'HH:MM:SS'));
+        if ~exist(gps_fn)
+          fprintf('%s\t0\tMissing\n', param.day_seg(1:8));
+          continue;
+        else
+          gps = load(gps_fn,'gps_time','lat','lon');
+          along_track = geodetic_to_along_track(gps.lat,gps.lon);
+          fprintf('%s\t%g\t\n', param.day_seg, along_track(end));
+        end
       elseif strcmp(data_source,'records')
         records_fn = ct_filename_support(param,[],'records');
         if ~exist(records_fn,'file')
-          warning('No records file: %s\n', records_fn);
+          fprintf('%s\t0\tMissing\n', param.day_seg);
           continue;
         end
-        frames_fn = ct_filename_support(param,'','frames');
-        if ~exist(frames_fn,'file')
-          warning('No frames file: %s\n', frames_fn);
-          continue;
-        end
-        
-        fprintf('  Processing %s: %s (%s)\n', param.day_seg, records_fn, datestr(now,'HH:MM:SS'));
-        gps = load(records_fn,'gps_time','lat','lon');
         
         % Load frames file
-        load(frames_fn);
+        frames = frames_load(param);
+        param.cmd.frms = frames_param_cmd_frms(param,frames);
         
-        if isempty(param.cmd.frms)
-          param.cmd.frms = 1:length(frames.frame_idxs);
-        end
-        % Remove frames that do not exist from param.cmd.frms list
-        [valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-        if length(valid_frms) ~= length(param.cmd.frms)
-          bad_mask = ones(size(param.cmd.frms));
-          bad_mask(keep_idxs) = 0;
-          warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-            param.cmd.frms(find(bad_mask,1)));
-          param.cmd.frms = valid_frms;
-        end
-        % Force into a row vector
-        param.cmd.frms = param.cmd.frms(:).';
+        %fprintf('  Processing %s: %s (%s)\n', param.day_seg, records_fn, datestr(now,'HH:MM:SS'));
+        gps = load(records_fn,'gps_time','lat','lon');
+        along_track = geodetic_to_along_track(gps.lat,gps.lon);
+        fprintf('%s\t%g\t\n', param.day_seg, along_track(end));
       end
 
       if strcmp(data_source,'gps')
@@ -173,14 +181,28 @@ for param_fn_idx = 1:length(param_fns)
         h = plot(x/1e3,y/1e3,plot_args{:},'UserData',param.day_seg);
         drawnow;
         
-        if isfield('label','day_seg')
+        if isfield(label,'day_seg')
           match_idxs = find(strcmpi(param.day_seg,label.day_seg(:).'));
           for match_idx = match_idxs
             for frm = label.frm{match_idx}
               first_idx = frames.frame_idxs(frm);
-              [x,y] = projfwd(proj,gps.lat(first_idx),gps.lon(first_idx));
-              plot(x/1e3,y/1e3,'.','MarkerSize',12,'Color','Black');
-              label.h_text(match_idx) = text(x/1e3,y/1e3,label.text{match_idx},'Color','black','FontWeight','bold','FontSize',14);
+              [x_first,y_first] = projfwd(proj,gps.lat(first_idx),gps.lon(first_idx));
+              if label.first_point_only{match_idx}
+                % Just the first point of the frame in black
+                label.h_plot(match_idx) = plot(x_first/1e3,y_first/1e3,'.','MarkerSize',12,'Color','Black');
+              else
+                % Whole frame in black
+                if frm == length(frames.frame_idxs)
+                  last_idx = frames.Nx;
+                else
+                  last_idx = frames.frame_idxs(frm+1);
+                end
+                along_track = geodetic_to_along_track(gps.lat(first_idx:last_idx),gps.lon(first_idx:last_idx));
+                decim_idxs = get_equal_alongtrack_spacing_idxs(along_track,along_track_sampling);
+                [x,y] = projfwd(proj,gps.lat(decim_idxs+first_idx-1),gps.lon(decim_idxs+first_idx-1));
+                label.h_plot(match_idx) = plot(x/1e3,y/1e3,'.','MarkerSize',12,'Color','Black');
+              end
+              label.h_text(match_idx) = text(x_first/1e3,y_first/1e3,label.text{match_idx},'Color','black','FontWeight','bold','FontSize',14);
             end
           end
         end
@@ -190,6 +212,11 @@ for param_fn_idx = 1:length(param_fns)
     
   end
   
+end
+
+if isfield(label,'day_seg')
+  uistack(label.h_text,'top');
+  uistack(label.h_plot,'top');
 end
 
 return

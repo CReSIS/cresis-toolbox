@@ -26,6 +26,8 @@ function data_rgb = hsv_plot(data,val_limits)
 % set(get(h_colorbar,'ylabel'),'string','angle (rad)')
 %
 % Author: John Paden
+%
+% See also: hsv_plot.m, hsv_plot_coherence.m
 
 if exist('val_limits','var')
   if length(val_limits) == 1

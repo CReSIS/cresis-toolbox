@@ -43,11 +43,17 @@ function cluster_compile(fun,hidden_depend_funs,force_compile,ctrl)
 %
 % Author: John Paden
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list, 
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 % Find dependencies that are directly called
 
@@ -194,6 +200,13 @@ if force_compile
   
   for dep_idx = 1:length(hidden_depend_funs)
     cmd = [cmd ' ' hidden_depend_funs{dep_idx}{1}];
+  end
+  
+  for input_idx = 1:length(fun)
+    % Add in functions in case they are not in the hidden dependency list
+    if isempty(regexpi(cmd, fun{input_idx}))
+      cmd = [cmd ' ' fun{input_idx}];
+    end
   end
   
   % Check to make sure the working directory is not a package or class

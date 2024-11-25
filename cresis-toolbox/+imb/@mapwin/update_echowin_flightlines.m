@@ -13,6 +13,13 @@ function update_echowin_flightlines(obj,src,event)
 xlimits = xlim(src.h_axes);
 start_gps = src.eg.image_gps_time(find(src.eg.image_xaxis>=xlimits(1),1));
 stop_gps = src.eg.image_gps_time(find(src.eg.image_xaxis<=xlimits(2),1,'last'));
+% Handle special edge cases for the first and last column when the user
+% selects xlimits before the first pixel or after the last pixel.
+if isempty(start_gps)
+  start_gps = stop_gps;
+elseif isempty(stop_gps)
+  stop_gps = start_gps;
+end
 
 valid_idxs = find(src.eg.map_gps_time >= start_gps & src.eg.map_gps_time <= stop_gps);
 if isempty(valid_idxs)

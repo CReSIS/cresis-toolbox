@@ -66,6 +66,9 @@ elseif obj.shift_pressed && click_in_axis % shift click
     
     if (obj.map.source == 1)
       [lat, lon] = google_map.world_to_latlon(x*obj.map.scale, 256-y*obj.map.scale);
+    elseif (obj.map.source == 3)
+      lon = x*obj.map.scale;
+      lat = y*obj.map.scale;
     else
       [lat,lon] = projinv(obj.map.proj,x*obj.map.scale,y*obj.map.scale);
     end
@@ -78,6 +81,9 @@ elseif obj.shift_pressed && click_in_axis % shift click
       % Update the echowin's cursor on the map
       if obj.map.source == 1
         [x,y] = google_map.latlon_to_world(obj.echowin_list(idx).cursor.lat, obj.echowin_list(idx).cursor.lon); y = 256-y;
+      elseif obj.map.source == 3
+        x = obj.echowin_list(idx).cursor.lon;
+        y = obj.echowin_list(idx).cursor.lat;
       else
         [x,y] = projfwd(obj.map.proj, obj.echowin_list(idx).cursor.lat, obj.echowin_list(idx).cursor.lon);
       end

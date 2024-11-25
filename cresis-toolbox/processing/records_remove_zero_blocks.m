@@ -26,8 +26,7 @@ for param_idx = 1:length(params)
     zero_blocks_fn = ct_filename_support(param,'','zero_blocks');
     zero_blocks = load(zero_blocks_fn);
     
-    records_fn = ct_filename_support(param,'','records');
-    records = load(records_fn);
+    records = records_load(param);
     records_mask = zeros(size(records.lat));
     
     frames_fn = ct_filename_support(param,'','frames');
@@ -94,7 +93,6 @@ for param_idx = 1:length(params)
     end
     movefile(records_fn,'/tmp/records/');
     save(records_fn,'-struct','records');
-    records_aux_files_create(records_fn);
     
     if ~exist('/tmp/frames/','dir')
       mkdir('/tmp/frames/');

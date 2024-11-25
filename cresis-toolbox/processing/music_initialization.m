@@ -29,8 +29,6 @@ function out = music_initialization(Rxx,param)
 % See also: array_proc.m, music_cost_function.m
 % =========================================================================
 
-c = 2.997924580003452e+08; % physical_constants too slow
-
 [V,D]                   = eig(Rxx);
 eigenVals               = diag(D);
 [eigenVals, eigenValIdxs]  = sort(real(eigenVals),'descend');

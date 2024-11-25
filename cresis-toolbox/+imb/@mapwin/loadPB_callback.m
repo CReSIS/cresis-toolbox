@@ -71,7 +71,7 @@ else
   addlistener(obj.echowin_list(echo_idx),'update_cursors',@obj.update_echowin_cursors);
   addlistener(obj.echowin_list(echo_idx),'update_map_selection',@obj.update_map_selection_echowin);
   addlistener(obj.echowin_list(echo_idx),'open_crossover_event',@obj.open_crossover_echowin);
-  addlistener(obj.echowin_list(echo_idx).tool.list{4},'ascope_memory',@obj.ascope_memory);
+  addlistener(obj.echowin_list(echo_idx).tool.list{7},'ascope_memory',@obj.ascope_memory); % Connect picktool_browse tool to ascope
   
   % Create a selection plot that identifies the echowin on the map
   obj.echowin_maps(echo_idx).h_cursor = plot(obj.map_panel.h_axes, [NaN],[NaN],'kx','LineWidth',2,'MarkerSize',10);
@@ -80,13 +80,14 @@ else
 end
 
 %  Draw the echo class in the selected echowin
+param = [];
 param.sources = obj.cur_map_pref_settings.sources;
 param.layers = obj.cur_map_pref_settings.layers;
 param.cur_sel = obj.map.sel;
 param.cur_sel.frm = str2num(param.cur_sel.frm_str(13:end));
 param.cur_sel.location = obj.cur_map_pref_settings.map_zone;
 param.cur_sel.day_seg = param.cur_sel.frm_str(1:11);
-if strcmp(obj.cur_map_pref_settings.system,'layerdata')
+if strcmp(obj.cur_map_pref_settings.system,'tracks')
   param.system = param.cur_sel.radar_name;
   param.cur_sel.radar_name = param.cur_sel.radar_name;
   param.cur_sel.season_name = param.cur_sel.season_name;
@@ -130,10 +131,23 @@ param.filename = {};
 param.map = obj.map;
 if strcmpi(param.layer_source,'layerdata')
   % Find this season in the list of seasons
-  season_idx = find(strcmp(system_name_full,obj.cur_map_pref_settings.seasons));
-  % Create a mask that identifies the frames for the selected segment in this season
-  frm_idxs = find(param.cur_sel.seg_id == floor(obj.layerdata.frm_info(season_idx).frm_id/1000));
-  num_frm = length(frm_idxs);
+  if strcmp(obj.cur_map_pref_settings.system,'tracks')
+    % Season layer files: Load segment information
+    season_idx = find(strcmp(system_name_full,obj.cur_map_pref_settings.seasons));
+    % Create a mask that identifies the frames for the selected segment in this season
+    frm_idxs = find(param.cur_sel.seg_id == floor(obj.trackdata.frm_info(season_idx).frm_id/1000));
+    num_frm = length(frm_idxs);
+  else
+    % OPS: Load segment information
+    ops_param = struct('properties',[]);
+    ops_param.properties.location = param.cur_sel.location;
+    ops_param.properties.segment_id = param.cur_sel.seg_id;
+    [status,data] = opsGetSegmentInfo(param.system,ops_param);
+    num_frm = length(data.properties.frame);
+    % Database may return them out of order
+    param.start_gps_time = sort(double(data.properties.start_gps_time));
+    param.stop_gps_time = sort(double(data.properties.stop_gps_time));
+  end
 
   % Load layer organizer file into param.layers
   %   param.layers.lyr_age % layer_organizer.lyr_age (age of layer or NaN)
@@ -153,16 +167,16 @@ if strcmpi(param.layer_source,'layerdata')
   param_layerdata.records.gps.time_offset = NaN;
   param_layerdata.radar.lever_arm_fh = [];
   layers = layerdata(param_layerdata,param.layer_data_source);
-  layers.check_all();
+  layers.check_layer_organizer();
   
   for frm = 1:num_frm
-    % stores the filename for all frames in the segment
+    % Stores the filename for all frames in the segment
     param.filename{frm} = layers.layer_fn(frm);
-    gps_time = layers.gps_time(frm);
+    gps_time = layers.gps_time(frm); % Get the gps_time to take its length
     Nx = length(gps_time);
     param.frame(end+(1:Nx)) = frm; % stores the frame number for each point path id in each frame
     param.frame_idxs(end+(1:Nx)) = 1:length(gps_time);  % contains the point number for each individual point in each frame
-    % stores the layer information for all frames in the segment
+    % Stores the layer information for all frames in the segment
     if frm == 1
       layer_info = layers.layer{frm};
     else
@@ -187,14 +201,27 @@ if strcmpi(param.layer_source,'layerdata')
   param.layers.lyr_name = param.layers.lyr_name(new_order);
   param.layers.lyr_order = param.layers.lyr_order(new_order);
   
-  param.start_gps_time = obj.layerdata.frm_info(season_idx).start_gps_time(frm_idxs);
-  param.stop_gps_time = obj.layerdata.frm_info(season_idx).stop_gps_time(frm_idxs);
+  if strcmp(obj.cur_map_pref_settings.system,'tracks')
+    param.start_gps_time = obj.trackdata.frm_info(season_idx).start_gps_time(frm_idxs);
+    param.stop_gps_time = obj.trackdata.frm_info(season_idx).stop_gps_time(frm_idxs);
+  end
 
 else
+  % OPS: Load segment information
+  ops_param = struct('properties',[]);
+  ops_param.properties.location = param.cur_sel.location;
+  ops_param.properties.segment_id = param.cur_sel.seg_id;
+  [status,data] = opsGetSegmentInfo(param.system,ops_param);
+  num_frm = length(data.properties.frame);
+  % Database may return them out of order
+  param.start_gps_time = sort(double(data.properties.start_gps_time));
+  param.stop_gps_time = sort(double(data.properties.stop_gps_time));
+
   param.layers.lyr_age = nan(size(param.layers.lyr_id)); % layer.age (age of layer or NaN)
   param.layers.lyr_age_source = cell(size(param.layers.lyr_id)); % layer.age_source (struct vector of age sources)
   param.layers.lyr_desc = cellfun(@char,cell(size(param.layers.lyr_id)),'UniformOutput',false); % layer.desc (layer description string)
   param.layers.lyr_order = [1:length(param.layers.lyr_id)]; % layer.order (positive integer, 1 to N where N is the number of layers)
+  layers.layer_organizer = param.layers;
   
 end
 
@@ -207,7 +234,7 @@ if isempty(undo_stack_match_idx)
 end
 
 % Attach echowin to the undo stack
-obj.echowin_list(echo_idx).cmds_set_undo_stack(obj.undo_stack_list(undo_stack_match_idx));
+cmds_list = obj.echowin_list(echo_idx).cmds_set_undo_stack(obj.undo_stack_list(undo_stack_match_idx));
 % user_data: This is only used for param.layer_source == 'layerdata' except
 % for the field param.layer_source.
 obj.undo_stack_list(undo_stack_match_idx).user_data.layer_source = param.layer_source; % string containing layer source ('OPS' or 'layerdata')
@@ -227,6 +254,10 @@ catch ME
   set(obj.h_fig,'Pointer','Arrow');
   rethrow(ME);
 end
+
+% Since there may be commands in the undo stack already, we will run these
+% commands so that the new echowin is synced up with the stack.
+obj.echowin_list(echo_idx).cmds_set_undo_stack_after_draw(cmds_list);
 
 %% Cleanup
 set(obj.h_fig,'Pointer','Arrow');

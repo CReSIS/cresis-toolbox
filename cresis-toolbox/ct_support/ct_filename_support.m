@@ -11,16 +11,21 @@ function fn = ct_filename_support(param,fn,type,generic_data_flag)
 %    standardized path/directory structure is not used (base_fn is used)
 %  - base_fn is empty: the param.support_path and standardized path are used
 %
-% param = control structure to data processor
-%  .radar_name (e.g. mcords)
-%  .season_name (e.g. 2009_antarctica_DC8)
-%  .day_seg (e.g. 20091020_03)
-% fn = parameter filename provided (leave blank to get the default file
-%   path)
-% type = string containing the type of data (e.g. vectors, gps, records,
-%   frames, radar_config)
-% generic_data_flag = if enabled, the radar name and segment are excluded.
-%   This field is optional. Default is false.
+% param: control structure to data processor
+% * .radar_name (e.g. mcords): See ct_output_dir.m for valid options. Only
+% required if fn not set.
+% * .season_name (e.g. 2009_antarctica_DC8). Only required if fn not set.
+% * .day_seg (e.g. 20091020_03). Used when fn not set. Optional.
+%
+% fn: parameter filename provided (leave blank to get the default file
+% path)
+%
+% type: string containing the type of data (e.g. vectors, gps, records,
+% frames, radar_config). Only required if fn not set.
+%
+% generic_data_flag: if enabled, the radar name and specific segment are
+% excluded from the output file path. This field is optional. Default is
+% false.
 %
 % Author: John Paden
 %
@@ -34,8 +39,6 @@ if ~exist('generic_data_flag','var') || isempty(generic_data_flag)
   generic_data_flag = 0;
 end
 
-[output_dir,radar_type] = ct_output_dir(param.radar_name);
-
 if strcmpi(type,'records') && isfield(param,'records') && isfield(param.records,'records_fn') && isempty(fn)
   fn = param.records.records_fn;
 end
@@ -45,6 +48,16 @@ if strcmpi(type,'frames') && isfield(param,'records') && isfield(param.records,'
 end
 
 if isempty(fn)
+  if ~isfield(param,'radar_name') || isempty(param.radar_name)
+    error('ct_filename_support requires that param.radar_name exist and be nonempty if input fn is not set.');
+  end
+  if ~isfield(param,'season_name') || isempty(param.season_name)
+    error('ct_filename_support requires that param.season_name exist and be nonempty if input fn is not set.');
+  end
+end
+
+if isempty(fn)
+  [output_dir,radar_type] = ct_output_dir(param.radar_name);
   if ~isfield(param,'day_seg') || isempty(param.day_seg)
     % Generate the default path
     if generic_data_flag

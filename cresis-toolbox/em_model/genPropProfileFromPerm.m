@@ -1,4 +1,4 @@
-function [TWtime,gain] = genPropProfileFromPerm(depth,er,freq)
+function [TWtime,gain,depth,er] = genPropProfileFromPerm(depth,er,freq)
 % [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
 % depth = depth axis (m)
 % e0*er = e0*(e' - j*e'') (F/m)
@@ -38,13 +38,42 @@ function [TWtime,gain] = genPropProfileFromPerm(depth,er,freq)
 %   i.e. gain(1) is less than one assuming depth(2) > depth(1)
 %
 % Example:
+%   -----------------------------------------------------------------------
 %   [depth,er] = summitPerm(195e6);
 %   [TWtime,gain] = genPropProfileFromPerm(depth,er,195e6);
 %   plot(depth(2:end),10*log10(gain))
 %
+%   -----------------------------------------------------------------------
+%   freq = [150]*1e6;
+%   depth = [1 2 3 4];
+%   er = [1 1.7 1.9 2.1 2.5 3.15]';
+%   [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
+% 
+%   -----------------------------------------------------------------------
+%   freq = [120:10:160]*1e6;
+%   depth = [1 2 3 4];
+%   er = [1*ones(1,5)
+%         1.7*ones(1,5)
+%         2*ones(1,5)
+%         3.15*ones(1,5)];
+%   [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
+% 
+%   -----------------------------------------------------------------------
+%   freq = 150e6;
+%   [depth,er] = gisp2Perm(freq);
+%   [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
+%
 % Author: John Paden
 
 physical_constants;
+
+if length(depth) == 1
+  depth = [0 1];
+  TWtime = [0 depth(end)/c*2*sqrt(er)];
+  gain = [1 1];
+  return;
+end
+
 w = 2*pi*freq;
 
 % Preallocate memory
@@ -93,27 +122,4 @@ for n = 2:(length(depth)-1)
   gain(n,:) = gain(n-1,:).*exp(-4*alpha.*thick).*tau;
 end
 
-return;
-
-% ------------------------------------------------------------------------------
-% Example
-% ------------------------------------------------------------------------------
-% freq = [150]*1e6;
-% depth = [1 2 3 4];
-% er = [1 1.7 1.9 2.1 2.5 3.15]';
-% [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
-% 
-% freq = [120:10:160]*1e6;
-% depth = [1 2 3 4];
-% er = [1*ones(1,5)
-%       1.7*ones(1,5)
-%       2*ones(1,5)
-%       3.15*ones(1,5)];
-% [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
-% 
-% freq = 150e6;
-% [depth,er] = gisp2Perm(freq);
-% [TWtime,gain] = genPropProfileFromPerm(depth,er,freq);
-
-
-
+TWtime = [0; TWtime];

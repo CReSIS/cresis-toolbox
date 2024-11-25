@@ -10,7 +10,7 @@ end
 
 if ~isempty(system_name)
   %% layerdata systems
-  if strcmpi(system_name,'layerdata')
+  if strcmpi(system_name,'tracks')
     layer_sources = get(obj.h_gui.layerSourcePM,'String');
     layer_source = layer_sources{get(obj.h_gui.layerSourcePM,'Value')};
     if strcmp(layer_source,'OPS')
@@ -42,15 +42,9 @@ if ~isempty(system_name)
         end
       end
       
-      % Get the current list of selected layers
-      selectedString = obj.h_gui.h_layers.get_selected_strings();
-      
       % Create the new list of layers for the system that is selected
-      obj.h_gui.h_layers.set_available(menuString);
-      
-      % Select all the old layers that were selected (this function
-      % automatically ignores layers that do not exist in the new list)
-      obj.h_gui.h_layers.set_selected(selectedString,true);
+      obj.h_gui.h_layers.set_list(sort(menuString));
+      obj.h_gui.h_layers.set_selected({'standard:surface','standard:bottom'},true);
       
       set(obj.h_gui.h_layers.h_list_availableCM.Children([2 3 4]),'Enable','off');
     end
@@ -65,16 +59,9 @@ if ~isempty(system_name)
       menuString{idx} = sprintf('%s:%s', data.properties.lyr_group_name{idx}, data.properties.lyr_name{idx});
     end
     
-    % Get the current list of selected layers
-    selectedString = obj.h_gui.h_layers.get_selected_strings();
-    selectedString = union({'standard:surface'},selectedString);
-    
     % Create the new list of layers for the system that is selected
-    obj.h_gui.h_layers.set_available(menuString);
-    
-    % Select all the old layers that were selected (this function
-    % automatically ignores layers that do not exist in the new list)
-    obj.h_gui.h_layers.set_selected(selectedString,true);
+    obj.h_gui.h_layers.set_list(sort(menuString));
+    obj.h_gui.h_layers.set_selected({'standard:surface','standard:bottom'},true);
     
     set(obj.h_gui.h_layers.h_list_availableCM.Children([2 3 4]),'Enable','on');
   end

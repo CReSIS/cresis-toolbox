@@ -10,7 +10,7 @@
 param = read_param_xls(ct_filename_param('snow_param_2012_Greenland_P3.xls'),'20120319_05');
 param2 = read_param_xls(ct_filename_param('kuband_param_2012_Greenland_P3.xls'),'20120319_05');
 
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 
 fn = fullfile(gRadar.data_support_path,'kurtz_seaice_thickness','2012.03.19','IDCSI2_20120319.txt');
 data = read_seaice_kurtz(fn);

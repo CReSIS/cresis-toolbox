@@ -60,12 +60,12 @@ function opsInsertLayer(params,insert_param)
 %    .$(custom): Custom fields available to the eval command.
 %    Variables available are:
 %      physical_constants
-%      "gps_time" (sec)
-%      "along_track" (m)
+%      "time" (ANSI-C GPS time, seconds since Jan 1, 1970)
+%      "at" (along-track, m)
 %      "lat" (deg)
 %      "lon" (deg)
 %      "elev" (m)
-%      "source" (twtt in sec)
+%      "s" (two way travel time, twtt, in sec)
 %      "ref" (reference structure from ref_source)
 %      "eval_struct" (the eval structure passed in by the user)
 %    The cmd string should generally update "source" variable. For example:
@@ -82,16 +82,22 @@ function opsInsertLayer(params,insert_param)
 physical_constants;
 global gRadar;
 
+if ~isfield(insert_param,'max_dist') || isempty(insert_param.max_dist)
+  insert_param.max_dist = inf;
+end
+
 if strcmpi(insert_param.type, 'point')
   %% Create triangulation function handle
+  % Ensure input data are column vectors
+  insert_param.x = insert_param.x(:);
+  insert_param.y = insert_param.y(:);
+  insert_param.data = insert_param.data(:);
   % Remove non-unique points
-  [dtri_pnts dtri_idxs] = unique([insert_param.x insert_param.y],'rows');
-  % Make a function handle for a function that applies triangularization
-  dtri = DelaunayTri(dtri_pnts(:,1),dtri_pnts(:,2));
+  [dtri_pnts,dtri_idxs] = unique([insert_param.x insert_param.y],'rows');
   if ~isfield(insert_param,'interp_method') || isempty(insert_param.interp_method)
     insert_param.interp_method = 'linear';
   end
-  insert_param.interp_fh = TriScatteredInterp(dtri,insert_param.data(dtri_idxs),insert_param.interp_method);
+  insert_param.interp_fh = scatteredInterpolant(dtri_pnts(:,1),dtri_pnts(:,2),insert_param.data(dtri_idxs),insert_param.interp_method,'nearest');
 elseif strcmpi(insert_param.type, 'raster')
   %% Prepare gridded data
 else
@@ -137,7 +143,7 @@ for param_idx = 1:length(params)
     [~,ops_frames] = opsGetSegmentInfo(sys,ops_param);
   end
   % Load frames file
-  frames = load(ct_filename_support(param,'','frames'));
+  frames = frames_load(param);
   
   %% Load existing destination layer data for this segment
   % Load all frames 
@@ -195,13 +201,13 @@ for param_idx = 1:length(params)
 
   %% Update layer source with interpolated data
   if strcmpi(insert_param.type, 'point')
-    [x,y] = projfwd(insert_param.proj,all_points.lat,all_points.lon);
-    all_points.twtt = insert_param.interp_fh(x,y);
+    [all_points.x,all_points.y] = projfwd(insert_param.proj,all_points.lat,all_points.lon);
+    all_points.twtt = insert_param.interp_fh(all_points.x,all_points.y);
     
   elseif strcmpi(insert_param.type, 'raster')
-    [x,y] = projfwd(insert_param.proj,all_points.lat,all_points.lon);
+    [all_points.x,all_points.y] = projfwd(insert_param.proj,all_points.lat,all_points.lon);
     all_points.twtt = interp2(reshape(insert_param.x,[1 numel(insert_param.x)]), ...
-      reshape(insert_param.y,[numel(insert_param.y) 1]),insert_param.data,x,y);
+      reshape(insert_param.y,[numel(insert_param.y) 1]),insert_param.data,all_points.x,all_points.y);
     
   end
   
@@ -240,15 +246,22 @@ for param_idx = 1:length(params)
     end
 
     %% Prepare variables for eval command
-    source = all_points.twtt;
-    gps_time = all_points.gps_time;
+    s = all_points.twtt;
+    time = all_points.gps_time;
     lat = all_points.lat;
     lon = all_points.lon;
     elev = all_points.elev;
-    along_track = geodetic_to_along_track(lat,lon,elev);
+    at = geodetic_to_along_track(lat,lon,elev);
     eval_struct = insert_param.eval;
     eval(insert_param.eval.cmd);
-    all_points.twtt = source;
+    all_points.twtt = s;
+  end
+  
+  if strcmpi(insert_param.type, 'point') && insert_param.max_dist < inf
+    TR = delaunayTriangulation(dtri_pnts(:,1),dtri_pnts(:,2));
+    idxs = TR.nearestNeighbor(all_points.x(:),all_points.y(:));
+    dist = (dtri_pnts(idxs,1)-all_points.x(:)).^2 + (dtri_pnts(idxs,2)-all_points.y(:)).^2;
+    all_points.twtt(dist > insert_param.max_dist^2) = NaN;
   end
   
   copy_param = [];

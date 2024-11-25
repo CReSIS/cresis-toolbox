@@ -1,5 +1,12 @@
-function layerLB_str(obj)
+function layerLB_str(obj,keep_value)
 
+if exist('keep_value','var') || isempty(keep_value)
+  keep_value = false;
+end
+
+if ~keep_value
+  set(obj.left_panel.layerLB,'Value',[]);
+end
 LB_strings = cell(1,length(obj.eg.layers.lyr_name));
 for idx = 1:length(obj.eg.layers.lyr_name)
   name = sprintf(obj.eg.layers.lyr_name{idx},idx);

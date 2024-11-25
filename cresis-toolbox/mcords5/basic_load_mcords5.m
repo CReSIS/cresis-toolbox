@@ -10,24 +10,38 @@ function [hdr,data] = basic_load_mcords5(fn,param)
 % NOTE: 64-bit computer may be essential to load a 256 MB file since it will
 % consume 512 MB of memory after loading.
 %
-% fn = filename of MCoRDS-5 data
-% param = struct controlling loading of data
-%   .clk = clock (Hz), default 1600e6, used to interpret
-%     counts in the header fields.
-%   .recs = 2 element vector for records to load [start_rec num_rec]
-%     start_rec uses zero-indexing, default is [0 inf]
-%   .debug_level = 1 is default, 2 generates plots/print-outs
-%   .first_byte = first byte to start reading at (default is zero0)
-%   .start_index_time_offset = time offset between transmit waveform start
-%     and the start index. The default is -1.0665e-05 implying that the first
-%     sample collected is 10.665 us before the transmit event starts. This
-%     value can be very different for each radar system (e.g. AWI system
-%     is 0.6 us).
-%   .presum_bug_fixed: default is false. Set to true if presum number in
-%     file matches actual presums.
+% Inputs:
+% =========================================================================
 %
-% hdr = file header for each record
-% data = cell vector of single matrices of radar data where each entry
+% fn: filename of MCoRDS-5 data
+%
+% param: struct controlling loading of data
+%
+%  .clk = clock (Hz), default 200e6 (1600 MHz sampling frequency divided by
+%  8), used to interpret counts in the header fields.
+%
+%  .recs = 2 element vector for records to load [start_rec num_rec]
+%   start_rec uses zero-indexing, default is [0 inf]
+%
+%  .first_byte = first byte to start reading at (default is zero0)
+%
+%  .start_index_time_offset = time offset between transmit waveform start
+%  and the start index. The default is -1.0665e-05 implying that the first
+%  sample collected is 10.665 us before the transmit event starts. This
+%  value can be very different for each radar system (e.g. AWI system is
+%  0.6 us).
+%
+%  .presum_mode: default is 1 which means there is an extra unused waveform
+%  and the presum header values are 1 higher than what they should be
+%  (8-channel DDS Ledford/Leuschen has this bug). Set to 0 if the presum
+%  header values are correct (i.e. header values match the actual number of
+%  presums.
+%
+% Outputs:
+% =========================================================================
+%
+% hdr: file header for each record
+% data: cell vector of single matrices of radar data where each entry
 %   in the cell vector is a 3-D array for that waveform. Dimensions
 %   1: fast-time/range-bin
 %   2: slow-time/range-line/records
@@ -45,33 +59,26 @@ function [hdr,data] = basic_load_mcords5(fn,param)
 if ~exist('param','var')
   param = struct();
 end
-if ~isfield(param,'clk');
-  param.clk = 1600e6;
+if ~isfield(param,'clk')
+  param.clk = 200e6;
 end
-if ~isfield(param,'recs');
+if param.clk == 1600e6
+  error('param.clk is now defined to be the actual header counter clock which is 200e6 instead of 1600e6.');
+end
+if ~isfield(param,'recs') || isempty(param.recs)
   param.recs = [0 inf];
 end
-if ~isfield(param,'debug_level');
-  param.debug_level = 1;
-end
-if ~isfield(param,'first_byte');
+if ~isfield(param,'first_byte') || isempty(param.first_byte)
   param.first_byte = 0;
 end
-if ~isfield(param,'start_index_time_offset')
+if ~isfield(param,'start_index_time_offset') || isempty(param.start_index_time_offset)
   param.start_index_time_offset = -1.0665e-05;
 end
-if ~isfield(param,'header_only')
-  if nargout <= 1
-    param.header_only = 1;
-  else
-    param.header_only = 0;
-  end
+if ~isfield(param,'presum_mode') || isempty(param.presum_mode)
+  param.presum_mode = 1;
 end
-if ~isfield(param,'record_mode')
-  param.record_mode = 1;
-end
-if ~isfield(param,'presum_bug_fixed')
-  param.presum_bug_fixed = 0;
+if isfield(param,'presum_bug_fixed')
+  error('presum_bug_fixed no longer used. Change it to presum_mode. Change param.presum_bug_fixed = 1 to param.presum_mode = 0 and presum_bug_fixed = 0 to presum_mode = 1.');
 end
 
 % Reset/clear hdr struct
@@ -146,14 +153,19 @@ wf_offset = WF_HEADER_SIZE/2;
 for wf = 1:num_waveforms
   % Read in waveform header
   fseek(fid,2,0);
-  if param.presum_bug_fixed
-    hdr.wfs(wf).presums = fread(fid, 1, 'uint8') + 1;
-  else
-    hdr.wfs(wf).presums = fread(fid, 1, 'uint8');
+  % hdr.wfs(wf).presums: field in file contains the number of hardware
+  % presums/stacking/averages minus one
+  hdr.wfs(wf).presums = fread(fid, 1, 'uint8') + 1;
+  if param.presum_mode == 1
+    % For 8-channel Ledford/Leuschen DDS waveform generator, an extra bad
+    % waveform is transmitted which is not used in the presum. The header
+    % shows the number of transmitted waveforms including the bad waveform
+    % so we need to subtract one from the presums.
+    hdr.wfs(wf).presums = hdr.wfs(wf).presums - 1;
   end
   hdr.wfs(wf).bit_shifts = -fread(fid, 1, 'int8');
   hdr.wfs(wf).start_idx = fread(fid, 1, 'uint16');
-  hdr.wfs(wf).t0 = hdr.wfs(wf).start_idx / param.clk*8 + param.start_index_time_offset;
+  hdr.wfs(wf).t0 = hdr.wfs(wf).start_idx / param.clk + param.start_index_time_offset;
   
   if DDC == 1
     hdr.wfs(wf).num_sam = 8*fread(fid, 1, 'uint16');
@@ -200,7 +212,7 @@ fseek(fid,0,1);
 hdr.file_size = ftell(fid);
 
 if hdr.rec_size ~= median(diff(hdr.sync_offsets))/2
-  error('Estimated header size is wrong');
+  error('Estimated header size (%d) does not appear to match the header size found in the file (%d)', hdr.rec_size, median(diff(hdr.sync_offsets))/2);
   % keyboard;
   % For badly recorded files (e.g. DDS settings not matching ADC settings)
   % you can try uncommenting the following line:
@@ -230,7 +242,7 @@ if nargout < 2
     fseek(fid,8,-1);
   end
   hdr.counter = fread(fid,1,'uint64');
-  hdr.utc_time_sod = hdr.seconds + hdr.fractions / param.clk*8;
+  hdr.utc_time_sod = hdr.seconds + hdr.fractions / param.clk;
   hdr.comp_time_sod = double(fread(fid,1,'uint64'));
   
   fclose(fid);
@@ -321,7 +333,7 @@ hdr.counter = 2^48*hdr_data(13+3*HACK_OFFSET,:) ...
   + 2^16*hdr_data(15+3*HACK_OFFSET,:) ...
   + hdr_data(16+3*HACK_OFFSET,:);
   
-hdr.utc_time_sod = hdr.seconds + hdr.fractions/param.clk*8;
+hdr.utc_time_sod = hdr.seconds + hdr.fractions/param.clk;
 
 hdr.comp_time_sod= (2^48*hdr_data(17+4*HACK_OFFSET,:) ...
   + 2^32*hdr_data(18+4*HACK_OFFSET,:) ...

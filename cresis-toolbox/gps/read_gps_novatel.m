@@ -20,7 +20,7 @@ function gps = read_gps_novatel(fn,param)
 %
 % Author: Huan Zhao, John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 % 2009 Antarctica TO FORMAT:
 % =========================================================================

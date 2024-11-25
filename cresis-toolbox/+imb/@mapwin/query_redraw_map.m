@@ -12,8 +12,8 @@ function query_redraw_map(obj,x_min,x_max,y_min,y_max)
 %   (in km) to get
 
 %% Scale the requested limits to meters
-obj.ops.request.XLim = sort([x_min x_max]*obj.map.scale);
-obj.ops.request.YLim = sort([y_min y_max]*obj.map.scale);
+map_xlim = sort([x_min x_max]*obj.map.scale);
+map_ylim = sort([y_min y_max]*obj.map.scale);
 
 %% Force requested limits to maintain the aspect ratio of the figure
 old_u = get(obj.map_panel.h_axes,'units');
@@ -25,21 +25,25 @@ width = round((PixelBounds(3))*1 - 0);
 aspect_ratio = height/width;
 set(obj.map_panel.h_axes,'units',old_u);
 
-% Grow the limits so that the requested region is as big or bigger
-% than the requested limits
-if aspect_ratio*diff(obj.ops.request.XLim) > diff(obj.ops.request.YLim)
-  growth = aspect_ratio*diff(obj.ops.request.XLim) - diff(obj.ops.request.YLim);
-  obj.ops.request.YLim(1) = obj.ops.request.YLim(1) - growth/2;
-  obj.ops.request.YLim(2) = obj.ops.request.YLim(2) + growth/2;
-else
-  growth = diff(obj.ops.request.YLim)/aspect_ratio - diff(obj.ops.request.XLim);
-  obj.ops.request.XLim(1) = obj.ops.request.XLim(1) - growth/2;
-  obj.ops.request.XLim(2) = obj.ops.request.XLim(2) + growth/2;
+if obj.map.source ~= 3
+  % Grow the limits so that the requested region is as big or bigger
+  % than the requested limits
+  if aspect_ratio*diff(map_xlim) > diff(map_ylim)
+    growth = aspect_ratio*diff(map_xlim) - diff(map_ylim);
+    map_ylim(1) = map_ylim(1) - growth/2;
+    map_ylim(2) = map_ylim(2) + growth/2;
+  else
+    growth = diff(map_ylim)/aspect_ratio - diff(map_xlim);
+    map_xlim(1) = map_xlim(1) - growth/2;
+    map_xlim(2) = map_xlim(2) + growth/2;
+  end
 end
 
 if obj.map.source == 0
   %% OPS map
   obj.ops.request.ImageFormat = 'image/jpeg';
+  obj.ops.request.XLim = map_xlim;
+  obj.ops.request.YLim = map_ylim;
 
   % Build the new WMS query, submit it and then retrieve the result
   obj.ops.request.ImageHeight =  height;
@@ -59,6 +63,8 @@ if obj.map.source == 0
   
 elseif obj.map.source == 1
   %% Google map
+  obj.ops.request.XLim = map_xlim;
+  obj.ops.request.YLim = map_ylim;
   
   [A,x_data,y_data] = obj.google.map.request_google_map(obj.ops.request.XLim(1), obj.ops.request.XLim(2), 256-obj.ops.request.YLim(1), 256-obj.ops.request.YLim(2));
   A = flipud(A);
@@ -94,10 +100,12 @@ elseif obj.map.source == 1
   end
   
 elseif obj.map.source == 2
-  %% Blank map
+  %% Blank Stereographic map
 
   if obj.map.fline_source == 0
     obj.ops.request.ImageFormat = 'image/png';
+    obj.ops.request.XLim = map_xlim;
+    obj.ops.request.YLim = map_ylim;
     
     % Build the new WMS query, submit it and then retrieve the result
     obj.ops.request.ImageHeight =  height;
@@ -112,8 +120,39 @@ elseif obj.map.source == 2
     y_data = R(3,2) + [0 size(A,1)*R(1,2)];
   else
     A = ones(1,1,3);
-    x_data = obj.ops.request.XLim/obj.map.scale;
-    y_data = obj.ops.request.YLim/obj.map.scale;
+    x_data = map_xlim/obj.map.scale;
+    y_data = map_ylim/obj.map.scale;
+  end
+  
+elseif obj.map.source == 3
+  %% Blank Geodetic map
+
+  if obj.map.fline_source == 0
+    % THIS IS NOT SUPPORTED... MAYBE OUR GEOSERVER IS TOO OLD AND MATLAB
+    % DOES NOT KNOW HOW TO INTERFACE
+    obj.ops.request.ImageFormat = 'image/png';
+    %obj.ops.request.Latlim = map_ylim;
+    %obj.ops.request.Lonlim = map_xlim;
+    obj.ops.request.Latlim = map_xlim; % HACK FOR OLD GEOSERVER?
+    obj.ops.request.Lonlim = map_ylim; % HACK FOR OLD GEOSERVER?
+    
+    % Build the new WMS query, submit it and then retrieve the result
+    obj.ops.request.ImageHeight =  height;
+    obj.ops.request.ImageWidth  = width;
+    modrequest = strcat(obj.ops.request.RequestURL,'&viewparams=',obj.ops.seasons_modrequest,obj.ops.season_group_ids_modrequest);
+    A = obj.map_pref.ops.wms.getMap(modrequest);
+    R = obj.ops.request.RasterRef;
+    R = R/obj.map.scale;
+  
+    % Create axes
+    %x_data = R(3,1) + [0 size(A,2)*R(2,1)];
+    %y_data = R(3,2) + [0 size(A,1)*R(1,2)];
+    y_data = fliplr(R(3,1) + [0 size(A,2)*R(2,1)]); % HACK FOR OLD GEOSERVER?
+    x_data = fliplr(R(3,2) + [0 size(A,1)*R(1,2)]); % HACK FOR OLD GEOSERVER?
+  else
+    A = ones(1,1,3);
+    x_data = map_xlim/obj.map.scale;
+    y_data = map_ylim/obj.map.scale;
   end
 end
 

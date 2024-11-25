@@ -19,13 +19,16 @@ if strcmpi(obj.eg.layers.source,'OPS')
     [lat,lon] = projinv(obj.eg.proj,data.properties.X,data.properties.Y);
     [data.properties.X,data.properties.Y] = google_map.latlon_to_world(lat,lon);
     data.properties.Y = 256-data.properties.Y;
+  elseif obj.eg.map.source == 3
+    [data.properties.Y,data.properties.X] = projinv(obj.eg.proj,data.properties.X,data.properties.Y);
   end
   obj.eg.map_x = double(data.properties.X)/obj.eg.map.scale;
   obj.eg.map_y = double(data.properties.Y)/obj.eg.map.scale;
   
-%% LayerData: Loading flight path from layerData
+%% LayerData: Loading flight path from tracks files
 else
-  fprintf(' Loading flight path from layerData(%s)\n', datestr(now,'HH:MM:SS'));
+  fprintf(' Loading flight path from csarp_support/tracks files (%s)\n', datestr(now,'HH:MM:SS'));
+  obj.eg.map_id = [];
   obj.eg.map_gps_time = [];
   obj.eg.map_elev = [];
   obj.eg.map_x = [];
@@ -39,6 +42,9 @@ else
     if obj.eg.map.source == 1
       [X,Y] = google_map.latlon_to_world(obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lat,obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lon);
       Y = 256-Y;
+    elseif obj.eg.map.source == 3
+      X = obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lon;
+      Y = obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lat;
     else
       [X,Y] = projfwd(obj.eg.proj,obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lat,obj.undo_stack.user_data.layer_info(obj.eg.frms(idx)).lon);
     end

@@ -25,45 +25,17 @@ fprintf('=====================================================================\n
 %% Input Checks
 % =====================================================================
 
-% Load frames file
-load(ct_filename_support(param,'','frames'));
-
 % Remove frames that do not exist from param.cmd.frms list
-load(ct_filename_support(param,'','frames')); % Load "frames" variable
-if ~isfield(param.cmd,'frms') || isempty(param.cmd.frms)
-  param.cmd.frms = 1:length(frames.frame_idxs);
-end
-[valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-if length(valid_frms) ~= length(param.cmd.frms)
-  bad_mask = ones(size(param.cmd.frms));
-  bad_mask(keep_idxs) = 0;
-  warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-    param.cmd.frms(find(bad_mask,1)));
-  param.cmd.frms = valid_frms;
+frames = frames_load(param);
+param.cmd.frms = frames_param_cmd_frms(param,frames);
+if isempty(param.cmd.frms)
+  % No valid frames to process
+  warning('No valid frames were listed in param.cmd.frms. Skipping this segment.');
+  return;
 end
 
 % sar.* fields
 % -------------------------------------------------------------------------
-
-% param.sar gets used to create the defaults of several fields so we make
-% sure the field is available
-if ~isfield(param,'sar') || isempty(param.sar)
-  param.sar = [];
-end
-if ~isfield(param.sar,'sigma_x') || isempty(param.sar.sigma_x)
-  error('The param.sar.sigma_x field must be set to calculate cpu time and memory requirements.');
-end
-
-% array.* fields
-% -------------------------------------------------------------------------
-
-if ~isfield(param.array,'dline') || isempty(param.array.dline)
-  error('param.array.dline must be specified.');
-end
-
-if ~isfield(param.array,'method') || isempty(param.array.method)
-  param.array.method = 'music';
-end
 
 % tomo_collate.* fields
 % -------------------------------------------------------------------------
@@ -71,18 +43,70 @@ if ~isfield(param.tomo_collate,'frm_types') || isempty(param.tomo_collate.frm_ty
   param.tomo_collate.frm_types = {-1,-1,-1,-1,-1};
 end
 
+if ~isfield(param.tomo_collate,'gt') || isempty(param.tomo_collate.gt)
+  param.tomo_collate.gt = [];
+end
+if ~isfield(param.tomo_collate.gt,'en') || isempty(param.tomo_collate.gt.en)
+  param.tomo_collate.gt.en = false;
+end
+if ~isfield(param.tomo_collate.gt,'path') || isempty(param.tomo_collate.gt.path)
+  param.tomo_collate.gt.path = 'surf';
+end
+if ~isfield(param.tomo_collate.gt,'range') || isempty(param.tomo_collate.gt.range)
+  param.tomo_collate.gt.range = 5;
+end
+if ~isfield(param.tomo_collate.gt,'surf_name') || isempty(param.tomo_collate.gt.surf_name)
+  param.tomo_collate.gt.surf_name = 'bottom gt';
+end
+
+if ~isfield(param.tomo_collate,'ground_based_flag') || isempty(param.tomo_collate.ground_based_flag)
+  param.tomo_collate.ground_based_flag = false;
+end
+
 if ~isfield(param.tomo_collate,'in_path') || isempty(param.tomo_collate.in_path)
   param.tomo_collate.in_path = 'music3D';
-end
-  
-if ~isfield(param.tomo_collate,'surf_out_path') || isempty(param.tomo_collate.surf_out_path)
-  param.tomo_collate.surf_out_path = 'surfData';
 end
   
 if ~isfield(param.tomo_collate,'out_path') || isempty(param.tomo_collate.out_path)
   param.tomo_collate.out_path = param.tomo_collate.in_path;
 end
   
+if ~isfield(param.tomo_collate,'surfData_mode') || isempty(param.tomo_collate.surfData_mode)
+  param.tomo_collate.surfData_mode = 'append';
+end
+  
+if ~isfield(param.tomo_collate,'surf_out_path') || isempty(param.tomo_collate.surf_out_path)
+  param.tomo_collate.surf_out_path = 'surfData';
+end
+
+% Name of the top surface (usually set to 'top' when tracking surfaces below
+% the ice-surface and set to an empty string, '', when tracking the
+% ice-surface.
+if ~isfield(param.tomo_collate,'top_name') || isempty(param.tomo_collate.top_name)
+  param.tomo_collate.top_name = 'top';
+end
+
+if ~isfield(param.tomo_collate,'array_manifold_cal_flag') || isempty(param.tomo_collate.array_manifold_cal_flag)
+  param.tomo_collate.array_manifold_cal_flag = false;
+end
+
+if ~isfield(param.tomo_collate,'suppress_surf_flag') || isempty(param.tomo_collate.suppress_surf_flag)
+  if param.tomo_collate.array_manifold_cal_flag
+    param.tomo_collate.suppress_surf_flag = false;
+  else
+    param.tomo_collate.suppress_surf_flag = false;
+  end
+end
+
+if ~isfield(param.tomo_collate,'suppress_surf_peak_val') || isempty(param.tomo_collate.suppress_surf_peak_val)
+  param.tomo_collate.suppress_surf_peak_val = 30;
+end
+
+if ~isfield(param.tomo_collate,'suppress_surf_window') || isempty(param.tomo_collate.suppress_surf_window)
+  param.tomo_collate.suppress_surf_window = 100;
+end
+
+
 %% Setup Processing
 % =====================================================================
 
@@ -90,11 +114,7 @@ end
 [~,~,radar_name] = ct_output_dir(param.radar_name);
 
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-if ~exist(records_fn)
-  error('You must run create the records file before running anything else:\n  %s', records_fn);
-end
-records = load(records_fn);
+records = records_load(param);
 
 % Along-track
 along_track_approx = geodetic_to_along_track(records.lat,records.lon,records.elev);
@@ -123,27 +143,37 @@ end
 ctrl = cluster_new_batch(param);
 cluster_compile({'tomo_collate_task.m'},ctrl.cluster.hidden_depend_funs,ctrl.cluster.force_compile,ctrl);
 
+% Load input array.m processed data product parameters
+frm = param.cmd.frms(1);
+in_fn = fullfile(out_path_dir, sprintf('Data_img_%02d_%s_%03d.mat', ...
+  param.tomo_collate.imgs{1}(1), param.day_seg, frm));
+load(in_fn,'param_array');
+array_proc_methods; % This script assigns the integer values for each method
+
+% Calculate the size of the images to determine cpu time and memory
+% requirements
 total_num_sam = 0;
 total_img = 0;
-if param.array.tomo_en
-  if any(strcmpi(param.array.method,{'music'}))
-    Nsv = param.array.Nsv;
-  elseif any(strcmpi(param.array.method,{'mle'}))
-    Nsv = 2*param.array.Nsrc;
+if param_array.array.tomo_en
+  if any(param_array.array.method == MUSIC_METHOD)
+    Nsv = param_array.array.Nsv;
+  elseif any(param_array.array.method == MLE_METHOD)
+    Nsv = 2*param_array.array.Nsrc;
   else
-    error('Unsupported param.array.method %s\n', param.array.method);
+    error('Unsupported param_array.array.method %s\n', param_array.array.method);
   end
 else
-  error('param.array.tomo_en is false, tomography should be enabled when running tomo.collate.');
+  error('param_array.array.tomo_en is false for the input file, tomography should be enabled during array process in order to run tomo.collate.');
 end
-[wfs,~] = data_load_wfs(setfield(param,'load',struct('imgs',{param.array.imgs})),records);
+param.load.imgs = param_array.array.imgs;
+[wfs,~] = data_load_wfs(param,records);
 if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','seaice','accum2','accum3'}))
   for v_img = 1:length(param.tomo_collate.imgs)
     for h_img = 1:length(param.tomo_collate.imgs{v_img})
       img = param.tomo_collate.imgs{v_img}(h_img);
       wf = param.tomo_collate.imgs{v_img}(1,1);
       if h_img == 1
-        total_num_sam = total_num_sam + wfs(wf).Nt_pc;
+        total_num_sam = total_num_sam + wfs(wf).Nt;
       end
       total_img = total_img + 1;
     end
@@ -235,7 +265,7 @@ for frm_idx = 1:length(param.cmd.frms)
   
   % CPU Time and Memory estimates:
   %  Nx*total_num_sam*K where K is some manually determined multiplier.
-  Nx = round(frm_dist / param.sar.sigma_x / param.array.dline);
+  Nx = round(frm_dist / param.sar.sigma_x / param_array.array.dline);
   dparam.cpu_time = 10 + Nx*Nsv*total_num_sam*cpu_time_mult;
   dparam.mem = 250e6 + Nx*Nsv*total_num_sam*mem_mult;
   ctrl = cluster_new_task(ctrl,sparam,dparam,'dparam_save',0);

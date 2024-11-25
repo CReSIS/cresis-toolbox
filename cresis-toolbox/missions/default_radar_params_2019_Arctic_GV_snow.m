@@ -15,7 +15,7 @@ param.radar_name = 'snow8';
 param.config.file.version = 8;
 param.config.file.prefix = param.radar_name;
 param.config.file.suffix = '.bin';
-param.config.max_time_gap = 10;
+param.config.max_time_gap = 5;
 param.config.min_seg_size = 2;
 
 param.config.daq_type = 'cresis';

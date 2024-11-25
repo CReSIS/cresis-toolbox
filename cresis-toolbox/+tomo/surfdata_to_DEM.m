@@ -46,6 +46,23 @@ if ~isstruct(param)
 end
 param = merge_structs(param, param_override);
 
+dbstack_info = dbstack;
+fprintf('=====================================================================\n');
+fprintf('%s: %s (%s)\n', dbstack_info(1).name, param.day_seg, datestr(now,'HH:MM:SS'));
+fprintf('=====================================================================\n');
+
+%% Input Checks: cmd
+% =====================================================================
+
+% Remove frames that do not exist from param.cmd.frms list
+frames = frames_load(param);
+param.cmd.frms = frames_param_cmd_frms(param,frames);
+
+%% Input Checks: dem
+% =====================================================================
+
+physical_constants;
+
 if ~isfield(param.dem,'doa_method_flag') || isempty(param.dem.doa_method_flag)
   doa_method_flag = false;
 else
@@ -58,13 +75,43 @@ else
   doa_limits = param.dem.doa_limits*pi/180;
 end
 
+% dem.er_ice: the relative dielectric of ice (defaults to 3.15 from
+% physical_constants.m which is generally the setting for creating digital
+% elevation models of the ice bottom). Set this to 1 for air (e.g. when
+% producing a dem for an ice surface that is not the param.dem.ice_top).
+% Note that this setting does not have any effect for the surface indicated by
+% param.dem.ice_top (i.e. the value does not matter).
+if ~isfield(param.dem,'er_ice') || isempty(param.dem.er_ice)
+  param.dem.er_ice = er_ice;
+end
 
-dbstack_info = dbstack;
-fprintf('=====================================================================\n');
-fprintf('%s: %s (%s)\n', dbstack_info(1).name, param.day_seg, datestr(now,'HH:MM:SS'));
-fprintf('=====================================================================\n');
+% dem.enforce_below_top: forces the surface to be below the top surface
+% (i.e. the ice surface). Defaults to true which is the setting for
+% creating DEMs of the ice bottom. Set to false to generate DEMs of the ice
+% surface. Note that this setting does not have any effect for the surface
+% indicated by param.dem.ice_top (i.e. can be true or false).
+if ~isfield(param.dem,'enforce_below_top') || isempty(param.dem.enforce_below_top)
+  param.dem.enforce_below_top = true;
+end
 
-physical_constants;
+if ~isfield(param.dem,'ice_mask') || isempty(param.dem.ice_mask)
+  param.dem.ice_mask = [];
+end
+
+if ~isfield(param.dem,'ice_mask_flag') || isempty(param.dem.ice_mask_flag)
+  param.dem.ice_mask_flag = false;
+end
+
+if ~isfield(param.dem,'array_manifold_mask_flag') || isempty(param.dem.array_manifold_mask_flag)
+  param.dem.array_manifold_mask_flag = false;
+end
+
+if param.dem.array_manifold_mask_flag
+  param.dem.array_manifold_mask_flag = true;
+  if isempty(param.dem.ice_mask)
+    error('User must specify an ice mask surface to derive the array manifold mask')
+  end
+end    
 
 surface_names = param.dem.surface_names;
 figure_dots_per_km = param.dem.figure_dots_per_km;
@@ -74,23 +121,8 @@ if ~isdir(out_dir)
   mkdir(out_dir);
 end
 
-% Load frames file
-load(ct_filename_support(param,'','frames'));
-
-if isempty(param.cmd.frms)
-  param.cmd.frms = 1:length(frames.frame_idxs);
-end
-% Remove frames that do not exist from param.cmd.frms list
-[valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-if length(valid_frms) ~= length(param.cmd.frms)
-  bad_mask = ones(size(param.cmd.frms));
-  bad_mask(keep_idxs) = 0;
-  warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-    param.cmd.frms(find(bad_mask,1)));
-  param.cmd.frms = valid_frms;
-end
-
 %% Loop through each frame and create data products
+% =====================================================================
 for frm_idx = 1:length(param.cmd.frms)
   
   frm = param.cmd.frms(frm_idx);
@@ -101,7 +133,7 @@ for frm_idx = 1:length(param.cmd.frms)
   surfdata_fn = fullfile(ct_filename_out(param,param.dem.surfdata_source),sprintf('Data_%s_%03d.mat',param.day_seg,frm));
   data_fn = fullfile(ct_filename_out(param,param.dem.input_dir_name),sprintf('Data_%s_%03d.mat',param.day_seg,frm));
   
-  %% Load surfData, echogram, steering vector calibration
+  %% Load surfdata, echogram, steering vector calibration and handle error conditions
   
   % Load surface data (usually top and bottom)
   fprintf('  %s\n', surfdata_fn);
@@ -115,17 +147,35 @@ for frm_idx = 1:length(param.cmd.frms)
   % Find the index to the ice top
   ice_top_idx = sd.get_index(param.dem.ice_top);
   
+  if ~isempty(find(strcmp(param.dem.ice_mask,{sd.surf.name}))) && param.dem.ice_mask_flag
+    ice_mask_idx = sd.get_index(param.dem.ice_mask);
+    ice_mask = sd.surf(ice_mask_idx).y; 
+    array_manifold_mask = ice_mask;
+    array_manifold_mask = cumsum(array_manifold_mask,1,'reverse') >= 1 | cumsum(array_manifold_mask,1,'forward') >= 1;
+  else
+    ice_mask_idx =[];
+    ice_mask = [];
+    array_manifold_mask = [];
+  end
+  
+  if isempty(ice_mask) && param.dem.array_manifold_mask_en
+    error('No valid ice mask found in surfdata file')
+  end
+  
+  if isempty(ice_mask) && param.dem.ice_mask
+    error('No valid ice mask found in surfdata file')
+  end
+  
   % Load the echogram
   fprintf('  %s\n', data_fn);
   mdata = load(data_fn);
   
   % Load the steering vector calibration file if specified
-  if(~isfield(mdata,'theta'))
+  if(~isfield(mdata.Tomo,'theta'))
     global gRadar
     theta = load(fullfile(gRadar.out_path,'rds','2014_Greenland_P3','CSARP_CSA_music','20140401_03','Data_20140401_03_037'),'theta');
-    mdata.theta = theta.theta;
+    mdata.Tomo.theta = theta.theta;
   end
-  
   
   %% Setup for convert doa,twtt to radar FCS for each surface
   
@@ -146,7 +196,7 @@ for frm_idx = 1:length(param.cmd.frms)
   
   % Convert top from range bins to twtt (the top is needed with each
   % surface to handle refraction)
-  ice_top = interp1(1:length(mdata.Time), mdata.Time, sd.surf(ice_top_idx).y);
+  ice_top = sd.surf(ice_top_idx).y;
   % If no top defined, then assume top is a zero time (i.e.
   %   ground based radar operation with antenna at surface)
   if all(all(isnan(ice_top)))
@@ -165,11 +215,14 @@ for frm_idx = 1:length(param.cmd.frms)
     % Determine which surface index in surfData file we are working with
     surface_idx = sd.get_index(surface_names{surface_names_idx});
     
-    % Ensure non-negative ice thickness
-    sd.surf(surface_idx).y(sd.surf(surface_idx).y<sd.surf(ice_top_idx).y) = sd.surf(ice_top_idx).y(sd.surf(surface_idx).y<sd.surf(ice_top_idx).y);
+    if param.dem.enforce_below_top
+      % Ensure non-negative ice thickness (threshold all values above the
+      % ice surface ("top") to be equal to the ice surface)
+      sd.surf(surface_idx).y(sd.surf(surface_idx).y<sd.surf(ice_top_idx).y) = sd.surf(ice_top_idx).y(sd.surf(surface_idx).y<sd.surf(ice_top_idx).y);
+    end
     
     % Convert surface from range bins to twtt
-    surface_twtt = interp1(1:length(mdata.Time), mdata.Time, sd.surf(surface_idx).y);
+    surface_twtt = sd.surf(surface_idx).y;
     % Apply spatial filtering
     if isfield(param.dem,'med_filt') && ~isempty(param.dem.med_filt)
       surface_twtt = medfilt2(surface_twtt,param.dem.med_filt);
@@ -177,14 +230,48 @@ for frm_idx = 1:length(param.cmd.frms)
       surface_twtt(:,end-floor(param.dem.med_filt(2)/2)+1:end) = NaN;
     end
     
-    % Convert from doa,twtt to radar FCS
+  %%%%%%%%%%% This section accomodates ground-based data collection
+    if ~isfield(param.dem,'ground_based_flag')
+      er_surf = 1;
+    else
+      if param.dem.ground_based_flag == true;      
+        if isfield(param.dem,'er_z') 
+          % er_z is an Nx2 matrix containing depths, and
+          % associated complex permittivities. For ground data,
+          % the real permittivity at the surface is used for
+          % down-going refraction
+          
+          % Identify the surface index.
+          [~,s_ind] = min(abs(param.dem.er_z(:,1)));
+          
+          % Then extract the permittivity at that depth
+          er_surf = real(param.dem.er_z(s_ind,2)); 
+        else
+          er_surf = 1;
+        end
+        
+        % For files that have erroneous steering vectors (that
+        % assume the medium containing the antenna is air, when
+        % it is not), the resulting theta matrix is adjusted
+        % here.
+        if isfield(param.dem,'theta_adjust')
+          if param.dem.theta_adjust == true
+            theta = asin(sin(theta)*1/sqrt(er_surf));
+          end
+        end
+        
+      else
+        er_surf = 1;
+      end      
+    end
+    
     if ~doa_method_flag
       [y_active,z_active] = tomo.twtt_doa_to_yz(repmat(theta(DOA_trim+1:end-DOA_trim),[1 Nx]), ...
         theta(DOA_trim+1:end-DOA_trim),ice_top(DOA_trim+1:end-DOA_trim,:), ...
-        3.15,surface_twtt(DOA_trim+1:end-DOA_trim,:));
+        er_surf,param.dem.er_ice,surface_twtt(DOA_trim+1:end-DOA_trim,:));
     else
       [y_active,z_active] = tomo.twtt_doa_to_yz(theta, ...
-        [],ice_top,3.15,surface_twtt,doa_method_flag,doa_limits);
+        [],ice_top,er_surf,param.dem.er_ice,surface_twtt,doa_method_flag,doa_limits);
     end
     
     % Convert from radar FCS to ECEF
@@ -192,15 +279,15 @@ for frm_idx = 1:length(param.cmd.frms)
     y_plane = zeros(size(y_active));
     z_plane = zeros(size(y_active));
     for rline = 1:size(y_active,2)
-      x_plane(:,rline) = mdata.param_array.array_proc.fcs{1}{1}.origin(1,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.y(1,rline) * y_active(:,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.z(1,rline) * z_active(:,rline);
-      y_plane(:,rline) = mdata.param_array.array_proc.fcs{1}{1}.origin(2,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.y(2,rline) * y_active(:,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.z(2,rline) * z_active(:,rline);
-      z_plane(:,rline) = mdata.param_array.array_proc.fcs{1}{1}.origin(3,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.y(3,rline) * y_active(:,rline) ...
-        + mdata.param_array.array_proc.fcs{1}{1}.z(3,rline) * z_active(:,rline);
+      x_plane(:,rline) = mdata.param_array.array_proc.fcs.origin(1,rline) ...
+        + mdata.param_array.array_proc.fcs.y(1,rline) * y_active(:,rline) ...
+        + mdata.param_array.array_proc.fcs.z(1,rline) * z_active(:,rline);
+      y_plane(:,rline) = mdata.param_array.array_proc.fcs.origin(2,rline) ...
+        + mdata.param_array.array_proc.fcs.y(2,rline) * y_active(:,rline) ...
+        + mdata.param_array.array_proc.fcs.z(2,rline) * z_active(:,rline);
+      z_plane(:,rline) = mdata.param_array.array_proc.fcs.origin(3,rline) ...
+        + mdata.param_array.array_proc.fcs.y(3,rline) * y_active(:,rline) ...
+        + mdata.param_array.array_proc.fcs.z(3,rline) * z_active(:,rline);
     end
     
     % Convert from ECEF to geodetic
@@ -270,7 +357,9 @@ for frm_idx = 1:length(param.cmd.frms)
     
     % Create a constrained delaunay triangulization that forces edges
     % along the boundary (concave_hull) of our swath
+    sd.surf(quality_idx).y(:) = 1;
     good_mask = isfinite(points.x) & isfinite(points.y) & isfinite(points.elev) & sd.surf(quality_idx).y(DOA_trim+1:end-DOA_trim,:);
+    
     if 0
       % This method only handles a single object/region
       row = find(good_mask,1);
@@ -336,6 +425,7 @@ for frm_idx = 1:length(param.cmd.frms)
         pnts(1,:) = points.x(good_idxs);
         pnts(2,:) = points.y(good_idxs);
         pnts(3,:) = points.elev(good_idxs);
+        ice_mask_pnts = ice_mask(good_idxs);
         gps_time = repmat(mdata.GPS_time,size(good_mask,1),1);
         gps_time = gps_time(good_idxs);
         
@@ -367,7 +457,7 @@ for frm_idx = 1:length(param.cmd.frms)
         DEM = F(xmesh,ymesh);
         
         % Interpolate to find gridded 3D image
-        img_3D_idxs = round(sd.surf(surface_idx).y(:)) + size(mdata.Tomo.img,1)*(0:numel(sd.surf(surface_idx).y)-1).';
+        img_3D_idxs = round(interp1(mdata.Time, 1:length(mdata.Time), sd.surf(surface_idx).y(:))) + size(mdata.Tomo.img,1)*(0:numel(sd.surf(surface_idx).y)-1).';
         img_3D = NaN*zeros(size(img_3D_idxs));
         img_3D(~isnan(img_3D_idxs)) = mdata.Tomo.img(img_3D_idxs(~isnan(img_3D_idxs)));
         img_3D = double(reshape(img_3D, size(sd.surf(surface_idx).y)));
@@ -497,6 +587,28 @@ for frm_idx = 1:length(param.cmd.frms)
       F = TriScatteredInterp(dt,pnts(3,:).');
       warning on;
       DEM = F(xmesh,ymesh);
+      
+      if param.dem.ice_mask_flag
+        ice_mask_pnts = ice_mask(good_idxs);
+        ice_mask_eval = double(ice_mask_pnts);        
+        Fi = TriScatteredInterp(dt,ice_mask_eval(:),'nearest');
+        ice_mask_dem = Fi(xmesh,ymesh);
+        ice_mask_dem = logical(round(ice_mask_dem));
+        
+%         ICE_MASK = Fi(xmesh,ymesh);
+%         ICE_MASK = logical(round(ICE_MASK));
+        
+        if param.dem.array_manifold_mask_flag
+          array_manifold_mask_pnts = array_manifold_mask(good_idxs);
+          array_manifold_mask_eval = double(array_manifold_mask_pnts);
+          Fa = TriScatteredInterp(dt,array_manifold_mask_eval(:),'nearest');
+          array_manifold_mask_dem =  Fa(xmesh,ymesh);
+          array_manifold_mask_dem = logical(round(array_manifold_mask_dem));
+%           ARRAY_MANIFOLD_MASK = Fa(xmesh,ymesh);
+%           ARRAY_MANIFOLD_MASK = logical(round(ARRAY_MANIFOLD_MASK));
+        end       
+      end
+      
       if 0
         % Debug
         figure;imagesc(DEM)
@@ -506,11 +618,13 @@ for frm_idx = 1:length(param.cmd.frms)
       % Interpolate to find gridded 3D image
       if ~doa_method_flag
         % Beamforming method
-        img_3D_idxs = round(sd.surf(surface_idx).y(:)) + size(mdata.Tomo.img,1)*(0:numel(sd.surf(surface_idx).y)-1).';
+        img_3D_idxs = round(interp1(mdata.Time, 1:length(mdata.Time), sd.surf(surface_idx).y(:))) + size(mdata.Tomo.img,1)*(0:numel(sd.surf(surface_idx).y)-1).';
         img_3D = NaN(size(img_3D_idxs));
         img_3D(~isnan(img_3D_idxs)) = mdata.Tomo.img(img_3D_idxs(~isnan(img_3D_idxs)));
         img_3D = double(reshape(img_3D, size(sd.surf(surface_idx).y)));
         img_3D = img_3D(DOA_trim+1:end-DOA_trim,:);
+        doa_ax_trim = sd.surf(surface_idx).x(DOA_trim + 1:end-DOA_trim,:);
+        ice_mask_trim = ice_mask(DOA_trim+1:end-DOA_trim,:);
       else
         % DOA method: 3D points are the estmated DOAs, which are usually
         % different for each range-line.
@@ -531,14 +645,29 @@ for frm_idx = 1:length(param.cmd.frms)
       end
       warning off;
       F = TriScatteredInterp(dt,img_3D(good_idxs));
+      F2 = TriScatteredInterp(dt,doa_ax_trim(good_idxs));
       warning on;
       IMG_3D = F(xmesh,ymesh);
+      DOA_GRID = F2(xmesh,ymesh);
       
       % Use inpolygon to find bad interpolation points and set to NaN
       idxs_to_check = find(~isnan(DEM));
       bad_mask = ~inpolygon(xmesh(idxs_to_check),ymesh(idxs_to_check),px,py);
       DEM(idxs_to_check(bad_mask)) = NaN;
       IMG_3D(idxs_to_check(bad_mask)) = NaN;
+      DOA_GRID(idxs_to_check(bad_mask))=NaN;
+      if param.dem.ice_mask_flag
+        nan_mask = idxs_to_check(bad_mask);
+        ICE_MASK = ice_mask_dem;
+        ICE_MASK(nan_mask) = true;
+%         ICE_MASK(~nan_mask) = ice_mask_dem;
+%         ICE_MASK(idxs_to_check(bad_mask)) = NaN;
+        if param.dem.array_manifold_mask_flag
+          ARRAY_MANIFOLD_MASK = array_manifold_mask_dem;
+          ARRAY_MANIFOLD_MASK(nan_mask) = true;
+%           ARRAY_MANIFOLD_MASK(idxs_to_check(bad_mask)) = NaN;
+        end
+      end
     end
     
     %% Create DEM scatter plot over geotiff
@@ -559,14 +688,63 @@ for frm_idx = 1:length(param.cmd.frms)
       good_mask = isfinite(points.elev);
       scatter(points.x(good_mask)/1e3,points.y(good_mask)/1e3,[],points.elev(good_mask),'Marker','.');
     else
-      imagesc(xaxis/1e3,yaxis/1e3,DEM,'parent',h_axes,'alphadata',~isnan(DEM));
+      % DEBUG ONLY CODE FOR PLOTTING TGRS ERROR MAPS
+      if 0
+%         dat = load('/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_DEM_tgrs2021_evd_20140506_01_lut_error_maps/20140401_03/20140401_03_042_top_lut.mat');
+        dat = load('/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_DEM_nominal_tgrs2021_error_maps/20140401_03/20140401_03_042_top_lut.mat');
+        dem1 = nan(size(DEM));
+        dem1(~ARRAY_MANIFOLD_MASK) = DEM(~ARRAY_MANIFOLD_MASK);
+        mask1 = nan(size(DEM));
+       
+        dem2 = nan(size(dat.ARRAY_MANIFOLD_MASK));
+        dem2(~dat.ARRAY_MANIFOLD_MASK) = dat.DEM(~dat.ARRAY_MANIFOLD_MASK);
+        nanmask = dem2==32767;
+        dem2(nanmask) = nan;
+        
+        error_map = dem1 - dem2;
+        imagesc(xaxis/1e3,yaxis/1e3,error_map,'parent',h_axes,'alphadata',~isnan(error_map));
+        % Plot flightline
+        [fline.lat,fline.lon,fline.elev] = ecef2geodetic( ...
+          mdata.param_array.array_proc.fcs.origin(1,:), ...
+          mdata.param_array.array_proc.fcs.origin(2,:), ...
+          mdata.param_array.array_proc.fcs.origin(3,:),WGS84.ellipsoid);
+        fline.lat = fline.lat*180/pi;
+        fline.lon = fline.lon*180/pi;
+        [fline.x,fline.y] = projfwd(proj,fline.lat,fline.lon);
+        hplot = plot(fline.x/1e3,fline.y/1e3,'k');
+        
+        % Colorbar, labels, and legends
+        hcolor = colorbar;
+        set(get(hcolor,'YLabel'),'String','Elevation (WGS-84,m)');
+        xlabel('X (km)');
+        ylabel('Y (km)');
+        legend(hplot,'Flight line');
+        
+        axis(axis_equal(h_axes, fline.x,fline.y));
+        h_fig_dem.Position = [50 50 800 600];
+        set(h_fig_dem,'PaperPositionMode','auto');
+        %
+        % Clip and decimate the geotiff because it is usually very large
+        clip_and_resample_image(h_img,gca,10);
+        title(sprintf('DEM %s_%03d %s',param.day_seg,frm,surface_names{surface_names_idx}),'interpreter','none');
+        
+        % Save output
+        out_fn_name = sprintf('%s_%03d_%s',param.day_seg,frm,'error');
+        out_fn = [fullfile(out_dir,out_fn_name),'.fig'];
+        fprintf('  %s\n', out_fn);
+        saveas(h_fig_dem,out_fn);
+        keyboard
+        
+      else
+        imagesc(xaxis/1e3,yaxis/1e3,DEM,'parent',h_axes,'alphadata',~isnan(DEM));
+      end
     end
     
     % Plot flightline
     [fline.lat,fline.lon,fline.elev] = ecef2geodetic( ...
-      mdata.param_array.array_proc.fcs{1}{1}.origin(1,:), ...
-      mdata.param_array.array_proc.fcs{1}{1}.origin(2,:), ...
-      mdata.param_array.array_proc.fcs{1}{1}.origin(3,:),WGS84.ellipsoid);
+      mdata.param_array.array_proc.fcs.origin(1,:), ...
+      mdata.param_array.array_proc.fcs.origin(2,:), ...
+      mdata.param_array.array_proc.fcs.origin(3,:),WGS84.ellipsoid);
     fline.lat = fline.lat*180/pi;
     fline.lon = fline.lon*180/pi;
     [fline.x,fline.y] = projfwd(proj,fline.lat,fline.lon);
@@ -625,7 +803,7 @@ for frm_idx = 1:length(param.cmd.frms)
       
       hA2 = axes;
       %hC = contourf((xaxis-xaxis(1))/1e3,(yaxis-yaxis(1))/1e3,double(DEM),12);
-      hC = sd.surf((xaxis-xaxis(1))/1e3,(yaxis-yaxis(1))/1e3,double(DEM)*0+25,double(DEM));
+      hC = surf((xaxis-xaxis(1))/1e3,(yaxis-yaxis(1))/1e3,double(DEM)*0+25,double(DEM));
       set(hC(1),'EdgeAlpha',0); grid off;
       %axis([2 38 0 10 zlims]);
       set(hA2,'Box','off');
@@ -641,7 +819,7 @@ for frm_idx = 1:length(param.cmd.frms)
       set(get(hc,'YLabel'),'String','Bed height (m)');
       
       hA = axes;
-      hS = sd.surf((xaxis-xaxis(1))/1e3,(yaxis-yaxis(1))/1e3,double(DEM),double(1*DEM));
+      hS = surf((xaxis-xaxis(1))/1e3,(yaxis-yaxis(1))/1e3,double(DEM),double(1*DEM));
       hA = gca; grid off;
       %axis([2 38 0 10 zlims]);
       set(hA,'Box','off');
@@ -677,7 +855,7 @@ for frm_idx = 1:length(param.cmd.frms)
       set(3,'Position',[50 50 500 500]);
       set(3,'Color',[1 1 1]);
       
-      hS = sd.surf((xaxis-xaxis(1))/1e3-2,(yaxis-yaxis(1))/1e3-1,double(DEM),double(DEM));
+      hS = surf((xaxis-xaxis(1))/1e3-2,(yaxis-yaxis(1))/1e3-1,double(DEM),double(DEM));
       hA = gca; grid off;
       %axis([0 36 0 10 zlims]);
       set(hA,'Box','off');
@@ -796,7 +974,18 @@ for frm_idx = 1:length(param.cmd.frms)
     else
       file_version = '1';
     end
-    save(mat_fn,'sw_version','param_array','ice_mask_ref','geotiff_ref','DEM_ref','xaxis','yaxis','DEM','IMG_3D','points','boundary','param_surfdata','file_version');
+
+    dem_savefields = {'sw_version','param_array','ice_mask_ref','geotiff_ref','DEM_ref','xaxis','yaxis','DEM','IMG_3D','points','boundary','param_surfdata','file_version'};
+    
+    if param.dem.ice_mask_flag
+      dem_savefields = [dem_savefields {'ICE_MASK'}];
+    end
+    
+    if param.dem.array_manifold_mask_flag
+      dem_savefields = [dem_savefields {'ARRAY_MANIFOLD_MASK','DOA_GRID'}];
+    end
+
+    ct_save(mat_fn, dem_savefields{:});
 
   end
   try; delete(h_fig_dem); end;

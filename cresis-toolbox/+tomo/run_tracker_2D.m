@@ -123,7 +123,7 @@ if any(strcmp(algorithms, 'viterbi'))
       continue;
     end
     % Load frames file
-    load(ct_filename_support(param,'','frames'));
+    frames = frames_load(param);
     if isempty(param.cmd.frms)
       param.cmd.frms = 1:length(frames.frame_idxs);
     end
@@ -161,7 +161,7 @@ if any(strcmp(algorithms, 'mcmc')) || any(strcmp(algorithms, 'lsm')) ...
       continue;
     end
     % Load frames file
-    load(ct_filename_support(param,'','frames'));
+    frames = frames_load(param);
     if isempty(param.cmd.frms)
       param.cmd.frms = 1:length(frames.frame_idxs);
     end

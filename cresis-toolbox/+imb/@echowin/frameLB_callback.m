@@ -33,7 +33,7 @@ else
   % Regular click
   frame_idx = get(obj.left_panel.frameLB,'Value');
   obj.update_frame_and_sourceLB(frame_idx);
-  if obj.eg.old_frame_idx ~= frame_idx
+  if ~isequal(obj.eg.old_frame_idx,frame_idx)
     % Let the map window know that a different frame has been selected
     % so that the map window can change the frame selection
     obj.eg.old_frame_idx = frame_idx;

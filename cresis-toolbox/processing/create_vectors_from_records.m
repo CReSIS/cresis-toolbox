@@ -74,8 +74,7 @@ fprintf('=====================================================================\n
 % Get the files
 % =====================================================================
 
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 
 if ~isfield(param.vectors.file,'adc') || isempty(param.vectors.file.adc)
   adc_idx = 1;

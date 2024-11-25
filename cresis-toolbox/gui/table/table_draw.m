@@ -1,8 +1,47 @@
 function table_draw(table)
 % table_draw(table)
 %
-% Initializes table ui handles.
-% Also called during resizing
+% Part of table_* container functions. table_draw is the user interface to
+% the container functions. All other functions should not be called
+% directly.
+% 
+% Initializes table ui handles and sizes all ui elements in table. Also
+% called for resizing.
+%
+% INPUTS:
+% table: structure controlling table object
+%
+%  .width_margin: Nrow by Ncol matrix indicating margin from left, leave
+%  undefined or set to NaN to use default value 0
+%
+%  .height_margin: Nrow by Ncol matrix indicating margin from top, leave
+%  undefined or set to NaN to use default value 0
+%
+%  .false_width: Nrow by Ncol matrix indicating width adjustment for
+%  contained object, leave undefined or set to NaN to use default value 0
+%
+%  .false_height: Nrow by Ncol matrix indicating height adjustment for
+%  contained object, leave undefined or set to NaN to use default value 0
+%
+%  .width: Nrow by Ncol matrix indicating width of contained object, set to
+%  inf to use the remaining space available, multiple inf entries in a row
+%  will dividing the remaining space equally
+%
+%  .height: Nrow by Ncol matrix indicating height of contained object, set
+%  to inf to use the remaining space available, multiple inf entries in a
+%  row will dividing the remaining space equally
+% 
+%  .handles: Nrow by Ncol matrix of ui handles
+%
+%  .ui: ui object that the table is associated with
+%
+%  .origin: [0 0] by default
+%
+%  .offset: [0 0] by default
+%
+% Author: John Paden
+%
+% See also: table_draw, table_pos, table_resize, table_size
 
 if ~isempty(table.ui)
   table.size = table_size(table);
@@ -25,17 +64,17 @@ if ~isfield(table,'height_margin')
     end
   end
 end
-if ~isfield(table,'false_height')
-  for row = 1:table.rows
-    for col = 1:table.cols
-      table.false_height(row,col) = NaN;
-    end
-  end
-end
 if ~isfield(table,'false_width')
   for row = 1:table.rows
     for col = 1:table.cols
       table.false_width(row,col) = NaN;
+    end
+  end
+end
+if ~isfield(table,'false_height')
+  for row = 1:table.rows
+    for col = 1:table.cols
+      table.false_height(row,col) = NaN;
     end
   end
 end
@@ -122,9 +161,12 @@ for row = 1:table.rows
     if row == table.rows
       % Last row is always on the bottom
       newPos = [table_pos(table,row,col,curPos,height) width-2*table.width_margin(row,col)-table.false_width(row,col) height-2*table.height_margin(row,col)-table.false_height(row,col)];
+      newPos(1) = newPos(1)-table.width_margin(row,col);
       newPos(2) = table.height_margin(row,col);
     else
       newPos = [table_pos(table,row,col,curPos,height) width-2*table.width_margin(row,col)-table.false_width(row,col) height-2*table.height_margin(row,col)-table.false_height(row,col)];
+      newPos(1) = newPos(1)-table.width_margin(row,col);
+      newPos(2) = newPos(2)-table.height_margin(row,col);
     end
     newPos(1:2) = newPos(1:2) + table.origin;
     if ~isempty(table.handles{row,col})

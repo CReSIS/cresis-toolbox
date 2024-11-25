@@ -194,8 +194,7 @@ for param_idx = 1:length(params)
   % Set the current artifact to on for just the bad frames
   frames.(update_field)(bad_frms) = frames.(update_field)(bad_frms) + 2^(artifact_type-1);
   
-  records_fn = ct_filename_support(param,'','records');
-  records = load(records_fn);
+  records = records_load(records_fn);
   frm_time_axis = gps_time_to_frame(records.gps_time,frames.frame_idxs);
   frm_time = interp1(records.gps_time,frm_time_axis,gps_time);
   

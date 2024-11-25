@@ -1,23 +1,19 @@
-% =========================================================================
-% OPS BULK DATA LOADER
+% script runOpsBulkInsert
 %
-% Loads data in bulk from the CReSIS filesystem to the OPS.
+% Loads flight path data in bulk from the CReSIS filesystem (records and
+% frames files) to the OPS.
 %
 % To use this script manually edit the input fileds under USER INPUT.
 %
 % Data inputs required:
 %   path: records and frames files
-%   layerData: layerData files or echogram files
-%   atm: atm L2 nadir interpolated files
 %
 % Multi-Layer data is supported, the layerData files must contain a name
 % field with a unique name identifying each layer.
 %
 % Authors: Kyle W. Purdon, Trey Stafford, John Paden
 %
-% see also opsBulkInsert.m opsCreatePath.m opsCreaLayerPoints.m layerDataToOps.m
-%
-% =========================================================================
+% See also: opsBulkInsert.m, opsCreatePath.m
 
 %% USER INPUT
 
@@ -25,105 +21,20 @@
 settings = [];
 
 % ----------------------------------------------------------------
-% runType: THE TYPE OF DATA INSERT TO COMPLETE
-%   1: INSERTS PATHS ONLY
-%   2: INSERTS LAYERS ONLY
-%   3: INSERT ATM LAYERS ONLY
-%   4: (1) AND (2)
-%   5: (1), (2), AND (3)
-settings.runType = 4;
-
-% ----------------------------------------------------------------
 % paramFn: FILENAME.xls OF EXCEL CReSIS PARAMS SHEET
-settings.paramFn = 'rds_param_2018_Antarctica_DC8.xls';
+settings.params = read_param_xls(ct_filename_param('rds_param_2014_Greenland_P3.xls'));
 
-% ----------------------------------------------------------------
-% location: LOCATION NAME ('arctic' OR 'antarctic')
-% settings.location = 'arctic';
-settings.location = 'antarctic';
+settings.params = ct_set_params(settings.params, 'cmd.generic', 1);
+settings.params = ct_set_params(settings.params, 'cmd.generic', 0, 'cmd.notes', 'do not process');
 
-% ----------------------------------------------------------------
-% sysName: SYSTEM NAME ('rds','snow','accum','kuband')
-settings.sysName = 'rds';
-
-% ----------------------------------------------------------------
-% layerDataPath: PATH TO LAYERDATA FILES
-%   'layerData': normal layerData path
-%   'qlook': normal layerData path for using echogram data
-%   'fullfile('CSARP_post','layerData')': posted layerData path
-%   'fullfile('CSARP_post','qlook')': posted layerData qlook path
-settings.layerDataPath = 'layerData';
-% settings.layerDataPath = 'standard';
-% settings.layerDataPath = fullfile('CSARP_post','layerData');
-% settings.layerDataPath = fullfile('CSARP_post','qlook');
-
-% ----------------------------------------------------------------
-% layer_name_map: OPTIONAL LAYER NAME REMAPPING
-%   This allows layers to be renamed when inserted into OPS.
-%   Normally this should be commented out so that layers are not renamed.
-% settings.layer_name_map.source_names = {'surface','bottom'};
-% settings.layer_name_map.dest_names = {'surface_old','bottom_old'};
-
-% ----------------------------------------------------------------
-% layerFilter: REGULAR EXPRESSION OF LAYER NAMES TO INSERT
-%   inline('~isempty(regexp(x,''(^surface$|^bottom$)''))');: only surface and bottom layers
-%   inline('~isempty(regexp(x,''^lm.*''))');: only layers starting with 'lm'
-settings.layerFilter = inline('~isempty(regexp(x,''(^surface$|^bottom$)''))');
-% settings.layerFilter = inline('~isempty(regexp(x,''(^bottom$)''))');
-% settings.layerFilter = inline('~isempty(regexp(x,''^lm.*''))');
-
-% ----------------------------------------------------------------
-% layerRelativeSurface: LOGICAL THAT IF TRUE ADDS ALL NEW LAYERS RELATIVE
-% TO THE EXISTING SURFACE
-settings.layerRelativeSurface = false;
-
-% ----------------------------------------------------------------
-% gaps_dist: TWO ELEMENTS THAT CONTROL HOW DATA IS INTERPOLATED ACROSS GAPS
-%  [300 60] is typical, arguments passed to data_gaps_check_mex.cpp
-settings.gaps_dist = [300 60];
-
-%% OPTIONAL USER INPUT (COMMON DEFAULT PROPERTIES)
-
-% ----------------------------------------------------------------
-% pathSpacing: DISTANCE IN METERS TO SPACE THE PATH/LAYER POINTS (DEFAULT = 15m)
-% settings.pathSpacing = 5; % 5 m for snow and kuband
-settings.pathSpacing = 15; % 15 m for accum and rds
-
-% ----------------------------------------------------------------
-% seasonGroup: STRING name of the group for the season (DEFAULT = 'cresis_private')
-% settings.seasonGroup = 'cresis_private';
-settings.seasonGroup = 'cresis_public';
-
-% ----------------------------------------------------------------
-% NO LONGER USED. SET seaonGroup to 'cresis_public'.
-% autoReleaseSeason: BOOLEAN, SHOULD THE SEASON AUTOMATICALLY BE PUBLIC? (DEFAULT = false)
-% settings.autoReleaseSeason = false;
-
-% ----------------------------------------------------------------
-% logsOn: BOOLEAN, SHOULD THE COMMAND WINDOW BE LOGGED TO A TXT FILE?
-settings.logsOn = false;
+%settings.params = ct_set_params(settings.params, 'cmd.generic', 0);
+%settings.params = ct_set_params(settings.params, 'cmd.generic', 1, 'day_seg', '20120416_01');
 
 %% AUTOMATED SECTION
 
-% ERROR CHECK THE INPUT
-if ~any(strcmp(settings.location,{'arctic','antarctic'}));
-  tmp = questdlg({'Location must be ''arctic'' or ''antarctic''','',sprintf('You entered: %s',settings.location),''},'INVALID LOCATION','OK','OK');
-  error('INVALID LOCATION');
-elseif ~any(strcmp(settings.sysName,{'rds','snow','accum','kuband'}));
-  tmp = questdlg({'System must be ''rds'',''snow'',''accum'' or ''kuband''','',sprintf('You entered: %s',settings.sysName),''},'INVALID SYSTEM','OK','OK');
-  error('INVALID SYSTEM');
-end
-
-% GET THE CReSIS GLOBAL
+% GET THE CReSIS GLOBAL settings
 global gRadar;
-if isvarname('gRadar')
-  settings = mergestruct(settings,gRadar);
-else
-  warning('gRadar IS NOT A GLOBAL VARIABLE.')
-  fprintf('Type ''dbcont'' to run startup.m and continue\n or ''dbquit'' to fix this yourself ...\n');
-  keyboard;
-  startup
-end
+settings = merge_structs(gRadar,settings);
 
 % RUN OPS BULK INSERT
 opsBulkInsert(settings);

@@ -167,7 +167,7 @@ else
   param.cur_quality = get(obj.left_panel.qualityPM,'Value');
   % Current layers
   param.cur_layers = find(obj.eg.layers.selected_layers).';
-  param.layer.x = obj.eg.layers.x_curUnit{1};
+  param.layer.x = obj.eg.layers.x_curUnit;
   param.layer.y = obj.eg.layers.y_curUnit;
   param.layer.type = obj.eg.layers.type;
   param.layer.qual = obj.eg.layers.qual;
@@ -175,6 +175,8 @@ else
   param.image_x = get(obj.left_panel.imagewin.img,'XData');
   param.image_y = get(obj.left_panel.imagewin.img,'YData');
   param.image_c = get(obj.left_panel.imagewin.img,'CData');
+  
+  param.echo_time = obj.eg.time;
   
   %% Find proper param window position (for browse tool)
   if ~obj.tool.accessed

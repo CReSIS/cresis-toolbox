@@ -85,24 +85,23 @@ if ~isempty(event.Key)
         % move plot down
         
         % break if already at the limit
-        if check_limits(obj,xaxis,yaxis,'d')
-          
+        %if check_limits(obj,xaxis,yaxis,'d')
           %break;
-        else
+        %else
           new_yaxis = [yaxis(1) - y_extent*0.4, yaxis(end) - y_extent*0.4];
           
-          if new_yaxis(1) < obj.map.yaxis_default(1)
-            new_yaxis(1) = obj.map.yaxis_default(1);
-            new_yaxis(end) = new_yaxis(1) + y_extent;
-          end
+          %if new_yaxis(1) < obj.map.yaxis_default(1)
+          %  new_yaxis(1) = obj.map.yaxis_default(1);
+          %  new_yaxis(end) = new_yaxis(1) + y_extent;
+          %end
           
           % get a new map for these limits
           new_yaxis = sort(new_yaxis);
           % don't change the x limits in this case
-          new_xaxis = obj.ops.request.XLim/obj.map.scale;
+          new_xaxis = obj.map.xaxis;
           obj.query_redraw_map(new_xaxis(1),new_xaxis(end),...
             new_yaxis(1),new_yaxis(end));
-        end
+        %end
         
       case 'uparrow' % Up arrow
         % move plot up
@@ -111,21 +110,21 @@ if ~isempty(event.Key)
         %y_extent = diff(yaxis);
         
         % break if already at the limit
-        if check_limits(obj,xaxis,yaxis,'u')
-        else
+        %if check_limits(obj,xaxis,yaxis,'u')
+        %else
           new_yaxis = [yaxis(1) + y_extent*0.4, yaxis(end) + y_extent*0.4];
-          if new_yaxis(end) > obj.map.yaxis_default(end)
-            new_yaxis(end) = obj.map.yaxis_default(end);
-            new_yaxis(1) = new_yaxis(end) - y_extent;
-          end
+          %if new_yaxis(end) > obj.map.yaxis_default(end)
+          %  new_yaxis(end) = obj.map.yaxis_default(end);
+          %  new_yaxis(1) = new_yaxis(end) - y_extent;
+          %end
           
           % get a new map for these limits
           new_yaxis = sort(new_yaxis);
           % don't change the x limits in this case
-          new_xaxis = obj.ops.request.XLim/obj.map.scale;
+          new_xaxis = obj.map.xaxis;
           obj.query_redraw_map(new_xaxis(1),new_xaxis(end),...
             new_yaxis(1),new_yaxis(end));
-        end
+        %end
         
       case 'rightarrow' % Right arrow
         % move plot right
@@ -134,21 +133,21 @@ if ~isempty(event.Key)
         end
         
         % break if already at the limit
-        if check_limits(obj,xaxis,yaxis,'r')          %break;
-        else
+        %if check_limits(obj,xaxis,yaxis,'r')          %break;
+        %else
           new_xaxis = [xaxis(1) + x_extent*0.4, xaxis(end) + x_extent*0.4];
-          if new_xaxis(end) > obj.map.xaxis_default(end)
-            new_xaxis(end) = obj.map.xaxis_default(end);
-            new_xaxis(1) = new_xaxis(end) - x_extent;
-          end
+          %if new_xaxis(end) > obj.map.xaxis_default(end)
+          %  new_xaxis(end) = obj.map.xaxis_default(end);
+          %  new_xaxis(1) = new_xaxis(end) - x_extent;
+          %end
           
           % get a new map for these limits
           new_xaxis = sort(new_xaxis);
           % don't change the y limits in this case
-          new_yaxis = obj.ops.request.YLim/obj.map.scale;
+          new_yaxis = obj.map.yaxis;
           obj.query_redraw_map(new_xaxis(1),new_xaxis(end),...
             new_yaxis(1),new_yaxis(end));
-        end
+        %end
         
       case 'leftarrow' % Left arrow
         % move plot left
@@ -157,22 +156,22 @@ if ~isempty(event.Key)
         end
         
         % break if already at the limit
-        if check_limits(obj,xaxis,yaxis,'l')
+        %if check_limits(obj,xaxis,yaxis,'l')
           %break;
-        else
+        %else
           new_xaxis = [xaxis(1) - x_extent*0.4, xaxis(end) - x_extent*0.4];
-          if new_xaxis(1) < obj.map.xaxis_default(1)
-            new_xaxis(1) = obj.map.xaxis_default(1);
-            new_xaxis(end) = new_xaxis(1) + x_extent;
-          end
+          %if new_xaxis(1) < obj.map.xaxis_default(1)
+          %  new_xaxis(1) = obj.map.xaxis_default(1);
+          %  new_xaxis(end) = new_xaxis(1) + x_extent;
+          %end
           
           % get a new map for these limits
           new_xaxis = sort(new_xaxis);
           % don't change the y limits in this case
-          new_yaxis = obj.ops.request.YLim/obj.map.scale;
+          new_yaxis = obj.map.yaxis;
           obj.query_redraw_map(new_xaxis(1),new_xaxis(end),...
             new_yaxis(1),new_yaxis(end));
-        end
+        %end
         
       case 'z'
         if obj.control_pressed

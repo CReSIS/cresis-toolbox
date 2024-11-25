@@ -7,7 +7,6 @@ function [success surfTimes] = slope_tracker_task(param)
 % param = struct controlling the loading, processing, surface tracking,
 %   and quick look generation
 %  .load = structure for which records to load
-%   .records_fn = filename of records file
 %   .recs = current records
 %   .imgs = cell vector of images to load, each image is Nx2 array of
 %     wf/adc pairs
@@ -83,8 +82,6 @@ global g_data;
 physical_constants;
 surfTimes = [];
 
-records_fn = ct_filename_support(param,'','records');
-
 if ~isfield(param.slope,'elev_correction') || isempty(param.slope.elev_correction)
   param.slope.elev_correction = false;
 end
@@ -122,7 +119,7 @@ end
 if simple_firdec
   load_param.load.recs(1) = param.load.recs(1);
   load_param.load.recs(2) = param.load.recs(2);
-  records = records_aux_files_read(records_fn,load_param.load.recs);
+  records = records_load(param,load_param.load.recs);
   old_param_records = records.param_records;
 else
   if mod(length(param.slope.B_filter)-1,2)
@@ -132,7 +129,7 @@ else
   start_buffer = min(filter_order/2,param.load.recs(1)-1);
   load_param.load.recs(1) = param.load.recs(1)-start_buffer;
   load_param.load.recs(2) = param.load.recs(2)+filter_order/2;
-  records = records_aux_files_read(records_fn,load_param.load.recs);
+  records = records_load(param,load_param.load.recs);
   old_param_records = records.param_records;
   stop_buffer = filter_order/2 - ((load_param.load.recs(2)-load_param.load.recs(1)+1) ...
     - length(records.lat));
@@ -201,15 +198,6 @@ elseif any(strcmpi(param.radar_name,{'mcords','mcords2','mcords3','seaice','accu
     1:max(old_param_records.records.file.adcs), param.slope);
   load_param.load.rec_data_size = rec_data_size;
 elseif any(strcmpi(param.radar_name,{'snow','kuband','snow2','kuband2','snow3','kuband3'}))
-  [path name] = fileparts(records_fn);
-  cdf_fn = fullfile(path, sprintf('%s.nc', name));
-  try
-    records.settings.nyquist_zone = ncread(cdf_fn,'settings(1).nyquist_zone',[1 load_param.load.recs(1)],[1 1]);
-  end
-  
-  try
-    records.settings.loopback_mode = ncread(cdf_fn,'settings(1).loopback_mode',[1 load_param.load.recs(1)],[1 1]);
-  end
   wfs_idx = find(records.settings.wfs_records <= load_param.load.recs(1),1,'last');
   records.settings.wfs = records.settings.wfs(wfs_idx).wfs;
   wfs = load_fmcw_wfs(records.settings, param, ...
@@ -246,7 +234,7 @@ if any(strcmpi(param.radar_name,{'mcords','mcords2','mcords3','mcords4','accum2'
     board = adc_to_board(param.radar_name,adc);
     board_idx = find(board == boards);
     load_param.load.file_idx{idx} = relative_rec_num_to_file_idx_vector( ...
-      load_param.load.recs,records.relative_rec_num{board_idx});
+      load_param.load.recs(1):load_param.load.recs(end),records.relative_rec_num{board_idx});
     load_param.load.offset{idx} = records.offset(board_idx,:);
     file_idxs = unique(load_param.load.file_idx{idx});
     

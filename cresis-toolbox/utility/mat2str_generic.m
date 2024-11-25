@@ -30,7 +30,7 @@ if iscell(M)
 elseif ischar(M)
   str = mat2str(M);
   
-elseif isstruct(M)
+elseif isstruct(M) || isobject(M)
   str = '';
   if length(M) > 1
     str = [str '['];
@@ -124,6 +124,9 @@ elseif isnumeric(M)
       str = mat2str(M);
     end
   end
+else
+  str = '[]';
+  warning('Setting to empty unsupported type: %s', class(M));
 end
 
 end

@@ -34,7 +34,11 @@ classdef (HandleCompatible = true) slicetool_icemask < imb.slicetool
 
     function set_custom_data(obj,custom_data)
       param.mdata.twtt = custom_data.mdata.twtt;
-      param.mdata.theta = custom_data.mdata.theta_cal;
+      if isfield(custom_data.mdata.Tomo,'theta_cal') && ~isempty(custom_data.mdata.Tomo.theta_cal)
+        param.mdata.theta = custom_data.mdata.Tomo.theta_cal;
+      else
+        param.mdata.theta = custom_data.mdata.Tomo.theta;
+      end
       param.mdata.ice_mask = custom_data.mdata.ice_mask;
       param.mdata.param_array = custom_data.mdata.param_array;
 %       rmfield(param,'mdata');

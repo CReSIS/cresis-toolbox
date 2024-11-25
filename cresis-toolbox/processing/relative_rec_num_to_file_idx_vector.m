@@ -6,9 +6,9 @@ function file_idx = relative_rec_num_to_file_idx_vector(recs,relative_rec_num)
 file_idx = zeros(size(recs));
 
 cur_file_idx = 1;
-for rec_idx = 1:(recs(end)-recs(1)+1)
+for rec_idx = 1:length(recs)
   while cur_file_idx+1 <= length(relative_rec_num) ...
-      && relative_rec_num(cur_file_idx+1) <= recs(1)+rec_idx-1
+      && relative_rec_num(cur_file_idx+1) <= recs(rec_idx)
     cur_file_idx = cur_file_idx + 1;
   end
   file_idx(rec_idx) = cur_file_idx;

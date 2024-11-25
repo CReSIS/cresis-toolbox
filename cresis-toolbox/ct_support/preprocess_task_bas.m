@@ -124,7 +124,7 @@ for board_idx = 1
   file_idxs{board_idx} = board_hdrs{board_idx}.file_idxs;
   day_wrap_offset{board_idx} = board_hdrs{board_idx}.day_wrap_offset;
 end
-[segs,stats] = create_segments(counters,file_idxs,day_wrap_offset,param.config.max_time_gap);
+[segs,stats] = preprocess_create_segments(counters,file_idxs,day_wrap_offset,param.config.max_time_gap);
 
 if 1
   % Debug: Test Code

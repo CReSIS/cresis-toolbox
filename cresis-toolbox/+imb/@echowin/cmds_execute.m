@@ -98,10 +98,10 @@ if yaxis_choice == 1 % TWTT
 elseif yaxis_choice == 2 % WGS_84 Elevation
   elevation = interp1(obj.eg.gps_time,...
     obj.eg.elev,...
-    obj.eg.layers.x{layer_idx},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{layer_idx},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for point_idx = point_idxs
     if isnan(obj.eg.layers.y{layer_idx}(point_idx))
       obj.eg.layers.y_curUnit{layer_idx}(point_idx) = NaN;
@@ -115,7 +115,7 @@ elseif yaxis_choice == 2 % WGS_84 Elevation
 elseif yaxis_choice == 3 % Depth/Range
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{layer_idx},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for point_idx = point_idxs
     if isnan(obj.eg.layers.y{layer_idx}(point_idx))
       obj.eg.layers.y_curUnit{layer_idx}(point_idx) = NaN;
@@ -133,7 +133,7 @@ elseif yaxis_choice == 4 % Range bin
 elseif yaxis_choice == 5 % Surface flat
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{layer_idx},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for point_idx = point_idxs
     if isnan(obj.eg.layers.y{layer_idx}(point_idx))
       obj.eg.layers.y_curUnit{layer_idx}(point_idx) = NaN;
@@ -156,11 +156,11 @@ function args = cmds_execute_delete(obj,args)
 % args{2} = [x_min x_max y_min y_max] with x in gps-time and y in twtt
 %   units
 
-% obj.eg.layers.x{layer_idx} % gps-time
+% obj.eg.layers.x % gps-time
 % obj.eg.layers.y{layer_idx} % twtt
 % obj.eg.layers.qual{layer_idx} % integer 1-3
 % obj.eg.layers.type{layer_idx} % this is either 1 (manual) or 2 (auto)
-% obj.eg.layers.x_curUnit{layer_idx} % current x-axis units (e.g. along-track km)
+% obj.eg.layers.x_curUnit % current x-axis units (e.g. along-track km)
 % obj.eg.layers.y_curUnit{layer_idx} % current y-axis units (e.g. WGS-84 m)
 
 
@@ -173,7 +173,7 @@ if isempty(layer_idx)
 end
 
 %% cmds_execute_delete: Determine which point indices need to be updated
-point_idxs = find(obj.eg.layers.x{layer_idx} > args{2}(1) & obj.eg.layers.x{layer_idx} < args{2}(2) ...
+point_idxs = find(obj.eg.layers.x > args{2}(1) & obj.eg.layers.x < args{2}(2) ...
   & obj.eg.layers.y{layer_idx} > args{2}(3) & obj.eg.layers.y{layer_idx} < args{2}(4));
 
 obj.eg.layers.y{layer_idx}(point_idxs) = NaN;
@@ -207,12 +207,11 @@ obj.eg.layers.lyr_order = [obj.eg.layers.lyr_order(1:val-1) order obj.eg.layers.
 obj.eg.layers.selected_layers = false(1,length(obj.eg.layers.lyr_name));
 obj.eg.layers.selected_layers(val) = true;
 obj.eg.layers.visible_layers = [obj.eg.layers.visible_layers(1:val-1) true obj.eg.layers.visible_layers(val:end)];
-obj.eg.layers.x = [obj.eg.layers.x(1:val-1) obj.eg.layers.x(1) obj.eg.layers.x(val:end)];
-obj.eg.layers.y = [obj.eg.layers.y(1:val-1) {nan(size(obj.eg.layers.x{1}))} obj.eg.layers.y(val:end)];
-obj.eg.layers.qual = [obj.eg.layers.qual(1:val-1) {ones(size(obj.eg.layers.x{1}))} obj.eg.layers.qual(val:end)];
-obj.eg.layers.type = [obj.eg.layers.type(1:val-1) {2*ones(size(obj.eg.layers.x{1}))} obj.eg.layers.type(val:end)];
-obj.eg.layers.x_curUnit = [obj.eg.layers.x_curUnit(1:val-1) obj.eg.layers.x_curUnit(1) obj.eg.layers.x_curUnit(val:end)];
-obj.eg.layers.y_curUnit = [obj.eg.layers.y_curUnit(1:val-1) {nan(size(obj.eg.layers.x_curUnit{1}))} obj.eg.layers.y_curUnit(val:end)];
+
+obj.eg.layers.y = [obj.eg.layers.y(1:val-1) {nan(size(obj.eg.layers.x))} obj.eg.layers.y(val:end)];
+obj.eg.layers.qual = [obj.eg.layers.qual(1:val-1) {ones(size(obj.eg.layers.x))} obj.eg.layers.qual(val:end)];
+obj.eg.layers.type = [obj.eg.layers.type(1:val-1) {2*ones(size(obj.eg.layers.x))} obj.eg.layers.type(val:end)];
+obj.eg.layers.y_curUnit = [obj.eg.layers.y_curUnit(1:val-1) {nan(size(obj.eg.layers.x_curUnit))} obj.eg.layers.y_curUnit(val:end)];
 
 obj.h_layer = [obj.h_layer(1:2*(val-1)) nan(1,2) obj.h_layer(2*val-1:end)];
 obj.h_quality = [obj.h_quality(1:6*(val-1)) nan(1,6) obj.h_quality(6*val-5:end)];
@@ -259,11 +258,9 @@ obj.eg.layers.lyr_name = obj.eg.layers.lyr_name(new_order);
 obj.eg.layers.lyr_order = obj.eg.layers.lyr_order(new_order);
 obj.eg.layers.selected_layers = obj.eg.layers.selected_layers(new_order);
 obj.eg.layers.visible_layers = obj.eg.layers.visible_layers(new_order);
-obj.eg.layers.x = obj.eg.layers.x(new_order);
 obj.eg.layers.y = obj.eg.layers.y(new_order);
 obj.eg.layers.qual = obj.eg.layers.qual(new_order);
 obj.eg.layers.type = obj.eg.layers.type(new_order);
-obj.eg.layers.x_curUnit = obj.eg.layers.x_curUnit(new_order);
 obj.eg.layers.y_curUnit = obj.eg.layers.y_curUnit(new_order);
 
 obj.h_layer = obj.h_layer(reshape(bsxfun(@plus,repmat(new_order,[2 1])*2,[-1:0].'),[1 Nlayers*2]));
@@ -272,7 +269,7 @@ obj.h_quality = obj.h_quality(reshape(bsxfun(@plus,repmat(new_order,[6 1])*6,[-5
 obj.plot_layers();
 obj.set_visibility();
 
-obj.layerLB_str();
+obj.layerLB_str(true);
 set(obj.left_panel.layerLB,'Value',val);
 
 end
@@ -293,11 +290,9 @@ obj.eg.layers.lyr_name = [obj.eg.layers.lyr_name(1:val-1) obj.eg.layers.lyr_name
 obj.eg.layers.lyr_order = [obj.eg.layers.lyr_order(1:val-1) obj.eg.layers.lyr_order(val+1:end)];
 obj.eg.layers.selected_layers = false(1,length(obj.eg.layers.lyr_name));
 obj.eg.layers.visible_layers = [obj.eg.layers.visible_layers(1:val-1) obj.eg.layers.visible_layers(val+1:end)];
-obj.eg.layers.x = [obj.eg.layers.x(1:val-1) obj.eg.layers.x(val+1:end)];
 obj.eg.layers.y = [obj.eg.layers.y(1:val-1) obj.eg.layers.y(val+1:end)];
 obj.eg.layers.qual = [obj.eg.layers.qual(1:val-1) obj.eg.layers.qual(val+1:end)];
 obj.eg.layers.type = [obj.eg.layers.type(1:val-1) obj.eg.layers.type(val+1:end)];
-obj.eg.layers.x_curUnit = [obj.eg.layers.x_curUnit(1:val-1) obj.eg.layers.x_curUnit(val+1:end)];
 obj.eg.layers.y_curUnit = [obj.eg.layers.y_curUnit(1:val-1) obj.eg.layers.y_curUnit(val+1:end)];
 
 delete(obj.h_layer((val-1)*2+(1:2)));
@@ -305,7 +300,7 @@ delete(obj.h_quality((val-1)*6+(1:6)));
 obj.h_layer = [obj.h_layer(1:2*(val-1)) obj.h_layer(2*(val+1)-1:end)];
 obj.h_quality = [obj.h_quality(1:6*(val-1)) obj.h_quality(6*(val+1)-5:end)];
 
-obj.layerLB_str();
+obj.layerLB_str(true);
 set(obj.left_panel.layerLB,'Value',[]);
 
 end
@@ -345,17 +340,15 @@ obj.eg.layers.lyr_name = obj.eg.layers.lyr_name(new_order);
 obj.eg.layers.lyr_order = obj.eg.layers.lyr_order(new_order);
 obj.eg.layers.selected_layers = obj.eg.layers.selected_layers(new_order);
 obj.eg.layers.visible_layers = obj.eg.layers.visible_layers(new_order);
-obj.eg.layers.x = obj.eg.layers.x(new_order);
 obj.eg.layers.y = obj.eg.layers.y(new_order);
 obj.eg.layers.qual = obj.eg.layers.qual(new_order);
 obj.eg.layers.type = obj.eg.layers.type(new_order);
-obj.eg.layers.x_curUnit = obj.eg.layers.x_curUnit(new_order);
 obj.eg.layers.y_curUnit = obj.eg.layers.y_curUnit(new_order);
 
 obj.h_layer = obj.h_layer(reshape(bsxfun(@plus,repmat(new_order,[2 1])*2,[-1:0].'),[1 Nlayers*2]));
 obj.h_quality = obj.h_quality(reshape(bsxfun(@plus,repmat(new_order,[6 1])*6,[-5:0].'),[1 Nlayers*6]));
 
-obj.layerLB_str();
+obj.layerLB_str(true);
 set(obj.left_panel.layerLB,'Value',val);
 
 end

@@ -108,7 +108,7 @@ for v_img = 1:length(param.tomo_collate.imgs)
     % to copy all the parameters and support variables over). We will update
     % the 3D image and time fields in the file at the end of fusing.
     combined_fn = fullfile(in_dir,sprintf('Data_%s_%03.0f.mat',param.day_seg,param.load.frm));
-    fprintf('Creating %s (%s)\n', combined_fn, datestr(now));
+    fprintf('Copying\n%s\n to\n%s (%s)\n', fns{1}, combined_fn, datestr(now));
     copyfile(fns{1}, combined_fn);
   end
   
@@ -213,8 +213,8 @@ for v_img = 1:length(param.tomo_collate.imgs)
         Time = Time(1:last_idx);
         Data = Data(1:last_idx,:);
         Tomo.img = Tomo.img(1:last_idx,:,:);
-        Tomo.theta = Tomo.theta(1:last_idx,:,:);
         if doa_method_flag
+          Tomo.theta = Tomo.theta(1:last_idx,:,:);
           Tomo.cost = Tomo.cost(1:last_idx,:,:);
           Tomo.hessian = Tomo.hessian(1:last_idx,:,:);
         end
@@ -289,6 +289,7 @@ for v_img = 1:length(param.tomo_collate.imgs)
     
     % Second row of img_bins indicates the end of the blend-region
     img_bins(2,:) = img_bins(1,:) + 10;
+    img_bins(2,img_bins(2,:)>length(Time)) = length(Time);
     
     difference = 10^(-0/10);
     
@@ -348,6 +349,7 @@ for v_img = 1:length(param.tomo_collate.imgs)
 end
 
 % Append new fused image to the combined file
+fprintf('Saving %s (%s)\n', combined_fn, datestr(now));
 if param.ct_file_lock
   file_version = '1L';
 else
@@ -355,6 +357,7 @@ else
 end
 save(combined_fn,'-append','Time','Data','Tomo','file_version');
 
+% Create output argument which contains combined image
 mdata = mdata{1};
 mdata.Time = Time;
 mdata.Data = Data;

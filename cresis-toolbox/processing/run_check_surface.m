@@ -38,3 +38,11 @@ for param_idx = 1:length(params)
     check_surface(param,param_override);
   end
 end
+
+% Output all results as table
+checksur_dir = fileparts(ct_filename_ct_tmp(params(1),'','check_surface','*.txt'));
+try
+  system(sprintf('cat %s/*.txt',checksur_dir))
+catch ME
+  warning('Output all results as table failed. %s', ME.getReport);
+end

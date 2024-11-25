@@ -137,8 +137,8 @@ defaults = {};
 % Survey Mode 32-38 GHz
 default.radar.wfs(1).f0 = 38e9;
 default.radar.wfs(1).f1 = 32e9;
-default.radar.wfs(1).Tpd = 240e-6;
-default.radar.wfs(1).BW_window = [32.1e9 37.75e9];
+default.radar.wfs(1).Tpd = 250e-6;
+default.radar.wfs(1).BW_window = [32.100096e9 37.749888e9];
 default.radar.wfs(1).t_ref = 0;
 
 default.config_regexp = '.*';

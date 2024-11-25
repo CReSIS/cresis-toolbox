@@ -1,3 +1,6 @@
+
+% cresis-toolbox\python\ECMWF\ecmwf_download.py
+% D:\tmp\koenig_internal_layers\
 ecmwf = ncinfo('erai_tp_e_79_17.nc');
 
 % units: degrees_east
@@ -54,22 +57,31 @@ ecmwf.e = permute(ecmwf.e,[2 1 3]);
 
 fprintf('%s to %s\n', datestr(ecmwf.time(1)), datestr(ecmwf.time(end)))
 
+xmask = ecmwf.lon > 360-70 & ecmwf.lon < 360-20;
+ymask = ecmwf.lat > 60 & ecmwf.lat < 80;
+
+% Greenland meters SWE per year
 figure(1); clf;
-imagesc(ecmwf.lon,ecmwf.lat,sum(ecmwf.tp,3))
-% imagesc(ecmwf.lon,ecmwf.lat,mean(ecmwf.tp,3))
-% imagesc(ecmwf.lon,ecmwf.lat,max(ecmwf.tp,[],3))
+imagesc(ecmwf.lon(xmask),ecmwf.lat(ymask),(mean(ecmwf.tp(ymask,xmask,:),3)+mean(ecmwf.e(ymask,xmask,:),3))*365.25)
 set(gca,'YDir','normal');
 xlabel('Longitude (deg)');
 ylabel('Latitude (deg)');
 h = colorbar;
-set(get(h,'YLabel'),'String','Total precipitation (m)');
+set(get(h,'YLabel'),'String','Mean SMB (m/year)');
 
 figure(2); clf;
-imagesc(ecmwf.lon,ecmwf.lat,sum(ecmwf.e,3))
+imagesc(ecmwf.lon,ecmwf.lat,mean(ecmwf.tp,3))
 set(gca,'YDir','normal');
 xlabel('Longitude (deg)');
 ylabel('Latitude (deg)');
 h = colorbar;
-set(get(h,'YLabel'),'String','Evaporation (m)');
+set(get(h,'YLabel'),'String','Mean precipitation (m/day)');
 
+figure(3); clf;
+imagesc(ecmwf.lon,ecmwf.lat,mean(ecmwf.e,3))
+set(gca,'YDir','normal');
+xlabel('Longitude (deg)');
+ylabel('Latitude (deg)');
+h = colorbar;
+set(get(h,'YLabel'),'String','Mean Evaporation (m/day)');
 

@@ -25,4 +25,9 @@ end
 
 default_params = obj.default_params;
 
-save(obj.default_params.picker_param_fn,'-append','-struct','default_params','mapwin','prefwin','echowin');
+try
+  fprintf('Saving user parameters file: %s\n', obj.default_params.picker_param_fn);
+  ct_save(obj.default_params.picker_param_fn,'-append','-struct','default_params','mapwin','prefwin','echowin');
+catch ME
+  warning('Failed to save default parameters file %s', obj.default_params.picker_param_fn);
+end

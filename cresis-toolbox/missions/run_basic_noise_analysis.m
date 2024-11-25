@@ -13,31 +13,31 @@ radar_setup = 'MCORDS5';
 
 %% RDS: MCORDS5
 if strcmpi(radar_setup,'MCORDS5')
-  [param,defaults] = default_radar_params_2018_Greenland_Polar6_mcords;
+  [param,defaults] = default_radar_params_2022_Greenland_Polar5_rds;
   
   % .file_search_mode: Specify how to search for a file: 'last_file',
   %   'specific', 'default', or empty to be asked
-  param.file_search_mode = 'last_file';
+  param.config.file_search_mode = 'last_file';
 
   % .base_dir_search: cell vector of paths to search for data files
-  param.base_dir_search = {'D:\awi\','/mnt/AWI_SSD0/1604261101/UWB/','/mnt/AWI_SSD0/1604261202/UWB/'};
+  param.config.base_dir_search = {'G:\20220603\','C:\rds\2022_Greenland_Polar5\20220512\','D:\awi\','\\192.168.1.100\D\AWI\'};
   
   % .pdf_en: Enable time domain, probability density function, and quantization plots
-  param.pdf_en = false;
+  param.basic_noise_analysis.pdf_en = false;
   % .psd_en: Enable PSD plot
-  param.psd_en = true;
+  param.basic_noise_analysis.psd_en = true;
   
   % .img: wf-adc pair list which specifies which waveform-adc pairs to
   %   analyze
   wf = 3; adcs = 1:8;
-  param.img = cat(2, wf*ones(length(adcs),1), adcs.');
+  param.config.img = cat(2, wf*ones(length(adcs),1), adcs.');
 
   % .recs: two element vector specifying which records/range-lines to load
   %   [start_record num_records]
-  param.recs = [0 250];
+  param.config.recs = [0 250];
   
   % .presums: Number of additional software presums (coherent averaging) to do
-  param.presums = 1;
+  param.config.presums = 1;
 end
 
 %% RDS: MCORDS5
@@ -133,5 +133,3 @@ end
 %% Automated Section
 
 basic_noise_analysis(param,defaults);
-
-return;

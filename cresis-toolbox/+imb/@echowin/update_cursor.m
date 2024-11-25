@@ -82,7 +82,8 @@ if notify_en
   ecef = ecef - z_vec*z_offset;
   ecef = [ecef + y_vec*cross_track, ecef - y_vec*cross_track];
   
-  [obj.cursor.clutter_lat obj.cursor.clutter_lon] = ecef2geodetic(ecef(1,:),ecef(2,:),ecef(3,:),WGS84.ellipsoid);
+  [obj.cursor.clutter_lat obj.cursor.clutter_lon] = ct_ecef2lla(ecef(1,:),ecef(2,:),ecef(3,:));
+  %[obj.cursor.clutter_lat obj.cursor.clutter_lon] = ecef2geodetic(ecef(1,:),ecef(2,:),ecef(3,:),WGS84.ellipsoid);
   obj.cursor.clutter_lat = obj.cursor.clutter_lat * 180/pi;
   obj.cursor.clutter_lon = obj.cursor.clutter_lon * 180/pi;
   

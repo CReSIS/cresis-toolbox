@@ -1,5 +1,5 @@
-function [param,defaults] = default_radar_params_2019_Antarctica_Ground_mcords6
-% [param,defaults] = default_radar_params_2019_Antarctica_Ground_mcords6
+function [param,defaults] = default_radar_params_2019_Antarctica_Ground_rds
+% [param,defaults] = default_radar_params_2019_Antarctica_Ground_rds
 %
 % MCoRDS6: 2019_Antarctica_Ground
 %
@@ -263,8 +263,6 @@ default.array.rline_rng = -5:5;
 default.array.dbin = 1;
 default.array.dline = 6;
 default.array.DCM = [];
-default.array.three_dim.en = 0;
-default.array.three_dim.layer_fn = '';
 default.array.Nsv = 1;
 default.array.theta_rng = [0 0];
 default.array.sv_fh = @array_proc_sv;

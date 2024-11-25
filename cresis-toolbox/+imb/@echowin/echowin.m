@@ -198,6 +198,8 @@ classdef (HandleCompatible = true) echowin < handle
     % x_label: string containing x-axis label
     % y_label: string containing x-axis label
     % y_order: string containing "normal" or "reverse" for obj.h_axes
+    % detrend: detrend properties structure
+    % multiple_suppression: surface multiple suppression properties structure
     %
     % layers
     %   show_manual_pts % Logical scalar, Show manual points in layer plots
@@ -217,11 +219,11 @@ classdef (HandleCompatible = true) echowin < handle
     %     selected (tools and operations will act on the layer)
     %   visible_layers: Nlayer length logical vector, true means layer visible
     %   x: 1 by Nx vector of x-values in GPS time
-    %   y: 1 by Nx vector of y-values in twtt
-    %   qual: 1 by Nx vector of quality values (1=good,2=medium,3=bad,NaN=unassigned)
-    %   type: 1 by Nx vector of type values (1=
+    %   y: Cell array of 1 by Nx vectors of y-values in twtt
+    %   qual: Cell array of 1 by Nx vectors of quality values (1=good,2=medium,3=bad,NaN=unassigned)
+    %   type: Cell array of 1 by Nx vectors of type values (1=
     %   x_curUnit: 1 by Nx vector of x-values in current x-axis units
-    %   y_curUnit: 1 by Nx vector of y-values in current y-axis units
+    %   y_curUnit: Cell array of 1 by Nx vectors of y-values in current y-axis units
     %   saved.lyr_name = {}; % Last saved version
     %   saved.lyr_group_name = {}; % Last saved version
     %   saved.lyr_id = {}; % Last saved version
@@ -344,8 +346,9 @@ classdef (HandleCompatible = true) echowin < handle
       obj.eg.data = []; % original Nt by Nx single data matrix (a copy must be kept in case operations are done on the matrix)
       obj.eg.gps_time = []; % GPS time of data matrix, represents seconds since Jan 1, 1970 (ANSI-C standard), 1 by Nx double vector
       obj.eg.elev = []; % Elevation of data matrix in meters, 1 by Nx double vector
-      obj.eg.lat = []; % Latitude of data matrix, 1 by Nx double vector
-      obj.eg.lon = []; % Longitude of data matrix, 1 by Nx double vector
+      obj.eg.lat = []; % Latitude of data matrix, 1 by Nx double vector, degrees N
+      obj.eg.lon = []; % Longitude of data matrix, 1 by Nx double vector, degrees E
+      obj.eg.roll = []; % Roll of data matrix, 1 by Nx double vector, radians right wing tip down from level
       obj.eg.surf_twtt = []; % Surface of data matrix, 1 by Nx double vector
       obj.eg.time = []; % Fast time of data matrix, Nt by 1 double vector
       
@@ -356,6 +359,9 @@ classdef (HandleCompatible = true) echowin < handle
       obj.eg.x_label = ''; % string containing x-axis label
       obj.eg.y_label = ''; % string containing x-axis label
       obj.eg.y_order = ''; % string containing "normal" or "reverse" for obj.h_axes
+      obj.eg.detrend.top = 1; % index or name to top layer
+      obj.eg.detrend.bottom = 2; % index or name to bottom layer
+      obj.eg.detrend.order = 7; % order of detrend polynomial
       
       obj.eg.layers = [];
       obj.eg.layers.show_manual_pts = true; % Logical scalar, Show manual points in layer plots
@@ -373,12 +379,12 @@ classdef (HandleCompatible = true) echowin < handle
       obj.eg.layers.surf_id = []; % surface ID (set in draw)
       obj.eg.layers.selected_layers = []; % Nlayer length logical vector, true means layer is selected (tools and operations will act on the layer) (set in draw)
       obj.eg.layers.visible_layers = []; % Nlayer length logical vector, true means layer visible (set in draw)
-      obj.eg.layers.x = {}; % 1 by Nx vector of x-values in GPS time (set in load_layers)
-      obj.eg.layers.y = {}; % 1 by Nx vector of y-values in twtt (set in load_layers)
-      obj.eg.layers.qual = {}; % 1 by Nx vector of quality values (1=good,2=medium,3=bad,NaN=unassigned) (set in load_layers)
-      obj.eg.layers.type = {}; % 1 by Nx vector of type values 1 (manual) or 2 (auto) (set in load_layers)
-      obj.eg.layers.x_curUnit = {}; % 1 by Nx vector of x-values in current x-axis units (set in plot_layers)
-      obj.eg.layers.y_curUnit = {}; % 1 by Nx vector of y-values in current y-axis units (set in plot_layers)
+      obj.eg.layers.x = []; % 1 by Nx vector of x-values in GPS time (set in load_layers)
+      obj.eg.layers.y = {}; % Cell array of 1 by Nx vectors of y-values in twtt (set in load_layers)
+      obj.eg.layers.qual = {}; % Cell array of 1 by Nx vectors of quality values (1=good,2=medium,3=bad,NaN=unassigned) (set in load_layers)
+      obj.eg.layers.type = {}; % Cell array of 1 by Nx vectors of type values 1 (manual) or 2 (auto) (set in load_layers)
+      obj.eg.layers.x_curUnit = []; % 1 by Nx vector of x-values in current x-axis units (set in plot_layers)
+      obj.eg.layers.y_curUnit = {}; % Cell array of 1 by Nx vectors of y-values in current y-axis units (set in plot_layers)
       obj.eg.layers.saved.lyr_age = {}; % Last saved version
       obj.eg.layers.saved.lyr_age_source = {}; % Last saved version
       obj.eg.layers.saved.lyr_desc = {}; % Last saved version
@@ -487,7 +493,6 @@ classdef (HandleCompatible = true) echowin < handle
     xaxisPM_callback(obj,hObj,event);
     yaxisPM_callback(obj,hObj,event);
     
-    idx = crossovers_closest(obj,gps_time,twtt);
     open_crossover(obj,source,event);
     cursor_crossover(obj,source,event);
     cur_frame = get_crossover(pbj);
@@ -517,15 +522,16 @@ classdef (HandleCompatible = true) echowin < handle
     set_visibility(obj,varargin); % Layer colors
     change_dynamic_range(obj);
     change_display_c(obj);
-    layerLB_str(obj);
+    layerLB_str(obj,keep_value);
     new_layerPB_OKbutton_callback(obj,hObj,event);
     new_layerPB_close_callback(obj,hObj,event);
-    cancel_operation = undo_stack_modified_check(obj);
+    cancel_operation = undo_stack_modified_check(obj,force_save_or_cancel_flag);
     toggle_imagewin_visibility(obj,h_obj,event);
     update_layer_plots(obj); % Update layer plots, called from cmds_execute
     
     %% Commands/Undo stack Methods
-    cmds_set_undo_stack(obj,undo_stack); % Attaches and detaches undo stack and listener
+    cmds_list = cmds_set_undo_stack(obj,undo_stack); % Attaches and detaches undo stack and listener, call before draw
+    cmds_set_undo_stack_after_draw(obj,cmds_list); % Run this with cmds_list from cmds_set_undo_stack after draw called
     cmds = cmds_convert_units(obj,cmds); % Converts tool commands from current units to gps-time and twtt
     cmds_execute(obj,cmds_list,cmds_direction); % Executes a set of commands on this echowin
     cmds_synchronize(obj,varargin); % for tools (callback for the undo_stack synchronize event)

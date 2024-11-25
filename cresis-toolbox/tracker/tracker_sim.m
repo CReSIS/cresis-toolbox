@@ -15,7 +15,7 @@ surf_bin = 200;
 signal_power_fh = @(x) 15*exp(-x/200)-20;
 noise_power = -5;
 mean_layer_fh = @(x) 75*exp(-x/1500);
-var_layer_fh = @(x) 0.3*exp(-x/1000);
+var_layer_fh = @(x) 60*exp(-x/1000);
 
 var_spread_fh = @(x) 8*exp(-x/1000);
 var_spread_gauss = 1;
@@ -63,7 +63,7 @@ for layer_idx = 1:num_layers
   %plot(layers(layer_idx,:)); hold on;
   
   % Filter layer
-  tmp = filtfilt(B,A,tmp)*corr_len;
+  tmp = filtfilt(B,A,tmp)*sqrt(corr_len);
   layers(layer_idx,:) = tmp(1+2*corr_len : end - 2*corr_len);
   %plot(layers(layer_idx,:)); hold on;
   
@@ -116,7 +116,7 @@ for layer_idx = 1:num_layers+1
           * var_spread(layer_idx,rline,spread_idx);
       end
       
-      Data(:,rline) = Data(:,rline) + signal_power * sinc((bins - layers(layer_idx,rline) - var_spread(layer_idx,rline,spread_idx))/sinc_width).^2;
+      Data(:,rline) = Data(:,rline) + signal_power * sinc((bins - layers(layer_idx,rline) - var_spread(layer_idx,rline,spread_idx))/sinc_width);
       %plot(lp(Data(:,rline))); hold on
     end
   end

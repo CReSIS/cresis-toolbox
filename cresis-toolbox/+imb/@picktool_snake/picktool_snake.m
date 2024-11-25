@@ -61,13 +61,10 @@ classdef picktool_snake < imb.picktool
       obj.rep_sv = .5;
       obj.cur_mode = 1;      
       
-      obj.create_ui_components();
-      obj.create_ui_basic(0,0);
+      obj.create_ui();
     end
     
-    create_ui_components(obj);
-    create_ui_basic(obj,xpos,ypos);
-    create_ui_crandall(obj,xpos,ypos);
+    create_ui(obj);
     cmds = left_click(obj,param);
     cmds = left_click_and_drag(obj,param);
     vals = snake(obj,image_c,image_x,image_y,x_old,y_old,x_new);

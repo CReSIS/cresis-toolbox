@@ -27,8 +27,8 @@ if strcmpi(example_setup,'vertical')
   % .in_path: ct_filename_out directory to use at input, fused image will be stored here.
   tomo_collate.in_path = 'test_music3D';
   
-  % .surf_out_path: ct_filename_out directory to use at output for surfData
-  tomo_collate.surf_out_path = 'surfData';
+  % .surf_out_path: ct_filename_out directory to use at output for surfdata
+  tomo_collate.surf_out_path = 'surf';
 
   % .imgs: list of images II to use from .in_path (Data_img_II*.mat). These
   %   should be listed from left most beam to right most beam for
@@ -70,6 +70,11 @@ if strcmpi(example_setup,'vertical')
   %   Setting too high slows the process down, setting too low will miss
   %   DEM points needed to properly represent the surface.
   tomo_collate.dem_per_slice_guard = 240;
+  
+  % .ground_based_flag: logical default is false, if true data are treated
+  % as ground based and surface twtt and ice_mask are set to zero and one
+  % for all pixels respectively.
+  tomo_collate.ground_based_flag = false;
   
   % .bounds_relative: DOA bins and along-track slices to trim off from each edge [top bottom left right]
   tomo_collate.bounds_relative = [3 2 0 0];
@@ -113,8 +118,8 @@ elseif strcmpi(example_setup,'horizontal')
   % .in_path: ct_filename_out directory to use at input, fused image will be stored here.
   tomo_collate.in_path = 'test_music3D';
   
-  % .surf_out_path: ct_filename_out directory to use at output for surfData
-  tomo_collate.surf_out_path = 'surfData';
+  % .surf_out_path: ct_filename_out directory to use at output for surfdata
+  tomo_collate.surf_out_path = 'surf';
 
   % .imgs: list of images II to use from .in_path (Data_img_II*.mat). These
   %   should be listed from left most beam to right most beam for
@@ -159,6 +164,11 @@ elseif strcmpi(example_setup,'horizontal')
   %   Setting too high slows the process down, setting too low will miss
   %   DEM points needed to properly represent the surface.
   tomo_collate.dem_per_slice_guard = 240;
+  
+  % .ground_based_flag: logical default is false, if true data are treated
+  % as ground based and surface twtt and ice_mask are set to zero and one
+  % for all pixels respectively.
+  tomo_collate.ground_based_flag = false;
   
   % .bounds_relative: DOA bins and along-track slices to trim off from each edge [top bottom left right]
   tomo_collate.bounds_relative = [3 2 0 0];
@@ -235,11 +245,17 @@ elseif strcmpi(example_setup,'horizontal')
 elseif strcmpi(example_setup,'grid')
   %% Grid multiwaveform fuse example
 %   params = read_param_xls(ct_filename_param('rds_param_2011_Greenland_P3.xls'),'','post');
-  params = read_param_xls(ct_filename_param('rds_param_2018_Greenland_Polar6_paden.xls'));
+%   params = read_param_xls(ct_filename_param('rds_param_2018_Greenland_Polar6_paden.xls'));
+  params = read_param_xls(ct_filename_param('rds_param_2018_Greenland_P3.xls'));
   
-%   params = ct_set_params(params,'cmd.generic',0);
-%   params = ct_set_params(params,'cmd.generic',1,'day_seg','20110317_03');
-%   params = ct_set_params(params,'cmd.frms',[1]);
+  cmd_method = 'array';
+  param_override.array.out_path = 'music3D';
+  rds_settings;
+  
+  params = ct_set_params(params,'cmd.generic',0);
+  params = ct_set_params(params,'cmd.generic',1,'day_seg','20180406_01');
+  params = ct_set_params(params,'cmd.frms',[1 2]);
+
 % 
 % %   params = ct_set_params(params,'array.imgs',{[ones(15,1) (2:16)'],[2*ones(15,1) (2:16)']});
 %   params = ct_set_params(params,'array.imgs',{[ones(7,1) (2:8)'],[2*ones(7,1) (2:8)']});
@@ -250,13 +266,18 @@ elseif strcmpi(example_setup,'grid')
 %   params = ct_set_params(params,'array.tomo_en',1);
 %   params = ct_set_params(params,'array.method','mle');
 
-% Each cell array represent one horizontal image, which may contain more than 
-% one vertical image. For example, {[1 2],[1]} means there are 2 horizontal 
-% images: the first one contains 2 vertical images and the second contains
-% just 1 vertical image.
-  tomo_collate.imgs = {[1],[2]}; % Vertical fusing
+% Each cell array represent one horizontal (potentially combined) image,
+% which may contain more than one vertical image. For example, {[1 2],[1]}
+% means there are 2 horizontal images: the first one contains 2 vertical
+% images and the second contains just 1 vertical image.
+  tomo_collate.imgs = {[1]}; % No fusing (single image)
+%   tomo_collate.imgs = {[1],[2]}; % Vertical fusing
 %   tomo_collate.imgs = {[1 2]}; % Horizontal fusing
-  tomo_collate.img_comb = [3e-06 -Inf 1e-06 1e-05 -Inf 3e-06];
+
+% .img_comb: vertical (fast-time) combining times (see img_combine.m
+% "img_comb" description).
+  tomo_collate.img_comb = [];
+%   tomo_collate.img_comb = [3e-06 -Inf 1e-06 1e-05 -Inf 3e-06];
 
 %   for param_idx = 1:length(params)
 %     if params(param_idx).cmd.generic
@@ -288,19 +309,18 @@ elseif strcmpi(example_setup,'grid')
 %   tomo_collate.in_path = 'test_music3D';
 %   tomo_collate.in_path = 'test_music3D_Nsv128_Nc15';
 %   tomo_collate.in_path = 'test_music3D_Nsv64_Nc7';
-  tomo_collate.in_path = 'music_lr';
+  tomo_collate.in_path = 'music3D';
 
   
-  % .surf_out_path: ct_filename_out directory to use at output for surfData
-%   tomo_collate.surf_out_path = 'test_surfData_Nsv128_Nc15';
-  tomo_collate.surf_out_path = 'surfData';
+  % .surf_out_path: ct_filename_out directory to use at output for surfdata
+  tomo_collate.surf_out_path = 'surf';
 
   % .imgs: list of images II to use from .in_path (Data_img_II*.mat). These
   %   should be listed from left most beam to right most beam for
   %   horizontal fusing and top to bottom for vertical fusing.
   
-  % .img_comb: Same as get_heights and combine worksheets. This is
-  %   used for vertical using only. For N images,
+  % .img_comb: Same as qlook and array worksheets. This is
+  %   used for vertical/fast-time using only. For N images,
   %   there will be (N-1) combines performed. Each combine is described by
   %   three numbers so that there should be (N-1)*3 elements in this
   %   vector. Each set of three numbers indicates the following:
@@ -308,7 +328,7 @@ elseif strcmpi(example_setup,'grid')
   %     2nd element: Minimum time after ice surface to begin combine
   %     3rd element: Time at end of the preceeding waveform to not use
   
-  % .fuse_columns: aligns with .imgs, each entry should contain 2xN-1
+  % .fuse_columns: aligns with .imgs, each entry should contain 2x(N-1)
   % entries where N is the length of the corresponding cell in .imgs. Each
   % column of 2 numbers represents the start/stop columns to blend with.
   % There should be one column per interface between two images that needs
@@ -316,13 +336,16 @@ elseif strcmpi(example_setup,'grid')
   % the horizontal dimension, the entry should be 2x2. If blending 2
   % images, the entry should be 2x1. If there is only one image for a
   % particular vertical index, then fuse_columns should be empty.
-  tomo_collate.fuse_columns = {[], [], [32, 33]};
+  %tomo_collate.fuse_columns = {[], [], [32, 33]};
+  tomo_collate.fuse_columns = {[]};
   
   % .sv_cal_fn: filename containing steering vector calibration, leave empty to not use
   tomo_collate.sv_cal_fn = '';
   
   % .ice_mask_fn: filename of ice mask, leave empty to not use
   tomo_collate.ice_mask_fn = 'greenland/IceMask/GimpIceMask_90m_v1.1.tif';
+  %tomo_collate.ice_mask_fn = ct_filename_gis([],'canada/ice_mask/03_rgi50_ArcticCanadaNorth/03_rgi50_ArcticCanadaNorth.mat');
+  
 
   % .dem_guard: additional region in meters around flight line to search for DEM points
   %   Setting too high slows the process down, setting too low will miss
@@ -334,14 +357,24 @@ elseif strcmpi(example_setup,'grid')
   %   DEM points needed to properly represent the surface.
   tomo_collate.dem_per_slice_guard = 240;
   
+  % .ground_based_flag: logical default is false, if true data are treated
+  % as ground based and surface twtt and ice_mask are set to zero and one
+  % for all pixels respectively.
+  tomo_collate.ground_based_flag = false;
+  
   % .bounds_relative: DOA bins and along-track slices to trim off from each edge [top bottom left right]
   tomo_collate.bounds_relative = [3 2 0 0];
   
   % .layer_params: parameter structure for opsLoadLayer (first layer should
-  %   be ice top and second layer should be ice bottom)
+  %   be ice top and second layer should be ice bottom), these are used for
+  %   the initial ground truth for tracking.
   tomo_collate.layer_params = struct('name','surface','source','layerdata');
   tomo_collate.layer_params(2).name = 'bottom';
   tomo_collate.layer_params(2).source = 'layerdata';
+  
+  % .tomo_params: parameters to constrain the range-bins of the 3D tracker
+  %tomo_collate.tomo_params = struct('name','surface','source','layerdata','eval',struct('cmd','s=s-1e-6;'));
+  %tomo_collate.tomo_params(2) = struct('name','bottom','source','layerdata','eval',struct('cmd','s=s+5e-6;'));
   
   % surfData_mode: surfData mode ('overwrite','fillgaps', or 'append', note that append with the
   %   same surface name as an existing surface will overwrite that surface whereas fillgaps
@@ -350,14 +383,17 @@ elseif strcmpi(example_setup,'grid')
   
   % surfdata_cmds: surfdata commands to run
   tomo_collate.surfdata_cmds = [];
-%   tomo_collate.surfdata_cmds(end+1).cmd = 'trws';
-%   tomo_collate.surfdata_cmds(end).surf_names = {'bottom trws','bottom'};
   
-  tomo_collate.surfdata_cmds(end+1).surf_names = {'bottom'};
-  tomo_collate.surfdata_cmds(end).cmd = 'doa'; % surf_names should be set to 'bottom' always
-  
+  % TRW-S (Tree Reweighted Sequential algorithm)
+  tomo_collate.surfdata_cmds(end+1).cmd = 'trws';
+  tomo_collate.surfdata_cmds(end).surf_names = {'bottom trws','bottom'};
   tomo_collate.surfdata_cmds(end).visible = true;
-%   tomo_collate.surfdata_cmds(end).max_loops = 10;
+  tomo_collate.surfdata_cmds(end).smooth_weight = [22 22];
+  tomo_collate.surfdata_cmds(end).smooth_var = 32;
+  tomo_collate.surfdata_cmds(end).max_loops = 50;
+  
+  %param.tomo_collate.top_name = 'top';
+  param.tomo_collate.top_name = '';
   
   % .fuse_images_flag: runs fuse_images.m when true
   tomo_collate.fuse_images_flag = true;

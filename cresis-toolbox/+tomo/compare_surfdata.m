@@ -63,8 +63,12 @@ fprintf('=====================================================================\n
 fprintf('%s: %s (%s)\n', dbstack_info(1).name, param.day_seg, datestr(now,'HH:MM:SS'));
 fprintf('=====================================================================\n');
 
+if ~isfield(param.compare,'mode') | isempty(param.compare.mode)
+  param.compare.method = 'twtt';
+end
+
 % Load frames file
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 
 if isempty(param.cmd.frms)
   param.cmd.frms = 1:length(frames.frame_idxs);
@@ -110,13 +114,19 @@ for frame_idx = 1:length(param.cmd.frms)
   
   fn_A = fullfile(ct_filename_out(param,surfdata_ref,''),sprintf('Data_%s_%03d.mat',param.day_seg,frm));
   A = tomo.surfdata(fn_A);
-
+  
   for comp_idx = 1:length(surfdata_other)
     fn_B = fullfile(ct_filename_out(param,surfdata_other{comp_idx},''),sprintf('Data_%s_%03d.mat',param.day_seg,frm));
     B = tomo.surfdata(fn_B);
     
-    [rmse,mean_diff,median_diff,min_diff,max_diff,surf_diff] ...
-      = A.compare(surf_name_ref, B,surf_name_other{comp_idx},DOA_trim);
+    switch param.compare.mode
+      case 'twtt'
+        [rmse,mean_diff,median_diff,min_diff,max_diff,surf_diff] ...
+          = A.compare(surf_name_ref, B,surf_name_other{comp_idx},DOA_trim);
+      case 'doa'
+        [rmse,mean_diff,median_diff,min_diff,max_diff,surf_diff] ...
+          = A.compare_doa(surf_name_ref, B,surf_name_other{comp_idx},DOA_trim,param.radar.fs);  
+    end
     
     rmse_f{comp_idx}(frame_idx) = rmse;
     mean_f{comp_idx}(frame_idx) = mean_diff;

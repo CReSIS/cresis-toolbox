@@ -35,11 +35,17 @@ function ctrl = cluster_new_batch(param,ctrl)
 %
 % Author: John Paden
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list, 
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 %% Input arguments check
 global gRadar;
@@ -90,6 +96,14 @@ if ~isfield(ctrl.cluster,'job_complete_pause') || isempty(ctrl.cluster.job_compl
   ctrl.cluster.job_complete_pause = 5;
 end
 
+% Matlab cluster number of workers to set for the job manager, default is
+% empty which lets Matlab choose.
+if ~isfield(ctrl.cluster,'matlab_NumWorkers') || isempty(ctrl.cluster.matlab_NumWorkers)
+  ctrl.cluster.matlab_NumWorkers = [];
+end
+
+% Matlab runtime compiler (MCR) path used by torque and slurm to run matlab
+% compiler (mcc)
 if ~isfield(ctrl.cluster,'matlab_mcr_path') || isempty(ctrl.cluster.matlab_mcr_path)
   ctrl.cluster.matlab_mcr_path = matlabroot;
 end
@@ -118,20 +132,8 @@ if ~isfield(ctrl.cluster,'mcr_cache_root') || isempty(ctrl.cluster.mcr_cache_roo
   ctrl.cluster.mcr_cache_root = '/tmp/';
 end
 
-if ~isfield(ctrl.cluster,'rerun_only') || isempty(ctrl.cluster.rerun_only)
-  ctrl.cluster.rerun_only = false;
-end
-
-if ~isfield(ctrl.cluster,'mem_mult') || isempty(ctrl.cluster.mem_mult)
-  ctrl.cluster.mem_mult = 1;
-end
-
-if ~isfield(ctrl.cluster,'mem_to_ppn') || isempty(ctrl.cluster.mem_to_ppn)
-  ctrl.cluster.mem_to_ppn = [];
-end
-
 if ~isfield(ctrl.cluster,'max_ppn') || isempty(ctrl.cluster.max_ppn)
-  if ~isempty(ctrl.cluster.mem_to_ppn)
+  if isfield(ctrl.cluster,'mem_to_ppn') && ~isempty(ctrl.cluster.mem_to_ppn)
     error('max_ppn must be specified if mem_to_ppn is specified.');
   end
   ctrl.cluster.max_ppn = [];
@@ -145,6 +147,18 @@ if ~isfield(ctrl.cluster,'mcc_delete_output') || isempty(ctrl.cluster.mcc_delete
   ctrl.cluster.mcc_delete_output = false;
 end
 
+if ~isfield(ctrl.cluster,'mem_mult') || isempty(ctrl.cluster.mem_mult)
+  ctrl.cluster.mem_mult = 1;
+end
+
+if ~isfield(ctrl.cluster,'mem_mult_mode') || isempty(ctrl.cluster.mem_mult_mode)
+  ctrl.cluster.mem_mult_mode = 'debug';
+end
+
+if ~isfield(ctrl.cluster,'mem_to_ppn') || isempty(ctrl.cluster.mem_to_ppn)
+  ctrl.cluster.mem_to_ppn = [];
+end
+
 if ~isfield(ctrl.cluster,'ppn_fixed') || isempty(ctrl.cluster.ppn_fixed)
   ctrl.cluster.ppn_fixed = [];
 end
@@ -156,6 +170,10 @@ if ~isfield(ctrl.cluster,'qsub_submit_arguments') || isempty(ctrl.cluster.qsub_s
   % machines which the current software does not support. Therefore nodes=1
   % always.
   ctrl.cluster.qsub_submit_arguments = '-m n -l nodes=1:ppn=%p,pmem=%m,walltime=%t';
+end
+
+if ~isfield(ctrl.cluster,'rerun_only') || isempty(ctrl.cluster.rerun_only)
+  ctrl.cluster.rerun_only = false;
 end
 
 if ~isfield(ctrl.cluster,'slurm_submit_arguments') || isempty(ctrl.cluster.slurm_submit_arguments)

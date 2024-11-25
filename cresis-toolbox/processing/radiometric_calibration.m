@@ -32,15 +32,9 @@ radiometric_tstart = tic;
 physical_constants;
 
 % Load frames file
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records_ver = load(records_fn,'ver');
-if isfield(records_ver,'ver')
-  records = load(records_fn);
-else
-  load(records_fn, 'records');
-end
+records = records_load(param);
 
 global g_data;
 g_data = [];

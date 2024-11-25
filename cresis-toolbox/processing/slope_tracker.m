@@ -57,10 +57,9 @@ fprintf('=====================================================================\n
 physical_constants;
 
 % Load frames file
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 
 global g_data;
 g_data = [];
@@ -614,7 +613,6 @@ if param.slope.surf.en
   
   % Store surface information to the records file
   save(records_fn,'-APPEND','-struct','records','surface');
-  records_aux_files_create(records_fn);
 end
 
 return;

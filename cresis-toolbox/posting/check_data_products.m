@@ -177,7 +177,7 @@ for param_idx = 1:length(params)
         fprintf('  Records %s\n', records_fn);
         if exist(records_fn,'file')
           try
-            records = load(records_fn);
+            records = records_load(param);
             if isfield(records,'records')
               fprintf('    Exists: %s\n', records.records.gps_source);
             else
@@ -211,8 +211,7 @@ for param_idx = 1:length(params)
       
       %% Check echogram outputs
       for output_idx = 1:length(outputs)
-        frames_fn = ct_filename_support(param,'','frames');
-        load(frames_fn);
+        frames = frames_load(param);
         out_dir = fullfile(ct_filename_out(param,'','',1),['CSARP_' outputs_post_dir], ...
           ['CSARP_' outputs{output_idx}],param.day_seg);
         fprintf('  Output %s\n', out_dir);
@@ -252,7 +251,7 @@ for param_idx = 1:length(params)
                 delete(fn);
               end
             else
-              if exist('gps_sources','var') && ~isempty(gps_sources) && ~strcmp(outputs{output_idx},'layerData')
+              if exist('gps_sources','var') && ~isempty(gps_sources) && ~strcmp(outputs{output_idx},'layer')
                 if strcmp(outputs{output_idx},'CSARP_out')
                   fns2 = get_filenames(fn,'','','');
                   fn = fns2{1};
@@ -315,7 +314,7 @@ for param_idx = 1:length(params)
       
       %% Check for expected image files
       frames_fn = ct_filename_support(param,'','frames');
-      load(frames_fn);
+      frames = load(frames_fn);
       for image_idx = 1:length(images)
         image_dir = fullfile(ct_filename_out(param, ...
           outputs_post_dir,'', true),'images',param.day_seg);

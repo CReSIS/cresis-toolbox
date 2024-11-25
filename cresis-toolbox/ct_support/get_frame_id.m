@@ -17,6 +17,9 @@ function [day_seg,frm_id,recs,num_recs] = get_frame_id(param,gps_time,search_par
 %  .days_after: default is 1, searches this many days after max gps_time
 %  .segment_end_time_guard: default is 0 seconds, causes the end time of
 %    each segment to be this many seconds later than it actually is
+%  .segment_id_num: default is 0 and day_seg is returned as a cell array of
+%    strings, if set to true then day_seg is returned as a numeric
+%    YYYYMMDDSS.
 %
 % day_seg: cell array the same size as gps_time filled with the day_seg of
 %   the corresponding gps_time
@@ -34,6 +37,7 @@ function [day_seg,frm_id,recs,num_recs] = get_frame_id(param,gps_time,search_par
 %   [day_seg,frm_id,recs] = get_frame_id(param,[1303490781.93816 1303491582.05660])
 %   [day_seg,frm_id,recs] = get_frame_id(param,[1303837435.04928 1303838235.17157])
 %   [day_seg,frm_id,recs] = get_frame_id(param,datenum_to_epoch(datenum(2011,4,22,16,46,21)))
+%   [day_seg,frm_id,recs] = get_frame_id(param,datenum_to_epoch(datenum('2019-09-09 14:11:19.08')))
 %
 % Author: John Paden
 %
@@ -56,6 +60,13 @@ if ~isfield(search_params,'segment_end_time_guard') || isempty(search_params.seg
   search_params.segment_end_time_guard = 1;
 end
 
+% search_params.segment_id_num: logical scalar, default false, if false
+% then day_seg is a cell array of strings, if true then day_seg is a
+% numeric array which is much faster for large gps_time input vectors.
+if ~isfield(search_params,'segment_id_num') || isempty(search_params.segment_id_num)
+  search_params.segment_id_num = false;
+end
+
 %% Setup
 
 % Preallocate outputs
@@ -72,12 +83,12 @@ recs = zeros(size(gps_time));
 if ~isfield(param,'day_seg')
   % If the day-segment is not provided, then load all segments
   records_dir = ct_filename_support(param, '', 'records');
-  fns = get_filenames(records_dir,'records','','.nc');
+  fns = get_filenames(records_dir,'records','','.mat');
 else
   % If the day-segment is provided, then just load that file
   records_fn = ct_filename_support(param, '', 'records');
   [records_fn_dir,records_fn_name] = fileparts(records_fn);
-  fns = {fullfile(records_fn_dir,sprintf('%s.nc',records_fn_name))};
+  fns = {fullfile(records_fn_dir,sprintf('%s.mat',records_fn_name))};
 end
 
 if isempty(fns)
@@ -111,24 +122,10 @@ end
 first_gps_time = [];
 for file_idx = 1:length(fns)
   records_fn = fns{file_idx};
-  [records_fn_dir records_fn_name] = fileparts(records_fn);
-  cdf_fn = fullfile(records_fn_dir, sprintf('%s.nc', records_fn_name));
-  
-  try
-    ncid = netcdf.open(cdf_fn,'NOWRITE');
-  catch ME
-    warning('Exception during file opening');
-    ME
-    keyboard
-  end
-  var_idx = netcdf.inqVarID(ncid,'gps_time');
-  first_gps_time(file_idx) = netcdf.getVar(ncid,var_idx,[0 0]);
-  
-  finfo = ncinfo(cdf_fn);
-  num_recs = finfo.Variables(find(strcmp('gps_time',{finfo.Variables.Name}))).Size(2);
-
-  last_gps_time(file_idx) = netcdf.getVar(ncid,var_idx,[0 num_recs-1]);
-  netcdf.close(ncid);
+  records = records_load(records_fn,'gps_time');
+  first_gps_time(file_idx) = records.gps_time(1);
+  last_gps_time(file_idx) = records.gps_time(end);
+  num_recs = length(records.gps_time);
 end
 keep_mask = isfinite(first_gps_time) & isfinite(last_gps_time);
 fns = fns(keep_mask);
@@ -165,7 +162,11 @@ end
 
 %% Determine the record and frame numbers and form outputs
 cur_fn_idx = NaN;
-day_seg = cell(size(gps_time));
+if search_params.segment_id_num
+  day_seg = zeros(size(gps_time));
+else
+  day_seg = cell(size(gps_time));
+end
 frm_id = zeros(size(frm_id));
 recs = zeros(size(recs));
 num_recs = zeros(size(num_recs));
@@ -196,17 +197,23 @@ for gps_idx = 1:numel(sort_gps_time)
     records_fn = fns{cur_fn_idx};
     [records_fn_dir records_fn_name] = fileparts(records_fn);
     
-    records.gps_time = ncread(records_fn,'gps_time');
+    records = records_load(records_fn,'gps_time');
     param.day_seg = records_fn_name(9:19);
-    frames_fn = ct_filename_support(param,'','frames');
-    load(frames_fn);
+    frames = frames_load(param);
   end
 end
 if ~isnan(cur_fn_idx)
   gps_idx = gps_idx + 1;
   recs(cur_gps_idx:gps_idx-1) = interp1(records.gps_time,1:length(records.gps_time),sort_gps_time(cur_gps_idx:gps_idx-1),'linear','extrap');
   num_recs(cur_gps_idx:gps_idx-1) = length(records.gps_time);
-  [day_seg{cur_gps_idx:gps_idx-1}] = deal(param.day_seg);
+  if search_params.segment_id_num
+    % day_seg is numeric array
+    segment_id_num = 100*str2double(param.day_seg(1:8)) + str2double(param.day_seg(10:11));
+    [day_seg(cur_gps_idx:gps_idx-1)] = segment_id_num;
+  else
+    % day_seg is cell array
+    [day_seg{cur_gps_idx:gps_idx-1}] = deal(param.day_seg);
+  end
   for offset_idx = cur_gps_idx:gps_idx-1
     new_frm_id = find(frames.frame_idxs <= recs(offset_idx),1,'last');
     if isempty(new_frm_id)

@@ -64,13 +64,11 @@ for idx = 1:length(params_en)
     continue;
   end
   
-  try
-    recs_fn = ct_filename_support(params_en{idx},'','records');
-    recs_old = load(recs_fn);
-  catch
-    fprintf('Missing records file: %s\n',recs_fn);
+  if ~exist(records_fn,'file')
+    warning('Missing records file: %s',records_fn);
     continue;
   end
+  recs_old = records_load(params_en{idx});
   
   if length(recs_old.settings.nyquist_zone) == length(testt.coh_wf.records_mask_set) && testt.coh_wf.sets == length(params_en{idx}.collate_nz_est.nz_table)
     nyquist_zone_hw = NaN(1,length(testt.coh_wf.records_mask_set));
@@ -79,19 +77,16 @@ for idx = 1:length(params_en)
     end
   end
   
-  
-  records_mask = ones(1,length(testt.coh_wf.records_mask_set),'uint8');
-  records_mask(isnan(nyquist_zone_hw)) = 0;
+  bit_mask = zeros(1,length(testt.coh_wf.records_mask_set),'uint8');
+  % isnan(nyquist_zone_hw) implies a bad record???
+  bit_mask(isnan(nyquist_zone_hw)) = bitor(1,bit_mask(isnan(nyquist_zone_hw)));
   
   %% UPDATE RECORDS
   
-  recs_old.settings.nyquist_zone_hw = nyquist_zone_hw;
-  recs_old.settings.records_mask = records_mask;
-  fprintf('Saving records file %s (%s)\n',recs_fn,datestr(now));
-%   ct_file_lock_check(recs_fn,3);
-  ct_save(recs_fn,'-struct','recs_old');
-  fprintf('Creating auxiliary records files %s (%s)\n',recs_fn,datestr(now));
-  records_aux_files_create(recs_fn);
+  recs_old.nyquist_zone_hw = nyquist_zone_hw;
+  recs_old.bit_mask = bit_mask;
+  fprintf('Saving records file %s (%s)\n',records_fn,datestr(now));
+  ct_save(records_fn,'-struct','recs_old','bit_mask','nyquist_zone_hw');
   
   %% FIGURES
   

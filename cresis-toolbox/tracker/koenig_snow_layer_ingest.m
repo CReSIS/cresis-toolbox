@@ -30,7 +30,7 @@ else
   fns = get_filenames('/cresis/snfs1/dataproducts/metadata/koenig_snow_layers/output_mapdata_2012','mapdata','','.txt');
 end
 
-%%
+%% Load Koenig Data
 physical_constants;
 surf_filter_len = 51; % Range lines to average surf twtt (must be odd integer)
 num_layers = 30;
@@ -73,7 +73,7 @@ for fn_idx = 1:length(fns)
   end
 end
 
-% Get unique days
+%% Get unique days
 days = cell(size(layer_data{1}));
 for idx = 1:length(layer_data{1})
   if length(layer_data{1}{idx}) < 15
@@ -87,7 +87,7 @@ days{end+1} = 'zzzzzzzz';
 [days,~,map_idxs] = unique(days);
 map_idxs = map_idxs(1:end-1);
 
-% Extract other fields
+%% Extract other fields
 trace_idx = {};
 lat = {};
 lon = {};
@@ -133,7 +133,12 @@ if 1
   end
 end
 
-%%
+%% Process Each Day
+enable_visible_plot = false;
+enable_debug_plot = false;
+if enable_debug_plot
+  h_fig = get_figures(2,enable_visible_plot);
+end
 params = read_param_xls(param_fn);
 for day_idx=13:13 %1:length(days)
   
@@ -143,6 +148,7 @@ for day_idx=13:13 %1:length(days)
   
   param_idxs = strmatch(days{day_idx},{params.day_seg});
   
+  %% Process: Process Each Segment
   for param_idx = param_idxs(:).'
     param = params(param_idx);
     
@@ -155,13 +161,14 @@ for day_idx=13:13 %1:length(days)
       layer_params.source = 'layerdata';
     end
     surf = opsLoadLayers(param,layer_params);
+    surf.twtt = interp_finite(surf.twtt);
     
-    % Filter surf data
+    %% Process:Segment Filter Surf Data
     surf.twtt_filtered = surf.twtt - surf.elev/(c/2);
     surf.twtt_filtered = fir_dec(surf.twtt_filtered,ones(1,surf_filter_len)/surf_filter_len,1);
     surf.twtt_filtered = surf.twtt_filtered + surf.elev/(c/2);
     
-    % Align layers to layerData
+    %% Process:Segment Sync Layers
     master = [];
     master.GPS_time = surf.gps_time;
     master.Latitude = surf.lat;
@@ -187,82 +194,84 @@ for day_idx=13:13 %1:length(days)
         master.layerData{lay_idx}.value{1}.data(surf.type == 1) ...
           = surf.twtt(surf.type==1);
         % Auto points
-        master.layerData{lay_idx}.value{2}.data = surf.twtt;
+        master.layerData{lay_idx}.value{2}.data = surf.twtt_filtered;
         master.layerData{lay_idx}.name = 'surface';
         master.layerData{lay_idx}.quality = ones(size(master.GPS_time));
-        % Ice bottom (all NaN)
-        master.layerData{lay_idx+1}.value{1}.data = nan(size(master.GPS_time));
-        master.layerData{lay_idx+1}.value{2}.data = nan(size(master.GPS_time));
-        master.layerData{lay_idx+1}.name = 'bottom';
-        master.layerData{lay_idx+1}.quality = ones(size(master.GPS_time));
       end
       if lay_idx > 1
-        master.layerData{lay_idx+1}.value{1}.data = nan(size(master.GPS_time));
-        master.layerData{lay_idx+1}.value{2}.data = surf.twtt_filtered + new_layer_twtt - surf_ref;
-        master.layerData{lay_idx+1}.name = sprintf('Koenig_%d', lay_idx);
-        master.layerData{lay_idx+1}.quality = ones(size(master.GPS_time));
+        master.layerData{lay_idx}.value{1}.data = nan(size(master.GPS_time));
+        master.layerData{lay_idx}.value{2}.data = surf.twtt_filtered + new_layer_twtt - surf_ref;
+        master.layerData{lay_idx}.name = sprintf('Koenig_%d', lay_idx);
+        master.layerData{lay_idx}.quality = ones(size(master.GPS_time));
       end
     end
     
-    % Load records file associated with this segment
-    records_fn = ct_filename_support(param,'','records');
-    records = load(records_fn);
-    % Load frames associated with this segment
-    frames_fn = ct_filename_support(param,'','frames');
-    load(frames_fn);
+    %% Process:Segment Save Output
+    copy_param = [];
+    copy_param.copy_method = 'overwrite';
+    copy_param.gaps_fill.method = 'preserve_gaps';
+    copy_param.layer_source.existence_check = false;
+    copy_param.layer_source.source = 'custom';
+    copy_param.layer_dest.source = 'layerdata';
+    copy_param.layer_dest.layerdata_source = 'layer_koenig';
+    copy_param.layer_dest.existence_check = false;
     
-    % Write layer information into layerData files
-    %   update opsCopyLayers to create new layerData files if they do not exist
-    for frm = 1:length(frames.frame_idxs)
-      first_rec = frames.frame_idxs(frm);
-      if frm == length(frames.frame_idxs)
-        last_rec = length(records.gps_time);
+    copy_param.layer_source.gps_time = {};
+    copy_param.layer_source.quality = {};
+    copy_param.layer_source.twtt = {};
+    copy_param.layer_source.type = {};
+    copy_param.layer_dest.name = {};
+    layer_str = '';
+    deepest_layer_with_points = NaN;
+    if enable_debug_plot
+      clf(h_fig(1));
+      h_axes(1) = axes('parent',h_fig(1));
+      clf(h_fig(2));
+      h_axes(2) = axes('parent',h_fig(2));
+    end
+    for lay_idx = 1:num_layers-1
+      copy_param.layer_source.gps_time{end+1} = surf.gps_time;
+      copy_param.layer_source.twtt{end+1} = master.layerData{lay_idx}.value{2}.data;
+      if any(~isnan(master.layerData{lay_idx}.value{2}.data))
+        deepest_layer_with_points = lay_idx;
+        layer_str = [layer_str sprintf(' %d', lay_idx)];
+      end
+      if lay_idx == 1
+        copy_param.layer_source.quality{end+1} = surf.quality;
+        copy_param.layer_source.type{end+1} = surf.type;
+        copy_param.layer_dest.name{end+1} = sprintf('surface', lay_idx);
       else
-        last_rec = frames.frame_idxs(frm+1)-1;
+        copy_param.layer_source.quality{end+1} = ones(size(surf.quality));
+        copy_param.layer_source.type{end+1} = 2*ones(size(surf.type));
+        copy_param.layer_dest.name{end+1} = sprintf('Koenig_%d', lay_idx);
       end
-      frm_mask = master.GPS_time >= records.gps_time(first_rec) ...
-        & master.GPS_time <= records.gps_time(last_rec);
-      lay = [];
-      lay.GPS_time = master.GPS_time(frm_mask);
-      lay.Latitude = master.Latitude(frm_mask);
-      lay.Longitude = master.Longitude(frm_mask);
-      lay.Elevation = master.Elevation(frm_mask);
-      deepest_layer_with_points = 1;
-      for lay_idx = 1:num_layers
-        if lay_idx == 1
-          % Copy surface and bottom
-          offsets = [0 1];
-        else
-          % Copy snow radar layer
-          offsets = 1;
-        end
-        for o = offsets
-          % 1. Manual points
-          lay.layerData{lay_idx+o}.value{1}.data ...
-            = master.layerData{lay_idx+o}.value{1}.data(frm_mask);
-          % 2. Auto points
-          lay.layerData{lay_idx+o}.value{2}.data ...
-            = master.layerData{lay_idx+o}.value{2}.data(frm_mask);
-          % 3. Name
-          lay.layerData{lay_idx+o}.name = master.layerData{lay_idx+o}.name;
-          % 4. Quality
-          lay.layerData{lay_idx+o}.quality ...
-            = master.layerData{lay_idx+o}.quality(frm_mask);
-        end
-        if any(~isnan(lay.layerData{lay_idx+o}.value{2}.data))
-          deepest_layer_with_points = lay_idx;
-        end
-      end
-      layer_fn_dir = ct_filename_out(param,'layerData','');
-      if ~exist(layer_fn_dir,'dir')
-        mkdir(layer_fn_dir);
-      end
-      layer_fn = fullfile(layer_fn_dir,sprintf('Data_%s_%03d.mat', param.day_seg, frm));
-      save(layer_fn,'-v7.3','-struct','lay');
-      if deepest_layer_with_points > 1
-        fprintf('%d: %s\n', deepest_layer_with_points, layer_fn);
+      if enable_debug_plot
+        plot(copy_param.layer_source.gps_time{end}, copy_param.layer_source.twtt{end}, 'parent', h_axes(1));
+        hold(h_axes(1), 'on');
+        xlabel(h_axes(1), 'GPS time (ANSI-C sec since Jan 1, 1970)');
+        ylabel(h_axes(1), 'Two way travel time (sec)');
+        
+        plot(copy_param.layer_source.gps_time{end}, surf.elev - copy_param.layer_source.twtt{end}*c/2, 'parent', h_axes(2));
+        hold(h_axes(2), 'on');
+        xlabel(h_axes(2), 'GPS time (ANSI-C sec since Jan 1, 1970)');
+        ylabel(h_axes(2), 'Elevation (m, WGS-84)');
       end
     end
+    
+    fprintf('opsCopyLayers %s (%s)\n', param.day_seg, datestr(now));
+    fprintf('  Layers:%s\n', layer_str);
+    fprintf('  Deepest\t%d\n', deepest_layer_with_points);
+    
+    if enable_visible_plot
+      % Bring plots to front
+      for h_fig_idx = 1:length(h_fig)
+        figure(h_fig(h_fig_idx));
+      end
+      % Enter debug mode
+      keyboard
+    end
+    
+    opsCopyLayers(param,copy_param);
     
   end
 end

@@ -11,20 +11,20 @@ function get_closest_frame(obj, param)
 ops_param.properties.season = obj.cur_map_pref_settings.seasons;
 
 if obj.map.fline_source == 1
-  % layerdata flineslines selected
+  % csarp_support/track flineslines selected
   % -----------------------------------------------------------------------
   
   % Find the frame of the closest point
-  [~,idx] = min((obj.layerdata.y-param.y).^2+(obj.layerdata.x-param.x).^2);
+  [~,idx] = min((obj.trackdata.y-param.y).^2+(obj.trackdata.x-param.x).^2);
   % Extract out frame, system, and season name
-  frm_id = obj.layerdata.frm_id(idx);
-  season_idx = obj.layerdata.season_idx(idx);
+  frm_id = obj.trackdata.frm_id(idx);
+  season_idx = obj.trackdata.season_idx(idx);
   season_name = obj.cur_map_pref_settings.seasons{season_idx};
   [sys,season_name] = strtok(season_name,'_');
   season_name = season_name(2:end);
   
   % Get a logical mask indicating all indices that match the frame
-  frm_mask = obj.layerdata.frm_id == frm_id;
+  frm_mask = obj.trackdata.frm_id == frm_id;
   
   % Generate frame string YYYYMMDD_SS_FFF
   frm_id = num2str(frm_id);
@@ -41,8 +41,8 @@ if obj.map.fline_source == 1
     data.properties.frame = frm_str;
     data.properties.season = season_name;
     data.properties.segment_id = str2num(frm_id(1:10));
-    data.properties.X = obj.layerdata.x(frm_mask);
-    data.properties.Y = obj.layerdata.y(frm_mask);
+    data.properties.X = obj.trackdata.x(frm_mask);
+    data.properties.Y = obj.trackdata.y(frm_mask);
     
   else
     % Get segment id from opsGetFrameSearch
@@ -63,8 +63,8 @@ if obj.map.fline_source == 1
       data.properties.frame = frm_str;
       data.properties.season = frm_data.properties.season;
       data.properties.segment_id = frm_data.properties.segment_id;
-      data.properties.X = obj.layerdata.x(frm_mask);
-      data.properties.Y = obj.layerdata.y(frm_mask);
+      data.properties.X = obj.trackdata.x(frm_mask);
+      data.properties.Y = obj.trackdata.y(frm_mask);
       status = frm_status;
     end
   end

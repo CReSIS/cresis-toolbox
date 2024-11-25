@@ -72,34 +72,16 @@ obj.eg.gps_time = [];
 obj.eg.lat = [];
 obj.eg.lon = [];
 obj.eg.elev = [];
+obj.eg.roll = [];
 obj.eg.surf_twtt = [];
 obj.eg.frms = [];
 
 %% Get all the frames for this segment
-if strcmp(obj.eg.layers.source,'layerdata')
-  obj.eg.start_gps_time = param.start_gps_time;
-  obj.eg.stop_gps_time = param.stop_gps_time;
-  obj.eg.frm_strs = {};
-  for frm = 1:length(obj.eg.start_gps_time)
-    obj.eg.frm_strs{frm} = sprintf('%s_%03d', obj.eg.cur_sel.day_seg, frm);
-  end
-else
-  ops_param = struct('properties',[]);
-  ops_param.properties.location = obj.eg.cur_sel.location;
-  ops_param.properties.segment_id = obj.eg.cur_sel.seg_id;
-  [status,data] = opsGetSegmentInfo(obj.eg.system,ops_param);
-  obj.eg.frm_strs = {};
-  obj.eg.start_gps_time = [];
-  obj.eg.stop_gps_time = [];
-  for idx = 1:length(data.properties.frame)
-    obj.eg.frm_strs{idx} = data.properties.frame{idx};
-    obj.eg.start_gps_time(idx) = double(data.properties.start_gps_time(idx));
-    obj.eg.stop_gps_time(idx) = double(data.properties.stop_gps_time(idx));
-  end
-  % Sort the list of frames in case database isn't sorted
-  [obj.eg.frm_strs sorted_idxs] = sort(obj.eg.frm_strs);
-  obj.eg.start_gps_time = obj.eg.start_gps_time(sorted_idxs);
-  obj.eg.stop_gps_time = obj.eg.stop_gps_time(sorted_idxs);
+obj.eg.start_gps_time = param.start_gps_time;
+obj.eg.stop_gps_time = param.stop_gps_time;
+obj.eg.frm_strs = {};
+for frm = 1:length(obj.eg.start_gps_time)
+  obj.eg.frm_strs{frm} = sprintf('%s_%03d', obj.eg.cur_sel.day_seg, frm);
 end
 
 %% Update file listing of all source files
@@ -137,7 +119,7 @@ set(obj.left_panel.frameLB,'String',obj.eg.frm_strs);
 obj.eg.layers.selected_layers = false(size(obj.eg.layers.lyr_id));
 obj.eg.layers.visible_layers = true(size(obj.eg.layers.lyr_id));
 
-obj.layerLB_str();
+obj.layerLB_str(false);
 
 
 %% Load flightlines, layers, crossovers and place the cursor

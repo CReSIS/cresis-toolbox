@@ -97,8 +97,8 @@ if isfield(param,'search_type') && strcmpi(param.search_type,'grid')
       % Evaluate cost function
       uy      = sin(theta).';
       uz      = cos(theta).';
-      tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz);
-      val     = wb_compute_cost(tau,DCM,param.fc, param.fs, h,t0,dt);
+      tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz)*param.sv_dielectric;
+      val     = wb_compute_cost(tau, DCM, param.fc, param.fs, h, t0, dt);
       J(idx)  = 10*log10(abs(val));
     end
     
@@ -143,7 +143,7 @@ else
     theta   = search_theta(idx);
     uy      = sin(theta).';
     uz      = cos(theta).';
-    tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz);
+    tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz)*param.sv_dielectric;
     val     = wb_compute_cost(tau, DCM, param.fc, param.fs, h, t0, dt);
     J(idx)  = 10*log10(abs(val));
   end
@@ -207,7 +207,7 @@ else
         search_theta = mean(param.src_limits{src_idx});
       end
       
-      % Evaluate cost cunction over coarse grid whose step size is set by
+      % Evaluate cost function over coarse grid whose step size is set by
       % array_param.Nsv
       J = NaN(size(search_theta));
       for idx = 1:length(search_theta);
@@ -215,8 +215,8 @@ else
         theta   = [theta_i;theta0];
         uy      = sin(theta).';
         uz      = cos(theta).';
-        tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz);
-        val     = wb_compute_cost(tau,DCM,param.fc, param.fs, h,t0,dt);
+        tau     = (2/c)*(param.y_pc*uy - param.z_pc*uz)*param.sv_dielectric;
+        val     = wb_compute_cost(tau, DCM, param.fc, param.fs, h, t0, dt);
         J(idx)  = 10*log10(abs(val));
       end
       
@@ -239,5 +239,3 @@ else
   out = theta0;
   
 end
-
-return;

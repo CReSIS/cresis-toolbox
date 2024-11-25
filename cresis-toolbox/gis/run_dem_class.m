@@ -7,6 +7,7 @@
 %% Typical Use
 % =========================================================================
 % Check to see if class already exists
+global gdem;
 if isempty(gdem) || ~isa(gdem,'dem_class') || ~isvalid(gdem)
   gdem = dem_class(gRadar);
 end
@@ -16,7 +17,7 @@ end
 gdem.set_res(10);
 
 if ~exist('records','var')
-  records = load('/cresis/snfs1/dataproducts/csarp_support/records/rds/2018_Greenland_P3/records_20180418_04.mat');
+  records = load(fullfile(gRadar.support_path,'records','rds','2018_Greenland_P3','records_20180418_04.mat'));
 end
 % Set the class up to look at this whole record
 if ~strcmpi(gdem.name,'rds:2018_Greenland_P3:20180418_04')

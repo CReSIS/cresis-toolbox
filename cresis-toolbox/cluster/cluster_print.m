@@ -17,16 +17,22 @@ function [in,out] = cluster_print(ctrl,ids,print_mode,ids_type)
 %   ids input argument. 0 for ids containing task ID and 1 for
 %   containing cluster side IDs (e.g. torque job ID). Default is 0.
 %
-% Author: John Paden
-%
 % ts = cluster_print(1,1:500,2); % Prints table
 % print_struct(ts,1) % Prints a tab-delimited array for spreadsheets
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list,
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% Author: John Paden
+%
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 if ~exist('print_mode','var') || isempty(print_mode)
   print_mode = 1;
@@ -201,7 +207,10 @@ if print_mode == 1
     else
       % cluster job ID (e.g. torque job ID)
       job_id = id;
-      task_id = find(ctrl.job_id_list == id);
+      task_id = find(ctrl.job_id_list == id,1);
+      if isempty(task_id)
+        error('Task not found.');
+      end
     end
     if ctrl.job_id_list(task_id) == -1
       lead_task_id = task_id;
@@ -252,7 +261,17 @@ if print_mode == 1
     end
     
     %% Print stdout and stderr files if available
-    if any(strcmpi(ctrl.cluster.type,{'torque','matlab','slurm'}))
+    if strcmpi(ctrl.cluster.type,'matlab')
+      fprintf('\n\nSTDOUT ======================================================================\n');
+      try
+        if ~isfield(ctrl.cluster,'jm')
+          ctrl.cluster.jm = parcluster;
+        end
+        fprintf('%s\n', ctrl.cluster.jm.findJob('ID',job_id).Tasks.Diary);
+      catch ME
+        fprintf('Failed to retrieve\n');
+      end
+    elseif any(strcmpi(ctrl.cluster.type,{'torque','slurm'}))
       retry = 0;
       fn = fullfile(ctrl.stdout_fn_dir,sprintf('stdout_%d_%d.txt',task_id, retry));
       while exist(fn,'file')
@@ -434,8 +453,8 @@ if print_mode == 2
     info(id_idx).task = NaN;
     info(id_idx).job_est = '';
     info(id_idx).job = '';
+    info(id_idx).mem_est = NaN;
     info(id_idx).mem = NaN;
-    info(id_idx).mem_actual = NaN;
    
     if job_id ~= -1
       if strcmpi(ctrl.cluster.type,'torque')
@@ -509,13 +528,13 @@ if print_mode == 2
             tmp_result = tmp_result(idx:end);
             mem_units = sscanf(tmp_result,'%s');
             if strcmpi(mem_units,'mb')
-              info(id_idx).mem_actual = mem;
+              info(id_idx).mem = mem;
             elseif strcmpi(mem_units,'kb')
-              info(id_idx).mem_actual = mem/1e3;
+              info(id_idx).mem = mem/1e3;
             elseif strcmpi(mem_units,'gb')
-              info(id_idx).mem_actual = mem*1e3;
+              info(id_idx).mem = mem*1e3;
             else
-              info(id_idx).mem_actual = mem/1e6;
+              info(id_idx).mem = mem/1e6;
             end
           end
           
@@ -540,17 +559,17 @@ if print_mode == 2
             tmp_result = tmp_result(idx+2:end);
             idx = find(tmp_result==10|tmp_result==13,1);
             tmp_result = tmp_result(1:idx);
-            [mem,~,~,idx] = sscanf(tmp_result,'%d');
+            [mem_est,~,~,idx] = sscanf(tmp_result,'%d');
             tmp_result = tmp_result(idx:end);
             mem_units = sscanf(tmp_result,'%s');
             if strcmpi(mem_units,'mb')
-              info(id_idx).mem = uint32(mem);
+              info(id_idx).mem_est = uint32(mem_est);
             elseif strcmpi(mem_units,'kb')
-              info(id_idx).mem = uint32(mem/1e3);
+              info(id_idx).mem_est = uint32(mem_est/1e3);
             elseif strcmpi(mem_units,'gb')
-              info(id_idx).mem = uint32(mem*1e3);
+              info(id_idx).mem_est = uint32(mem_est*1e3);
             else
-              info(id_idx).mem = uint32(mem/1e6);
+              info(id_idx).mem_est = uint32(mem_est/1e6);
             end
           end
         end
@@ -634,8 +653,8 @@ if print_mode == 2
     end
 
     task_in = merge_structs(sparam.static_param,dparam.dparam{task_id});
-    if isnan(info(id_idx).mem)
-      info(id_idx).mem = task_in.mem/1e6;
+    if isnan(info(id_idx).mem_est)
+      info(id_idx).mem_est = task_in.mem/1e6;
     end
     
     % Read output file
@@ -667,7 +686,7 @@ if print_mode == 2
     
     info(id_idx).notes = task_in.notes;
     
-    if isnan(info(id_idx).mem_actual)
+    if isnan(info(id_idx).mem)
       fn = fullfile(ctrl.stdout_fn_dir,sprintf('stdout_%d.txt',lead_task_id));
       [fid,msg] = fopen(fn);
       if fid > 0
@@ -676,18 +695,19 @@ if print_mode == 2
         try
           % Memory requested in megabytes
           idx = regexp(result,'Max Mem');
-          tmp_result = result(idx:end);
+          tmp_result = result(idx(end):end);
           idx = find(tmp_result==':',1);
           tmp_result = tmp_result(idx+2:end);
           idx = find(tmp_result==10|tmp_result==13,1);
           tmp_result = tmp_result(1:idx);
           [mem,~,~,idx] = sscanf(tmp_result,'%d');
-          info(id_idx).mem_actual = mem/1e3;
-          
+          info(id_idx).mem = mem/1e3;
+        end
+        try
           if isempty(info(id_idx).exec_node)
             % Exec host
             idx = regexp(result,'hostname:');
-            tmp_result = result(idx:end);
+            tmp_result = result(idx(end):end);
             idx = find(tmp_result==':',1);
             tmp_result = tmp_result(idx+2:end);
             idx = find(tmp_result==' ');

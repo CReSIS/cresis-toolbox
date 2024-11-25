@@ -10,7 +10,6 @@ function [success] = sar_task(param)
 %  .radar = structured used by load_mcords_hdr
 %
 %  .load = structure containing info about what data to load
-%   .records_fn = records filename
 %   .recs = 2 element vector containing the start and stop records
 %   .imgs = cell vector of images to load, each image is Nx2 array of
 %     wf/adc pairs
@@ -74,8 +73,7 @@ wgs84 = wgs84Ellipsoid('meters');
 
 [output_dir,radar_type,radar_name] = ct_output_dir(param.radar_name);
 
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn,'settings','param_records');
+records = records_load(param,'settings','param_records');
 
 if param.sar.combine_rx && param.sar.mocomp.en
   warning('SAR motion compensation mode must be 0 for combine_rx (setting to 0)');
@@ -88,7 +86,7 @@ sar_coord_dir = ct_filename_out(param, param.sar.coord_path);
 
 % Load SAR coordinate system
 sar_fn = fullfile(sar_coord_dir,'sar_coord.mat');
-sar = load(sar_fn,'version','Lsar','gps_source','type','sigma_x','presums','along_track','surf_pp');
+sar = load(sar_fn,'file_version','Lsar','gps_source','type','sigma_x','presums','along_track','surf_pp');
 
 % Determine output range lines
 output_along_track = 0 : param.sar.sigma_x : sar.along_track(end);
@@ -180,7 +178,7 @@ fcs.bottom = NaN*ones(size(fcs.surface));
 % =========================================================================
 recs = [(param.load.recs(1)-1)*param.sar.presums+1, ...
         param.load.recs(2)*param.sar.presums];
-records = records_aux_files_read(records_fn,recs);
+records = records_load(param,recs);
 % Decimate records according to presums
 if param.sar.presums > 1
   records.lat = fir_dec(records.lat,param.sar.presums);
@@ -319,7 +317,15 @@ for img = 1:length(param.load.imgs)
     end
 
     % 3. Fill in any missing lines
-    fcs.pos(:,~good_rline) = interp1(output_along_track(good_rline),fcs.pos(:,good_rline).',output_along_track(~good_rline).','linear','extrap').';
+    if length(good_rline) > 1
+      fcs.pos(:,~good_rline) = interp1(output_along_track(good_rline),fcs.pos(:,good_rline).',output_along_track(~good_rline).','linear','extrap').';
+    elseif length(good_rline) == 1
+      fcs.pos(1,~good_rline) = fcs.pos(1,good_rline);
+      fcs.pos(2,~good_rline) = fcs.pos(2,good_rline);
+      fcs.pos(3,~good_rline) = fcs.pos(3,good_rline);
+    else
+      error('good_rline is empty; no good data?');
+    end
     
     
     %% SAR Processing
@@ -445,6 +451,11 @@ for img = 1:length(param.load.imgs)
         % of a hack.
         x_lin = linspace(along_track(1), ...
           along_track(end),length(along_track));
+        dx = mean(diff(x_lin));
+        pre_x_lin = fliplr(x_lin(1)-dx:-dx:output_along_track_full(1));
+        post_x_lin = x_lin(end)+dx:dx:output_along_track_full(end);
+        x_lin = [pre_x_lin, x_lin, post_x_lin];
+        fk_data = [zeros(size(fk_data,1),length(pre_x_lin)), fk_data, zeros(size(fk_data,1),length(post_x_lin))];
         
         % Create kx (along-track wavenumber) axis of input data
         kx = gen_kx(x_lin);

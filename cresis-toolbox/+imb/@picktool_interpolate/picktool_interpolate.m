@@ -53,7 +53,7 @@ classdef picktool_interpolate < imb.picktool
       % Any code, including access to object
       % This is the first tool initialized by a new echowin
       obj.h_fig = h_fig;
-      obj.w = 185;
+      obj.w = 200;
       obj.h = 120;
       obj.tool_name = '(i)nterp';
       obj.tool_name_title = 'enter';

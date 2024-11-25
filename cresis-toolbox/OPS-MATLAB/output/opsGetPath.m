@@ -13,6 +13,10 @@ function [status,data] = opsGetPath(sys,param)
 %     properties.stop_gps_time = double
 %     (optional) properties.nativeGeom = true (returns wgs1984 coordinates)
 %
+% OR INSTEAD OF THE ABOVE
+%     properties.location = string ('arctic' or 'antarctic')
+%     properties.point_path_id: integer array as row vector
+%
 % Output:
 %   status: integer (0:Error,1:Success)
 %   data: structure with fields (or error message)

@@ -32,12 +32,11 @@ if strcmpi(obj.eg.layers.source,'OPS')
   [status,data] = opsGetLayerPoints(obj.eg.system,ops_param);
   
   %% OPS: Preallocate layer arrays
-  obj.eg.layers.x = {};
   obj.eg.layers.y = {};
   obj.eg.layers.qual = {};
   obj.eg.layers.type = {};
+  obj.eg.layers.x = double(obj.eg.map_gps_time); % gps-time
   for idx = 1:length(obj.eg.layers.lyr_name)
-    obj.eg.layers.x{idx} = double(obj.eg.map_gps_time); % gps-time
     obj.eg.layers.y{idx} = nan(size(obj.eg.map_id)); % twtt
     obj.eg.layers.qual{idx} = nan(size(obj.eg.map_id)); % integer 1-3
     obj.eg.layers.type{idx} = nan(size(obj.eg.map_id)); % this is either 1 (manual) or 2 (auto)
@@ -69,25 +68,22 @@ elseif strcmpi(obj.eg.layers.source,'layerdata')
   %% LayerData: Load layer points from layerdata
   
   %% LayerData: Preallocate layer arrays
-  fprintf(' Loading layer points from layerData (%s)\n',datestr(now));
-  obj.eg.layers.x = {};
+  fprintf(' Loading layer points from layer data files (%s)\n',datestr(now));
+  obj.eg.layers.x = [];
   obj.eg.layers.y = {};
   obj.eg.layers.qual = {};
   obj.eg.layers.type = {};
   for idx = 1:length(obj.eg.layers.lyr_id)
-    obj.eg.layers.x{idx} = []; % gps time
     obj.eg.layers.y{idx} = []; % twtt
     obj.eg.layers.qual{idx} = []; % integer 1-3
     obj.eg.layers.type{idx} = []; % this is either 1 (manual) or 2 (auto)
   end
   %% LayerData: Load gps_time, quality, twtt and type of layers from undo_stack
-  lGPS = [];
   for frm = obj.eg.frms(1):obj.eg.frms(end);
     gps_time = obj.undo_stack.user_data.layer_info(frm).gps_time;
-    lGPS = cat(2,lGPS,gps_time); % concatenates the layer GPS time
+    obj.eg.layers.x = cat(2,obj.eg.layers.x,gps_time); % concatenates the layer GPS time
     
     for idx=1:length(obj.eg.layers.lyr_name)
-      obj.eg.layers.x{idx} = cat(2,obj.eg.layers.x{idx},gps_time); % gps time
       lay_idx = find(obj.eg.layers.lyr_id(idx) == obj.undo_stack.user_data.layer_info(frm).id);
       if ~isempty(lay_idx)
         qual = obj.undo_stack.user_data.layer_info(frm).quality(lay_idx,:);
@@ -105,17 +101,18 @@ elseif strcmpi(obj.eg.layers.source,'layerdata')
     end
   end
   
-  %% LayerData: Update echogram surface if there are enough good points 
-  % Find good surface points
-  if ~any(obj.eg.layers.lyr_id==1)
-    error('standard:surface must be added in the "Layers" preference window before loading echograms.');
-  end
-  
-  % logical vector with 1 where the twtt of the surface is a number and 0
-  % when NaN.
-  good_mask = ~isnan(obj.eg.layers.y{obj.eg.layers.lyr_id==1});
-  if sum(good_mask) > 2
-    obj.eg.surf_twtt = interp1(lGPS(good_mask),obj.eg.layers.y{obj.eg.layers.lyr_id==1}(good_mask),obj.eg.gps_time);
-    obj.eg.surf_twtt = interp_finite(obj.eg.surf_twtt,0);
+  %% LayerData: Update echogram surface if there are enough good points
+  if ~isempty(obj.eg.layers.lyr_id)
+    if isempty(obj.eg.layers.surf_id) || all(obj.eg.layers.surf_id ~= obj.eg.layers.lyr_id)
+      % Surface ID not set yet, assume it is the minimum
+      obj.eg.layers.surf_id = min(obj.eg.layers.lyr_id);
+    end
+    % good_mask: logical vector with 1 where the twtt of the surface is a number and 0
+    % when NaN.
+    good_mask = ~isnan(obj.eg.layers.y{obj.eg.layers.lyr_id==obj.eg.layers.surf_id});
+    if sum(good_mask) > 2
+      obj.eg.surf_twtt = interp1(obj.eg.layers.x(good_mask),obj.eg.layers.y{obj.eg.layers.lyr_id==obj.eg.layers.surf_id}(good_mask),obj.eg.gps_time);
+      obj.eg.surf_twtt = interp_finite(obj.eg.surf_twtt,0);
+    end
   end
 end

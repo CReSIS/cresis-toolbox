@@ -20,7 +20,7 @@ if obj.map.fline_source==1
   frm_id = str2num(frm_id);
   
   % Get a logical mask indicating all indices that match the frame
-  frm_mask = obj.layerdata.frm_id == frm_id;
+  frm_mask = obj.trackdata.frm_id == frm_id;
   % Find the first matching frame in the list
   idx = find(frm_mask,1);
   if isempty(idx)
@@ -28,8 +28,8 @@ if obj.map.fline_source==1
     return;
   end
   % Extract out frame, system, and season name
-  frm_id = obj.layerdata.frm_id(idx);
-  season_idx = obj.layerdata.season_idx(idx);
+  frm_id = obj.trackdata.frm_id(idx);
+  season_idx = obj.trackdata.season_idx(idx);
   season_name = obj.cur_map_pref_settings.seasons{season_idx};
   [sys,season_name] = strtok(season_name,'_');
   season_name = season_name(2:end);
@@ -47,8 +47,8 @@ if obj.map.fline_source==1
     data.properties.frame = frm_str;
     data.properties.season = season_name;
     data.properties.segment_id = str2num(frm_id(1:10));
-    data.properties.X = obj.layerdata.x(frm_mask);
-    data.properties.Y = obj.layerdata.y(frm_mask);
+    data.properties.X = obj.trackdata.x(frm_mask);
+    data.properties.Y = obj.trackdata.y(frm_mask);
     new_xdata = data.properties.X;
     new_ydata = data.properties.Y;    
   else
@@ -68,8 +68,8 @@ if obj.map.fline_source==1
     data.properties.frame = frm_str;
     data.properties.season = frm_data.properties.season;
     data.properties.segment_id = frm_data.properties.segment_id;
-    data.properties.X = obj.layerdata.x(frm_mask);
-    data.properties.Y = obj.layerdata.y(frm_mask);
+    data.properties.X = obj.trackdata.x(frm_mask);
+    data.properties.Y = obj.trackdata.y(frm_mask);
     new_xdata = data.properties.X;
     new_ydata = data.properties.Y;
   end

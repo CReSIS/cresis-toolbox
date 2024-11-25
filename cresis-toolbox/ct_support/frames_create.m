@@ -25,7 +25,11 @@ classdef (HandleCompatible = true) frames_create < handle
       
       %% Creator: General Setup
       % =====================================================================
-      obj.param = merge_structs(param, param_override);
+      if exist('param_override','var')
+        obj.param = merge_structs(param, param_override);
+      else
+        obj.param = param;
+      end
       
       fprintf('=====================================================================\n');
       fprintf('%s: %s (%s)\n', mfilename, obj.param.day_seg, datestr(now));
@@ -56,19 +60,16 @@ classdef (HandleCompatible = true) frames_create < handle
       
       frames_fn = ct_filename_support(obj.param,'','frames');
       
-      records_fn = ct_filename_support(obj.param,'','records');
-      obj.records = load(records_fn,'lat','lon');
+      obj.records = records_load(obj.param,'gps_time','lat','lon');
       
       if exist(frames_fn,'file')
-        tmp = load(frames_fn,'frames');
-        obj.frames = tmp.frames;
+        obj.frames = frames_load(obj.param);
         if any(obj.frames.frame_idxs > length(obj.records.lat))
           warning('Frames file %s\ncontains indices past the end of the records file. These indices will be ignored.', frames_fn);
           obj.frames.frame_idxs = obj.frames.frame_idxs(obj.frames.frame_idxs <= length(obj.records.lat));
         end
       else
         obj.frames.frame_idxs = 1;
-        obj.frames.nyquist_zone = NaN;
         obj.frames.proc_mode = 0;
       end
       
@@ -355,8 +356,8 @@ classdef (HandleCompatible = true) frames_create < handle
 
       hold(obj.h_geotiff.h_axes,'on');
       if isempty(obj.h_geotiff.proj)
-        x = records.lon;
-        y = records.lat;
+        x = obj.records.lon;
+        y = obj.records.lat;
       else
         [x,y] = projfwd(obj.h_geotiff.proj,obj.records.lat,obj.records.lon);
         x = x/1e3;
@@ -454,7 +455,6 @@ classdef (HandleCompatible = true) frames_create < handle
       mask = mask{1}; mask(1) = 0;
       
       obj.frames.frame_idxs = obj.frames.frame_idxs(~mask);
-      obj.frames.nyquist_zone = obj.frames.nyquist_zone(~mask);
       obj.frames.proc_mode = obj.frames.proc_mode(~mask);
       
       obj.h_geotiff.delete_pnt(1,find(mask));
@@ -522,9 +522,6 @@ classdef (HandleCompatible = true) frames_create < handle
         rec = rec + 1;
       end
       
-      obj.frames.nyquist_zone(frm+1+num:end+num) = obj.frames.nyquist_zone(frm+1:end);
-      obj.frames.nyquist_zone(frm+(1:num)) = NaN;
-      
       obj.frames.proc_mode(frm+1+num:end+num) = obj.frames.proc_mode(frm+1:end);
       new_proc_mode = str2double(get(obj.h_gui.fig.ctrl_panel.procTB,'String'));
       obj.frames.proc_mode(frm+(1:num)) = new_proc_mode;
@@ -560,27 +557,27 @@ classdef (HandleCompatible = true) frames_create < handle
         mkdir(frames_fn_dir);
       end
       
-      frames.gps_time = [obj.records.gps_time(frames.frame_idxs), obj.records.gps_time(end)];
-      Nfrms = length(frames.frame_idxs);
-      frames.notes = cell(1,Nfrms);
-      if ~isfield(frames,'quality')
-        frames.quality = zeros(1,Nfrms);
+      obj.frames.gps_time = [obj.records.gps_time(obj.frames.frame_idxs), obj.records.gps_time(end)];
+      Nfrms = length(obj.frames.frame_idxs);
+      obj.frames.notes = cell(1,Nfrms);
+      if ~isfield(obj.frames,'quality')
+        obj.frames.quality = zeros(1,Nfrms);
       end
-      if ~isfield(frames,'proc_mode')
-        frames.proc_mode = zeros(1,Nfrms);
+      if ~isfield(obj.frames,'proc_mode')
+        obj.frames.proc_mode = zeros(1,Nfrms);
       end
-      frames.Nx = length(obj.records.gps_time);
-      frames.param.day_seg = param.day_seg;
-      frames.param.season_name = param.season_name;
-      frames.param.radar_name = param.radar_name;
-      frames.param.sw_version = param.sw_version;
+      obj.frames.Nx = length(obj.records.gps_time);
+      obj.frames.param.day_seg = obj.param.day_seg;
+      obj.frames.param.season_name = obj.param.season_name;
+      obj.frames.param.radar_name = obj.param.radar_name;
+      obj.frames.param.sw_version = obj.param.sw_version;
       
       if obj.param.ct_file_lock
-        frames.file_version = '1L';
+        obj.frames.file_version = '1L';
       else
-        frames.file_version = '1';
+        obj.frames.file_version = '1';
       end
-      frames.file_type = 'frames';
+      obj.frames.file_type = 'frames';
       ct_file_lock_check(frames_fn,3);
       fprintf('Saving %s\n', frames_fn);
       frames = obj.frames;
@@ -651,8 +648,6 @@ classdef (HandleCompatible = true) frames_create < handle
         end
         obj.frames.frame_idxs(frm+1:end+1) = obj.frames.frame_idxs(frm:end);
         obj.frames.frame_idxs(frm) = min_idx;
-        obj.frames.nyquist_zone(frm+1:end+1) = obj.frames.nyquist_zone(frm:end);
-        obj.frames.nyquist_zone(frm) = NaN;
         obj.frames.proc_mode(frm+1:end+1) = obj.frames.proc_mode(frm:end);
         obj.frames.proc_mode(frm) = str2double(get(obj.h_gui.fig.ctrl_panel.procTB,'String'));
         segment.lat = obj.records.lat(min_idx);

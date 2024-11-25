@@ -128,21 +128,8 @@ end
 truncate_data = param.compress_echogram.truncate_data;
 
 % Load the frames file
-frames_fn = ct_filename_support(param,'','frames');
-load(frames_fn);
-
-if isempty(param.cmd.frms)
-  param.cmd.frms = 1:length(frames.frame_idxs);
-end
-% Remove frames that do not exist from param.cmd.frms list
-[valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-if length(valid_frms) ~= length(param.cmd.frms)
-  bad_mask = ones(size(param.cmd.frms));
-  bad_mask(keep_idxs) = 0;
-  warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-    param.cmd.frms(find(bad_mask,1)));
-  param.cmd.frms = valid_frms;
-end
+frames = frames_load(param);
+param.cmd.frms = frames_param_cmd_frms(param,frames);
 
 %% Setup
 % =========================================================================
@@ -197,7 +184,7 @@ for frm = param.cmd.frms
           dBins = round(dRange / (c/2) / dt);
         end
         zero_pad_len = max(abs(dBins));
-        tmp.Data = cat(1,tmp.Data,zeros(zero_pad_len,size(tmp.Data,2)));
+        tmp.Data = cat(1,tmp.Data,nan(zero_pad_len,size(tmp.Data,2)));
         if ~isempty(tmp.Time)
           tmp.Time = tmp.Time(1) + dt * (0:size(tmp.Data,1)-1).';
         end
@@ -240,9 +227,9 @@ for frm = param.cmd.frms
         % Truncating data adds four variables
         % 1)Truncate_Bins
         tmp.Truncate_Bins = good_bins;
-        tmp.Truncate_Median = NaN*zeros(1,size(tmp.Data,2));
-        tmp.Truncate_Mean = NaN*zeros(1,size(tmp.Data,2));
-        tmp.Truncate_Std_Dev = NaN*zeros(1,size(tmp.Data,2));
+        tmp.Truncate_Median = nan(1,size(tmp.Data,2));
+        tmp.Truncate_Mean = nan(1,size(tmp.Data,2));
+        tmp.Truncate_Std_Dev = nan(1,size(tmp.Data,2));
         % 2) Truncate_Median, Truncate_Mean, Truncate_Std_Dev
         %    These will have a NaN for a range line when no valid bins were
         %    truncated for that range line.  Zero padded bins from elevation

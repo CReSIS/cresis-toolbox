@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include "mat.h"
 #include "mex.h"
 
@@ -231,6 +232,7 @@ mexFunction( int nlhs,
       }
       hdr = hdr_tmp;
     }
+    unsigned int hdr_type = (*((unsigned int *)(hdr+8))) & 0x7FFFFFFF;
     memcpy(hdr+num_hdr*header_size,last_bytes,*last_bytes_len);
     memcpy(hdr+num_hdr*header_size+*last_bytes_len,data,header_size-*last_bytes_len);
     //mexPrintf("%d: %lld %d 0x%016llx\n", __LINE__, idx, num_hdr+1, ((unsigned long long int *)(hdr+num_hdr*header_size))[0]);
@@ -276,6 +278,7 @@ mexFunction( int nlhs,
     num_expected_original = *num_expected;
     //mexPrintf("%d: %d\n", __LINE__, *num_expected);
     int num_expected_bins = *num_expected;
+    mexPrintf("%d: %x\n", __LINE__, profile_data_format);
     switch (profile_data_format)
     {
       case 0x00000000:
@@ -295,16 +298,20 @@ mexFunction( int nlhs,
         break;
       case 0x00020000:
       case 0x00030000:
-        // num_expected is in units of bytes
-        // num_expected_bins needs to be adjusted for 8 byte bins:
-        //   >>3 = /8, 2 IQ channels, 4 bynum_expectedte samples or 2*4 = 8
-        num_expected_bins = num_expected_bins >> 3;
-        //*num_expected = *num_expected << 3; // This line replaced the above line for temporary hack
+        // num_expected is in units of samples, needs to be in units of bytes
+        // num_expected_bins is in units of samples, no adjustment needed
+        //   <<3 = *8, 2 IQ channels, 4 byte samples or 2*4 = 8
+        if (hdr_type==45) {
+          // GHOST radar header
+          *num_expected = *num_expected << 3;
+        } else {
+          num_expected_bins = num_expected_bins >> 3;
+        }
         break;
     }
     if (num_expected_bins < *min_num_expected || num_expected_bins > *max_num_expected)
     {
-      mexPrintf("%d: %d Bad Record Length %d\n", __LINE__, ((unsigned int *)(hdr+num_hdr*header_size))[0], *num_expected);
+      mexPrintf("%d: %d Bad Record Length %d outside of specified min-max range of %d to %d.\n", __LINE__, ((unsigned int *)(hdr+num_hdr*header_size))[0], num_expected_bins, *min_num_expected, *max_num_expected);
       *num_expected = *default_num_expected;
     }
     *num_expected = *num_expected + *length_field_offset + 4- *last_bytes_len;
@@ -372,6 +379,8 @@ mexFunction( int nlhs,
           }
           hdr = hdr_tmp;
         }
+        unsigned int hdr_type = (*((unsigned int *)(data+idx+8))) & 0x7FFFFFFF;
+
         memcpy(hdr+num_hdr*header_size,(void*)(data+idx),header_size);
         // Uncomment next line for debugging
         //mexPrintf("%d: %lld %d 0x%016llx\n", __LINE__, idx, num_hdr+1, ((unsigned long long int *)(hdr+num_hdr*header_size))[0]);
@@ -394,10 +403,8 @@ mexFunction( int nlhs,
         profile_data_format = (*(int *)(data + idx - 4));
         *num_expected = (*(int *)(data + idx));
         num_expected_original = *num_expected;
-        idx += 4 + *num_expected; // Skip to the end of the record
-        // Uncomment next line for debugging
-        //mexPrintf("%d: expect %d bytes, new record expected at %d of %d bytes\n", __LINE__, *num_expected, idx, file_size);
         int num_expected_bins = *num_expected;
+        //mexPrintf("%d: %x\n", __LINE__, profile_data_format);
         switch (profile_data_format)
         {
           case 0x00000000:
@@ -417,16 +424,23 @@ mexFunction( int nlhs,
             break;
           case 0x00020000:
           case 0x00030000:
-            // num_expected is in units of bytes
-            // num_expected_bins needs to be adjusted for 8 byte bins:
-            //   >>3 = /8, 2 IQ channels, 4 byte samples or 2*4 = 8
-            num_expected_bins = num_expected_bins >> 3;
-            //*num_expected = *num_expected << 3; // This line replaced the above line for temporary hack
+            // num_expected is in units of samples, needs to be in units of bytes
+            // num_expected_bins is in units of samples, no adjustment needed
+            //   <<3 = *8, 2 IQ channels, 4 byte samples or 2*4 = 8
+            if (hdr_type==45) {
+              // GHOST radar header
+              *num_expected = *num_expected << 3;
+            } else {
+              num_expected_bins = num_expected_bins >> 3;
+            }
             break;
         }
+        idx += 4 + *num_expected; // Skip to the end of the record
+        // Uncomment next line for debugging
+        //mexPrintf("%d: expect %d bytes, new record expected at %d of %d bytes\n", __LINE__, *num_expected, idx, file_size);
         if (num_expected_bins < *min_num_expected || num_expected_bins > *max_num_expected)
         {
-          mexPrintf("%d: %d Bad Record Length %d outside of specified min-max range.\n", __LINE__, ((unsigned int *)(hdr+num_hdr*header_size))[0], num_expected_bins);
+          mexPrintf("%d: %d Bad Record Length %d outside of specified min-max range of %d to %d.\n", __LINE__, ((unsigned int *)(hdr+num_hdr*header_size))[0], num_expected_bins, *min_num_expected, *max_num_expected);
           *num_expected = *default_num_expected;
         }
       }
@@ -440,7 +454,7 @@ mexFunction( int nlhs,
                 __LINE__, last_record_offset, idx, num_expected_original);
         // Uncomment next seven lines for debugging
         mexPrintf("Bytes around the expected location of the sync:\n");
-        for (int debug_idx=0; debug_idx<16; debug_idx++)
+        for (ptrdiff_t debug_idx=0; debug_idx<std::min((ptrdiff_t)16,idx); debug_idx++)
         {
           mexPrintf("  %d 0x%016llx\n", debug_idx-8, ((unsigned long long *)(data+idx-64))[debug_idx]);
         }
@@ -460,6 +474,9 @@ mexFunction( int nlhs,
               mexPrintf("  %d 0x%016llx\n", header_idx, ((unsigned long long int *)(hdr+(num_hdr-2)*header_size))[header_idx]);
             }
           }
+          // Remove the last header
+          mexPrintf("  Marking record %d as bad\n", num_hdr);
+          ((unsigned int *)(hdr+(num_hdr-1)*header_size))[0] = -2^31;
         }
         else
         {

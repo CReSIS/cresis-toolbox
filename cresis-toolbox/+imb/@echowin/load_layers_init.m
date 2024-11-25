@@ -5,8 +5,8 @@ function load_layers_init(obj)
 
 if strcmpi(obj.eg.layers.source,'OPS')
   %% OPS: Preallocating layer arrays
+  obj.eg.layers.x = double(obj.eg.map_gps_time); % gps-time
   for idx = 1:length(obj.eg.layers.lyr_id)
-    obj.eg.layers.x{idx} = double(obj.eg.map_gps_time); % gps-time
     obj.eg.layers.y{idx} = NaN*zeros(size(obj.eg.map_id)); % twtt
     obj.eg.layers.qual{idx} = NaN*zeros(size(obj.eg.map_id)); % integer 1-3
     obj.eg.layers.type{idx} = NaN*zeros(size(obj.eg.map_id)); % this is either 1 (manual) or 2 (auto)
@@ -14,8 +14,8 @@ if strcmpi(obj.eg.layers.source,'OPS')
   
   %% LayerData: Preallocating layer arrays
 else
+  obj.eg.layers.x = []; %gps time
   for idx = 1:length(obj.eg.layers.lyr_id)
-      obj.eg.layers.x{idx} = []; %gps time
       obj.eg.layers.y{idx} = []; % twtt
       obj.eg.layers.qual{idx} = []; % integer 1-3
       obj.eg.layers.type{idx} = []; % this is either 1 (manual) or 2 (auto)
@@ -25,12 +25,13 @@ end
 %% Plot layers
 delete(obj.h_layer);
 delete(obj.h_quality);
+obj.h_layer = [];
+obj.h_quality = [];
 
 % -------------------------------------------------------------------------
 % WARNING: DO NOT IMPLEMENT WITH SCATTER... TOO SLOW RENDERING
 % -------------------------------------------------------------------------
-layer_data_x = obj.eg.layers.x;
-for idx = 1:length(layer_data_x)
+for idx = 1:length(obj.eg.layers.y)
   % Manual points (plot this way to handle empty XData or YData
   obj.h_layer(2*(idx-1)+1) = plot(obj.h_axes,NaN,NaN,'bx');
   % Auto and manual points

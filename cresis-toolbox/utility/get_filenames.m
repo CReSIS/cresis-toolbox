@@ -1,30 +1,47 @@
-function [filenames,status] = get_filenames(filepath,filename_start,filename_middle,filename_end,param)
-%-------------------------%
-% GetFilenames            %
-%-------------------------%
-% Author:  William Blake
-% Input:
-%    filepath = path to files
-%    filename_start  = beginning of filename
-%    filename_middle = middle identifier of filename
-%    filename_end    = suffix of filename
-%    param = structure containing
-%      .recursive: boolean, default 0, recursive into directories
-%      .type: 'f' or 'd', default 'f', file type f=file, d=directory
-%      .exact: boolean, default 0, requires exact match
-%      .regexp: regular expression
-%      Legacy support: if param is a string, it can only be 'recursive'
+function [fns,status] = get_filenames(filepath,fn_prefix,fn_midfix,fn_suffix,param)
+% [fns,status] = get_filenames(filepath,fn_prefix,fn_midfix,fn_suffix,param)
+%
+% Gets a list of filenames that match the pattern specified by the input
+% arguments. Supports regular expression, file/directory, and recursive
+% file searches.
+%
+% Inputs:
+%
+% filepath: string containing path to search
+%
+% fn_prefix: beginning of filename must match this string
+%
+% fn_midfix: middle of filename must match this string
+%
+% fn_suffix: end of filename must match this string
+%
+% param: optional structure containing one or more of these fields:
+%
+%  .recursive: Logical scalar. Default is false. If true, causes the search
+%  to recurse into subfolders.
+%
+%  .type: String containing either 'f' or 'd'. Default is 'f'. Files
+%  matched according to f=file, d=directory.
+%
+%  .exact: Logical scalar. Default is false. If true, requires that the
+%  string exactly match with no characters in between the prefix, midfix,
+%  and suffix.
+%
+%  .regexp: Regular expression string. Default is empty. Field ignored if
+%  empty.
+%
 % Output:
 %    Returns a column cell vector of filenames that correspond to paths of
 %    filenames that meet the pattern specified in the arguements
 %
 % Example:
-%    filenames = GetFilenames('\\emperor\d5\wblake','InSAR','','wf_01_tx_01_rx_01.mat');
-%    filenames = GetFilenames('/d5/wblake','InSAR','','wf_01_tx_01_rx_01.mat');
+%    fns = get_filenames('\\emperor\d5\wblake','InSAR','','wf_01_tx_01_rx_01.mat');
+%    fns = get_filenames('/d5/wblake','InSAR','','wf_01_tx_01_rx_01.mat');
 %
 %    Get all files (including in subdirectories):
-%    filenames = GetFilenames('/d5/wblake','','','','recursive');
+%    fns = get_filenames('/d5/wblake','','','',struct('recursive',true));
 %
+% Author: William Blake, John Paden
 
 if nargin < 4 || nargin > 5
   error('Args:IncorrectFormat','Must have 4 or 5 arguments');
@@ -64,17 +81,17 @@ else
     end
   end
 end
-if ~ischar(filepath) || ~ischar(filename_start) || ~ischar(filename_middle) || ...
-    ~ischar(filename_end)
+if ~ischar(filepath) || ~ischar(fn_prefix) || ~ischar(fn_midfix) || ...
+    ~ischar(fn_suffix)
   error('Args:IncorrectFormat','First four arguments must be strings');
 end
 
 if param.exact
-  filename_exp = sprintf('%s%s%s', filename_start, filename_middle, ...
-    filename_end);
+  filename_exp = sprintf('%s%s%s', fn_prefix, fn_midfix, ...
+    fn_suffix);
 else
-  filename_exp = sprintf('%s*%s*%s', filename_start, filename_middle, ...
-    filename_end);
+  filename_exp = sprintf('%s*%s*%s', fn_prefix, fn_midfix, ...
+    fn_suffix);
 end
 
 if ispc
@@ -109,7 +126,7 @@ if ispc
   end
   % Execute system command to get filenames
   [status,tmp_filenames] = system(sysCmd);
-  filenames = {};
+  fns = {};
   % Parse returned filenames
   if isempty(tmp_filenames) || status ~= 0
     return;
@@ -118,9 +135,9 @@ if ispc
   files = files{1};
   for idx = 1:size(files,1)
     if ~param.recursive
-      filenames{end+1,1} = fullfile(filepath,files{idx});
+      fns{end+1,1} = fullfile(filepath,files{idx});
     else
-      filenames{end+1,1} = files{idx};
+      fns{end+1,1} = files{idx};
     end
   end
 else
@@ -139,7 +156,7 @@ else
   % Execute system command to get filenames
   [status,tmp_filenames] = system(sysCmd);
   
-  filenames = {};
+  fns = {};
   % Parse returned filenames
   if isempty(tmp_filenames) || status ~= 0
     return;
@@ -147,18 +164,15 @@ else
   files = textscan(tmp_filenames,'%s','Delimiter','\n');
   files = sort(files{1});
   for idx = 1:size(files,1)
-    filenames{end+1,1} = files{idx};
+    fns{end+1,1} = files{idx};
   end
-  filenames = sort(filenames);
+  fns = sort(fns);
 end
 
 if ~isempty(param.regexp)
-  good_mask = logical(ones(size(filenames)));
-  for idx = 1:length(filenames)
+  good_mask = logical(ones(size(fns)));
+  for idx = 1:length(fns)
     good_mask(idx) = ~isempty(regexp(files{idx},param.regexp));
   end
-  filenames = filenames(good_mask);
+  fns = fns(good_mask);
 end
-
-return;
-

@@ -45,9 +45,13 @@ if strcmpi(param.method,'sinc')
     elseif length(Hwin) == 1
       data(:,rline) = data_in(:,idxs);
     else
-      Hwin = Hwin / param.dx * param.filt_len/length(idxs);
-      Hwin = Hwin .* [x_off(2)-x_off(1); (x_off(3:end)-x_off(1:end-2))/2; x_off(end)-x_off(end-1)];
-      Hwin = Hwin / sum(Hwin);
+      % Normalize Hwin based on the distance travelled (this is mostly to
+      % deal with changes in speed which happen for ground based data). We
+      % also prevent discontinuities in the along-track from being weighted
+      % to much by capping the normalization at param.dx (i.e. a single
+      % input cannot be weighted more than one output sample).
+      norm_Hwin = min(param.dx,abs([x_off(2)-x_off(1); (x_off(3:end)-x_off(1:end-2))/2; x_off(end)-x_off(end-1)])) / param.dx;
+      Hwin = Hwin .* norm_Hwin;
       data(:,rline) = data_in(:,idxs)*Hwin;
     end
   end

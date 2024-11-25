@@ -91,6 +91,15 @@ else
   end
 end
 
+%% Check flightlines
+flightlines = get(obj.h_gui.flightlinesPM,'String');
+flightlines = flightlines{get(obj.h_gui.flightlinesPM,'Value')};
+if strcmp(map_name,'Blank Geodetic Map') && ~strcmp(flightlines,'tracks files Flightlines')
+  % if so, don't plot a map
+  uiwait(msgbox('Only "tracks files Flightlines" supports "Blank Geodetic Map". Change either the map setting or the flightline setting.','Error updating preferences','modal'));
+  return;
+end
+
 %% Pass information to map window
 % Give information on the season, location (arctic/antarctic) and system_name
 % (rds accum etc.) to the map window
@@ -114,8 +123,7 @@ obj.settings.sources = get(obj.h_gui.sourceLB,'String');
 obj.settings.map_zone = map_zone;
 obj.settings.map_name = map_name;
 
-flightlines = get(obj.h_gui.flightlinesPM,'String');
-obj.settings.flightlines = flightlines{get(obj.h_gui.flightlinesPM,'Value')};
+obj.settings.flightlines = flightlines;
 
 % Broadcast notice that StateChange event has occurred (calls imb.mapwin.get_map)
 notify(obj,'StateChange');

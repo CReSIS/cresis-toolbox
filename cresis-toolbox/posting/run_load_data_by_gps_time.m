@@ -81,10 +81,14 @@ param.out = 'CSARP_post/qlook'; % <== CHANGE HERE
 
 gaps_dist = [100 30];
 
-surface_source = struct('name','surface','source','layerData', 'layerdata_source','layerData_koenig'); % <== CHANGE HERE
+% surface_source: location of surface information (used in elevation
+% compensation). For example:
+%  struct('name','surface','source','layerdata', 'layerdata_source','layer')
+%  struct('name','surface','source','ops')
+surface_source = struct('name','surface','source','layerdata', 'layerdata_source','layer'); % <== CHANGE HERE
 
 % param.img_name: output data product image. For example:
-%   '': combined product, 'img_01_', , 'img_02_'
+%   '': combined product, 'img_01_': image 1, , 'img_02_': image 2, etc.
 param.img_name = '';
 
 if echo_param.elev_comp == 3
@@ -130,10 +134,10 @@ param.use_master_surf = 0;
 
 % param.layer_params: set to plot layers on echograms
 layer_params = []; idx = 0;
-if 1 % Enable to plot layers on echograms
-  layer_params = struct('name','surface','source','layerData','layerdata_source','layerData_koenig');
+if 0 % Enable to plot layers on echograms
+  layer_params = struct('name','surface','source','layerdata','layerdata_source','layerData_koenig');
   for idx = 2:30
-    layer_params(end+1) = struct('name',sprintf('Koenig_%d',idx),'source','layerData','layerdata_source','layerData_koenig');
+    layer_params(end+1) = struct('name',sprintf('Koenig_%d',idx),'source','layerdata','layerdata_source','layerData_koenig');
   end
 end
 param.layer_params = layer_params;
@@ -256,10 +260,10 @@ if 1
 
   % param.layer_params: set to plot layers on echograms
   layer_params = []; idx = 0;
-  if 1 % Enable to plot layers on echograms
-    layer_params = struct('name','surface','source','layerData','layerdata_source','layerData_koenig');
+  if 0 % Enable to plot layers on echograms
+    layer_params = struct('name','surface','source','layerdata','layerdata_source','layerData_koenig');
     for idx = 2:30
-      layer_params(end+1) = struct('name',sprintf('Koenig_%d',idx),'source','layerData','layerdata_source','layerData_koenig');
+      layer_params(end+1) = struct('name',sprintf('Koenig_%d',idx),'source','layerdata','layerdata_source','layerData_koenig');
     end
   end
   param.layer_params = layer_params;
@@ -508,16 +512,14 @@ for param_idx = 1:length(params)
   master.Elevation = ds.Elevation;
 
   if ds.Latitude<0
-    ds.param_records.post.location = 'antarctic';
+    ds.param_records.post.ops.location = 'antarctic';
   else
-    ds.param_records.post.location = 'arctic';
+    ds.param_records.post.ops.location = 'arctic';
   end
   
   global gRadar;
+  param = merge_structs(param,ds.param_records);
   param = merge_structs(param,gRadar);
-  param.day_seg = ds.frm_id(1:11);
-  param.cmd.frms = ds.start_frame:ds.stop_frame;
-  param.post.ops.location = ds.param_records.post.location;
 
   surface_layer = {opsLoadLayers(param, surface_source)};
   

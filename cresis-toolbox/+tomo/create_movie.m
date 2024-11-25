@@ -39,7 +39,7 @@ for param_idx = 1:length(params)
   end
   
   % Load frames file
-  load(ct_filename_support(param,'','frames'));
+  frames = frames_load(param);
   
   if isempty(param.cmd.frms)
     param.cmd.frms = 1:length(frames.frame_idxs);
@@ -59,8 +59,7 @@ for param_idx = 1:length(params)
     try
       param.topDEM    = load(fullfile(ct_filename_out(param, options.DEM_source, ''), sprintf('%s_%03d_top',param.day_seg, frm_idx)));
       param.bottomDEM = load(fullfile(ct_filename_out(param, options.DEM_source, ''), sprintf('%s_%03d_bottom',param.day_seg, frm_idx)));
-      records_fn      = ct_filename_support(param,'','records');
-      records         = load(records_fn,'gps_time');
+      records = records_load(param,[],'gps_time');
     catch ME
       warning('Attention: DEM for reference frame %s not found. Skipping this frame.', sprintf('%s_%03d',param.day_seg, frm_idx));
       continue;

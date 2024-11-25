@@ -39,9 +39,9 @@ catch ME
   return;
 end
 % Add Blank and Google maps
-wms_maps = [{'arctic:blank_map';'antarctic:blank_map';'arctic:google_map';'antarctic:google_map'}; wms_maps(:)];
+wms_maps = [{'arctic:Blank Geodetic Map';'antarctic:Blank Geodetic  Map';'arctic:Blank Stereographic Map';'antarctic:Blank Stereographic Map';'arctic:Google Map';'antarctic:Google Map'}; wms_maps(:)];
 
-flightlines = {'layerdata Flightlines','OPS Flightlines','OPS Quality Flightlines','OPS Coverage Flightlines', 'OPS Crossover Errors','OPS Bottom Elevation'};
+flightlines = {'tracks files Flightlines','OPS Flightlines','OPS Quality Flightlines','OPS Coverage Flightlines', 'OPS Crossover Errors','OPS Bottom Elevation'};
 set(obj.h_gui.flightlinesPM,'String',flightlines);
 
 set(obj.h_gui.mapsPM,'String',wms_maps);

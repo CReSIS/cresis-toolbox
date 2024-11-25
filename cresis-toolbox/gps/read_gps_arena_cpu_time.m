@@ -46,7 +46,7 @@ function gps = read_gps_arena_cpu_time(fn, param)
 %
 % Author: John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 if ~isfield(param,'clk') || isempty(param.clk)
   param.clk = 10e6;

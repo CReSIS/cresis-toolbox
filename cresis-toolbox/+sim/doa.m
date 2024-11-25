@@ -20,6 +20,11 @@ if ~isfield(param.src,'ft_wind') || isempty(param.src.ft_wind)
   param.src.ft_wind = @boxcar;
 end
 
+if ~isfield(param.src,'sv_dielectric') || isempty(param.src.sv_dielectric)
+  param.src.sv_dielectric = 1;
+end
+
+
 %% Setup
 % =========================================================================
 

@@ -112,7 +112,7 @@ classdef ice_mask_edit < handle
         %         obj.mdata.twtt = param.mdata.twtt;
         %         obj.mdata.theta = param.mdata.theta;
         %         obj.mdata.ice_mask = param.mdata.ice_mask;
-        %         obj.mdata.param_combine = param.mdata.param_combine;
+        %         obj.mdata.param_array = param.mdata.param_array;
         %         rmfield(param,'mdata');
         obj.mdata = param.mdata;
       end
@@ -728,7 +728,7 @@ classdef ice_mask_edit < handle
       if isempty(obj.mdata_loaded) || ~obj.mdata_loaded
         %% load data
         % convert from FCS to proj
-        origin_ecef = obj.mdata.param_combine.array_param.fcs{1}{1}.origin(:,:);
+        origin_ecef = obj.mdata.param_array.array_param.fcs{1}{1}.origin(:,:);
         physical_constants;
         [origin_lat,origin_lon] = ecef2geodetic(origin_ecef(1,:),origin_ecef(2,:),origin_ecef(3,:),WGS84.ellipsoid);
         origin_lat = origin_lat*180/pi;
@@ -750,11 +750,11 @@ classdef ice_mask_edit < handle
         intersect_ecef_all = zeros([3,Nt,Nr]);
         for rline = 1:Nr
           
-          Tfcs_ecef = [obj.mdata.param_combine.array_param.fcs{1}{1}.x(:,rline), ...
-            obj.mdata.param_combine.array_param.fcs{1}{1}.y(:,rline), ...
-            obj.mdata.param_combine.array_param.fcs{1}{1}.z(:,rline)];
+          Tfcs_ecef = [obj.mdata.param_array.array_param.fcs{1}{1}.x(:,rline), ...
+            obj.mdata.param_array.array_param.fcs{1}{1}.y(:,rline), ...
+            obj.mdata.param_array.array_param.fcs{1}{1}.z(:,rline)];
           
-          dir = [zeros(1,Nt) ; sin(obj.mdata.theta) ; -cos(obj.mdata.theta)];
+          dir = [zeros(Nt,1), sin(obj.mdata.theta), -cos(obj.mdata.theta)].';
           for row = 1:Nt
             dir(:,row) = dir(:,row)/norm(dir(:,row));
           end

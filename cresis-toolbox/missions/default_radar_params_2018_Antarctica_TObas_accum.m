@@ -1,10 +1,12 @@
 function param = default_radar_params_2018_Antarctica_TObas_accum
 % param = default_radar_params_2018_Antarctica_TObas_accum
 %
-% Accum: 2018_Antarctica_TObas
+% Accum: 2018_Antarctica_TObas and 2019_Antarctica_TObas
 %
 % Creates base "param" struct
 % Creates defaults cell array for each type of radar setting
+%
+% Set the param.season_name to the correct season before running.
 %
 % Author: John Paden
 
@@ -216,8 +218,6 @@ default.array.rline_rng = -5:5;
 default.array.dbin = 1;
 default.array.dline = 6;
 default.array.DCM = [];
-default.array.three_dim.en = 0;
-default.array.three_dim.layer_fn = '';
 default.array.Nsv = 1;
 default.array.theta_rng = [0 0];
 default.array.sv_fh = @array_proc_sv;
@@ -227,7 +227,7 @@ default.array.Nsig = 2;
 %% Radar worksheet
 default.radar.adc_bits = 14;
 default.radar.Vpp_scale = 1.5; % Digital receiver gain is 5, full scale Vpp is 2
-default.radar.Tadc_adjust = 8.3042e-06; % System time delay: leave this empty or set it to zero at first, determine this value later using data over surface with known height or from surface multiple
+default.radar.Tadc_adjust = -189e-9; % System time delay: leave this empty or set it to zero at first, determine this value later using data over surface with known height or from surface multiple
 default.radar.lever_arm_fh = @lever_arm;
 % default.radar.wfs(1).adc_gains_dB = 27; % Gain from the first LNA to the ADC
 % default.radar.wfs(2).adc_gains_dB = 45; % Gain from the first LNA to the ADC

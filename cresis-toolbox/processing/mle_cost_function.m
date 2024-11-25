@@ -28,11 +28,41 @@ function val = mle_cost_function(theta, param)
 % See also:  array_proc.m, mle_compute_cost.m, mle_initialization.m
 % =========================================================================
 
-c = 2.997924580003452e+08; % physical_constants too slow
 
-if ~isfield(param,'proj_mtx_update')
+%% mle_cost_function:  Input checks
+% =========================================================================
+if ~isfield(param,'sv_fh') || isempty(param.sv_fh)
+  param.sv_fh = @array_proc_sv;
+end
+
+if ~isfield(param,'sv_dielectric') || isempty(param.sv_dielectric)
+  param.sv_dielectric =1;
+end
+
+if ~isfield(param,'lut') || isempty(param.lut)
+  param.lut = [];
+end
+
+if ~isfield(param,'lut_roll') || isempty(param.lut_roll)
+  param.lut_roll = [];
+end
+
+if ~isfield(param,'doa_seq') || isempty(param.doa_seq)
+  param.doa_seq = false;
+end
+
+if ~isfield(param,'apriori') || isempty(param.apriori)
+  param.apriori.en = false;
+  param.apriori.theta_range = [];
+  param.apriori.mean_doa = [];
+  param.apriori.var_doa = [];
+end
+  
+if ~isfield(param,'proj_mtx_update') || isempty(param.proj_mtx_update)
   param.proj_mtx_update = false;
 end
+  
+c = 2.997924580003452e+08; % physical_constants too slow
 
 % Force theta to be a row vector in preparation for inner product
 theta = theta(:).';
@@ -42,13 +72,9 @@ if param.proj_mtx_update
   % Setup steering vectors for the fixed
   theta_eval = [param.theta_fixed(:).',theta];
   theta_eval = theta_eval(:).';   % make theta have the right dimensions
-  Nsv2{1} = 'theta';
-  Nsv2{2} = theta_eval;
-  [~,SVs] = array_proc_sv(Nsv2,param.fc,param.y_pc,param.z_pc);
-%   k     = 4*pi*param.fc/c;
-%   ky    = k*sin(theta_eval).';
-%   kz    = k*cos(theta_eval).';
-%   SVs   = (1/sqrt(length(param.y_pc)))*exp(1i*(param.y_pc*ky - param.z_pc*kz));
+  sv_opt_arg.theta = theta_eval;
+  sv_arg ={param.fc*param.sv_dielectric, param.y_pc, param.z_pc, sv_opt_arg, param.lut, param.lut_roll};
+  [~,SVs] = param.sv_fh(sv_arg{:});
   A     = SVs(:,1:numel(param.theta_fixed)); % Nc x (Nsrc - 1)
   C     = SVs(:,numel(param.theta_fixed)+1:end); % Nc x 1 (always)
   Pa    = A* inv(A' * A) * A'; % Nc x Nc
@@ -57,21 +83,19 @@ if param.proj_mtx_update
   L     = trace(B'*param.Rxx*B);
   
 else
-  DCM = param.Rxx;
+  Rxx = param.Rxx;
   M = param.Nsrc;
-  Nsv2{1} = 'theta';
-  Nsv2{2} = theta;
-  [~,A] = array_proc_sv(Nsv2,param.fc,param.y_pc,param.z_pc);
-%   k = 4*pi*param.fc/c;
-%   A = sqrt(1/length(param.y_pc)) * exp(1i*k*(-param.z_pc*cos(theta) + param.y_pc*sin(theta)));
+  sv_opt_arg.theta = theta;
+  sv_arg={param.fc*sqrt(param.sv_dielectric),param.y_pc,param.z_pc, sv_opt_arg, param.lut, param.lut_roll};
+  [~,A] = param.sv_fh(sv_arg{:});
   Pa  = A * inv(A'*A) * A';
   if param.doa_seq && param.apriori.en
-    L = -(M*size(A,1)) * log(abs(sum(sum((eye(size(Pa))-Pa) .* DCM.'))));
+    L = -(M*size(A,1)) * log(abs(sum(sum((eye(size(Pa))-Pa) .* Rxx.'))));
   else
-    L = abs(sum(sum(Pa .* DCM.')));
+    L = abs(sum(sum(Pa .* Rxx.')));
   end
-%   L = -abs(trace((eye(size(Pa))-Pa)*DCM)); % Mohanad
-%   L = abs(trace(Pa*DCM)); % Wax
+%   L = -abs(trace((eye(size(Pa))-Pa)*Rxx)); % Mohanad
+%   L = abs(trace(Pa*Rxx)); % Wax
 end
 
 if param.doa_seq && param.apriori.en

@@ -10,7 +10,9 @@ function post(param, param_override)
 
 %% General Setup
 % =====================================================================
-param = merge_structs(param, param_override);
+if exist('param_override','var')
+  param = merge_structs(param, param_override);
+end
 
 fprintf('=====================================================================\n');
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
@@ -28,19 +30,7 @@ physical_constants;
 
 % Load the frames file
 frames = frames_load(param);
-
-if isempty(param.cmd.frms)
-  param.cmd.frms = 1:length(frames.frame_idxs);
-end
-% Remove frames that do not exist from param.cmd.frms list
-[valid_frms,keep_idxs] = intersect(param.cmd.frms, 1:length(frames.frame_idxs));
-if length(valid_frms) ~= length(param.cmd.frms)
-  bad_mask = ones(size(param.cmd.frms));
-  bad_mask(keep_idxs) = 0;
-  warning('Nonexistent frames specified in param.cmd.frms (e.g. frame "%g" is invalid), removing these', ...
-    param.cmd.frms(find(bad_mask,1)));
-  param.cmd.frms = valid_frms;
-end
+param.cmd.frms = frames_param_cmd_frms(param,frames);
 
 if isempty(param.cmd.frms)
   % No valid frames specified to post
@@ -56,6 +46,10 @@ end
 
 if ~isfield(param.post,'csv_en') || isempty(param.post.csv_en)
   param.post.csv_en = 0;
+end
+if param.post.concat_en && ~param.post.csv_en
+  warning('post.csv_en must be true when post.concat_en is true since concatenation uses the CSV files. Setting post.csv_en to true.');
+  param.post.csv_en = 1;
 end
 
 if ~isfield(param.post,'data_dirs') || isempty(param.post.data_dirs)
@@ -79,6 +73,12 @@ end
 
 if ~isfield(param.post,'echo_en') || isempty(param.post.echo_en)
   param.post.echo_en = false;
+end
+
+% echo_with_no_layer_en: only activated if echo_en is true. When true, an
+% echogram image file will be created with no layers plotted on it.
+if ~isfield(param.post,'echo_with_no_layer_en') || isempty(param.post.echo_with_no_layer_en)
+  param.post.echo_with_no_layer_en = true;
 end
 
 if ~isfield(param.post,'frm_types') || isempty(param.post.frm_types)
@@ -161,7 +161,10 @@ fprintf('Loading layer data (%s)\n', datestr(now));
 tmp_param = param; tmp_param.cmd.frms = []; % Get layer information for all frames
 layers = [];
 if param.post.layers_en
-  layers = opsLoadLayers(tmp_param, param.post.layers);
+  % Load layers to output
+  [layers,param.post.layers] = opsLoadLayers(tmp_param, param.post.layers);
+  % Setup output layerdata class
+  out_layers = layerdata(param, fullfile(post_path,'CSARP_layer'));
 end
 surface_layer = {opsLoadLayers(tmp_param, param.post.surface_source)};
 
@@ -369,7 +372,7 @@ for frm_idx = 1:length(param.cmd.frms)
       echo_param.fig_hand = [];
     end
     
-    echo_param.frm_id = sprintf('%s_03d', param.day_seg, frm);
+    echo_param.frm_id = sprintf('%s_%03d', param.day_seg, frm);
     
     echo_info = publish_echogram(echo_param,mdata,lay, surface_lay.layerData{1});
     for handle_idx = 1:length(echo_info.h_layers)
@@ -411,8 +414,10 @@ for frm_idx = 1:length(param.cmd.frms)
     set(echo_info.fig_hand(1),'PaperUnits','inches');
     set(echo_info.fig_hand(1),param.post.echo.plot_params{1},param.post.echo.plot_params{2});
     set(echo_info.fig_hand(1),'PaperOrientation','Portrait');
-    fprintf('    Saving output %s\n', echo_fn);
-    print(echo_info.fig_hand(1),print_device,print_dpi,echo_fn);
+    if param.post.echo_with_no_layer_en
+      fprintf('    Saving output %s\n', echo_fn);
+      print(echo_info.fig_hand(1),print_device,print_dpi,echo_fn);
+    end
     
     if param.post.pdf_en
       % Remove current file and save new file
@@ -550,14 +555,33 @@ for frm_idx = 1:length(param.cmd.frms)
   
   %% Post Loop: Create layer files
   if param.post.layers_en
-    % Copy layer file
-    layer_out_fn_dir = fullfile(post_path,sprintf('CSARP_layerData'),param.day_seg);
-    if ~exist(layer_out_fn_dir,'dir')
-      mkdir(layer_out_fn_dir)
+    % NEW FILE FORMAT
+    for layer_idx = 1:length(layers_to_post)
+      id = out_layers.get_id(layers_to_post{layer_idx}.name);
+      if isempty(id)
+        layer_organizer = [];
+        layer_organizer.age = layers_to_post{layer_idx}.age;
+        layer_organizer.age_source = {layers_to_post{layer_idx}.age_source};
+        layer_organizer.lyr_desc = {layers_to_post{layer_idx}.desc};
+        layer_organizer.lyr_group_name = {layers_to_post{layer_idx}.group_name};
+        layer_organizer.lyr_name = {layers_to_post{layer_idx}.name};
+        id = out_layers.insert_layers(layer_organizer);
+      end
+      out_layers.update_layer(frm, id, layers_to_post{layer_idx}.gps_time, ...
+        layers_to_post{layer_idx}.twtt,layers_to_post{layer_idx}.quality,layers_to_post{layer_idx}.type);
     end
-    layer_out_fn = fullfile(layer_out_fn_dir,sprintf('Data_%s.mat',frm_id));
-    
-    save(layer_out_fn,'-struct','lay','GPS_time','Latitude','Longitude','Elevation','layerData');
+    if 1
+      % OLD FILE FORMAT
+      
+      % Copy layer file
+      layer_out_fn_dir = fullfile(post_path,sprintf('CSARP_layerData'),param.day_seg);
+      if ~exist(layer_out_fn_dir,'dir')
+        mkdir(layer_out_fn_dir)
+      end
+      layer_out_fn = fullfile(layer_out_fn_dir,sprintf('Data_%s.mat',frm_id));
+      
+      save(layer_out_fn,'-struct','lay','GPS_time','Latitude','Longitude','Elevation','layerData');
+    end
   end
   
   %% Post Loop: Copy data files
@@ -611,6 +635,11 @@ for frm_idx = 1:length(param.cmd.frms)
   end
 end
 
+% Save layer files
+% =======================================================================
+if param.post.layers_en
+  out_layers.save();
+end
 
 % =======================================================================
 %% Create segment CSV/KML files
@@ -620,35 +649,25 @@ if param.post.concat_en
   fprintf(' Creating csv and kml files (%s)\n', datestr(now));
   
   csv_dir = fullfile(post_path,'csv',param.day_seg);
-  kml_base_dir = fullfile(post_path,'kml');
   
-  [csv_dir_path csv_dir_name] = fileparts(csv_dir);
-  out_fn = fullfile(csv_dir_path,sprintf('Data_%s.csv',csv_dir_name));
-  concatenate_thickness_files(csv_dir,'*.csv',out_fn,',');
-  
-  % Create KML browse files for each segment
-  % Extract day_seg from filename
-  in_fn = out_fn;
-  [in_fn_dir in_fn_name] = fileparts(in_fn);
-  kml_out_fn = fullfile(kml_base_dir, ['Browse_' in_fn_name '.kml']);
-  day_seg = in_fn_name(6:end);
-  kml_write_cresis(in_fn, kml_out_fn, day_seg,'segment',[inf 40]);
+  if ~exist(csv_dir,'dir')
+    warning('No csv files to concatenate.');
+  else
+    [csv_dir_path csv_dir_name] = fileparts(csv_dir);
+    out_fn = fullfile(csv_dir_path,sprintf('Data_%s.csv',csv_dir_name));
+    concatenate_thickness_files(csv_dir,'*.csv',out_fn,',');
+  end
   
   % Repeat for csv_good and kml_good
   csv_dir = fullfile(post_path,'csv_good',param.day_seg);
-  kml_base_dir = fullfile(post_path,'kml_good');
   
-  [csv_dir_path csv_dir_name] = fileparts(csv_dir);
-  out_fn = fullfile(csv_dir_path,sprintf('Data_%s.csv',csv_dir_name));
-  concatenate_thickness_files(csv_dir,'*.csv',out_fn,',');
-  
-  % Create KML browse files for each segment
-  % Extract day_seg from filename
-  in_fn = out_fn;
-  [in_fn_dir in_fn_name] = fileparts(in_fn);
-  kml_out_fn = fullfile(kml_base_dir, ['Browse_' in_fn_name '.kml']);
-  day_seg = in_fn_name(6:end);
-  kml_write_cresis(in_fn, kml_out_fn, day_seg,'segment',[inf 40]);
+  if ~exist(csv_dir,'dir')
+    warning('No csv files to concatenate.');
+  else
+    [csv_dir_path csv_dir_name] = fileparts(csv_dir);
+    out_fn = fullfile(csv_dir_path,sprintf('Data_%s.csv',csv_dir_name));
+    concatenate_thickness_files(csv_dir,'*.csv',out_fn,',');
+  end
 end
 
 % =======================================================================

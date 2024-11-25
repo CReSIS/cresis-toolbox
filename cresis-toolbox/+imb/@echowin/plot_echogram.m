@@ -3,16 +3,68 @@ function plot_echogram(obj,x_min,x_max,y_min,y_max)
 %
 % Plot echogram data from echogram files
 
+if ~obj.busy_mode
+  set_busy_mode = true;
+  obj.busy_mode = true;
+  set(obj.h_fig,'Pointer','watch');
+  obj.status_text_set(sprintf('(%s) Plotting echogram...', datestr(now,'HH:MM:SS')),'replace');
+  drawnow;
+else
+  set_busy_mode = false;
+end
+
 physical_constants;
+
+%% Apply optional multiple suppression
 % ======================================================================
+
+state = get(obj.left_panel.layerCM_multiple,'Checked');
+if strcmp(state,'on')
+  try
+    mult_param = struct('window_units','b');
+    pdata.Data = obj.eg.data;
+    pdata.Time = obj.eg.time;
+    pdata.Roll = obj.eg.roll;
+    pdata = echo_mult_suppress(pdata, obj.eg.surf_twtt, mult_param);
+    
+  catch ME
+    warning('Multiple suppression failed, multiple supppression properties may be incorrect. Error:\n%s', ME.getReport);
+    pdata = obj.eg.data;
+  end
+else
+  pdata = obj.eg.data;
+end
+
+%% Apply optional detrending
+% ======================================================================
+
+state = get(obj.left_panel.layerCM_detrend,'Checked');
+if strcmp(state,'on')
+  try
+    detrend_param = struct('method','polynomial','units','b');
+    detrend_param.layer_top = round(interp1(obj.eg.time,...
+      1:length(obj.eg.time),...
+      obj.eg.layers.y{obj.eg.detrend.top},'linear','extrap'));
+    detrend_param.layer_bottom = round(interp1(obj.eg.time,...
+      1:length(obj.eg.time),...
+      obj.eg.layers.y{obj.eg.detrend.bottom},'linear','extrap'));
+    detrend_param.order = obj.eg.detrend.order;
+    pdata = 10.^(echo_detrend(10*log10(pdata),detrend_param)/10);
+  catch ME
+    warning('Detrend failed, detrend properties may be incorrect. Error:\n%s', ME.getReport);
+    pdata = obj.eg.data;
+  end
+end
+
 %% Convert the data along the x-axis according to the units
+% ======================================================================
 xaxis_choice = get(obj.left_panel.xaxisPM,'Value');
 if xaxis_choice == 1 % rangeline
   % update image_xaxis and image_gps_time
   obj.eg.image_xaxis = 1:length(obj.eg.gps_time);
   obj.eg.image_gps_time = obj.eg.gps_time;
   % update image_data according to xaxis_gpstime
-  obj.eg.image_data = obj.eg.data;
+  obj.eg.image_data = pdata;
   % update x label
   obj.eg.x_label = 'Range Line';
   
@@ -27,7 +79,7 @@ elseif xaxis_choice == 2 % Along track
     along_track_uniform,'linear');
   % update image_data according to image_gps_time
   obj.eg.image_data = interp1(obj.eg.gps_time,...
-    obj.eg.data.',obj.eg.image_gps_time,'linear').';
+    pdata.',obj.eg.image_gps_time,'linear').';
   % update x label
   obj.eg.x_label = 'Along track (km)';
   
@@ -41,7 +93,7 @@ elseif xaxis_choice == 3 % GPS time
   obj.eg.image_xaxis = gps_time_uniform;
   % update display_data according to xaxis_gpstime
   obj.eg.image_data = interp1(obj.eg.gps_time,...
-    obj.eg.data.',obj.eg.image_gps_time,'linear').';
+    pdata.',obj.eg.image_gps_time,'linear').';
   % update x label
   obj.eg.x_label = 'GPS time';
 end
@@ -54,8 +106,11 @@ obj.eg.image_surf_twtt = interp1(obj.eg.gps_time,obj.eg.surf_twtt,obj.eg.image_g
 
 obj.eg.image_ecef = zeros(3,length(obj.eg.image_gps_time));
 [obj.eg.image_ecef(1,:),obj.eg.image_ecef(2,:),obj.eg.image_ecef(3,:)] ...
-  = geodetic2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,obj.eg.image_elev,WGS84.ellipsoid);
-[z_vec_x,z_vec_y,z_vec_z] = geodetic2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,obj.eg.image_elev-1,WGS84.ellipsoid);
+  = ct_lla2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,zeros(size(obj.eg.image_elev)));
+[z_vec_x,z_vec_y,z_vec_z] = ct_lla2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,obj.eg.image_elev-1);
+% [obj.eg.image_ecef(1,:),obj.eg.image_ecef(2,:),obj.eg.image_ecef(3,:)] ...
+%   = geodetic2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,zeros(size(obj.eg.image_elev)),WGS84.ellipsoid);
+% [z_vec_x,z_vec_y,z_vec_z] = geodetic2ecef(obj.eg.image_lat/180*pi,obj.eg.image_lon/180*pi,obj.eg.image_elev-1,WGS84.ellipsoid);
 
 obj.eg.image_y_vec = zeros(3,length(obj.eg.image_gps_time));
 obj.eg.image_z_vec = zeros(3,length(obj.eg.image_gps_time));
@@ -86,7 +141,7 @@ if yaxis_choice == 1 % TWTT
   % update yaxis and yaxis_time
   obj.eg.image_yaxis = obj.eg.time*1e6;
   % update y label
-  obj.eg.y_label = 'Two-way Propagation (\mus)';
+  obj.eg.y_label = 'Two-way propagation (\mus)';
   obj.eg.y_order = 'reverse';
   
 elseif yaxis_choice == 2 % WGS_84 Elevation
@@ -96,7 +151,7 @@ elseif yaxis_choice == 2 % WGS_84 Elevation
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,obj.eg.image_gps_time,'linear');
   physical_constants;
-  elev_max = max(elevation - time(1)*vel_air);
+  elev_max = max(elevation - surface*vel_air - (time(1)-surface)*vel_ice);
   elev_min = min(elevation - surface*vel_air - (time(end)-surface)*vel_ice);
   dt = time(2) - time(1);
   drange = dt * vel_ice;
@@ -170,14 +225,16 @@ elseif yaxis_choice == 5 % Surface flat
   depth_uniform = (depth_min:d_depth:depth_max).'; % depth axis we will interpolate onto
   % update image_data
   Nt = size(obj.eg.image_data,1);
-  obj.eg.image_data = [obj.eg.image_data;...
-    zeros(length(depth_uniform)-Nt,size(obj.eg.image_data,2))];
+  % HACK: Not sure why, but using new_img instead of obj.eg.image_data speeds
+  % this code up in some situations
+  new_img = zeros(length(depth_uniform), size(obj.eg.image_data,2));
   for idx = 1:length(surface)
     depth = min(0,time-surface(idx)) * vel_air ...
       + max(0,time-surface(idx)) * vel_ice;
-    obj.eg.image_data(:,idx) = interp1(depth,...
-      obj.eg.image_data(1:Nt,idx),depth_uniform,'linear');
+    new_img(:,idx) = interp1(depth,...
+      obj.eg.image_data(:,idx),depth_uniform,'linear');
   end
+  obj.eg.image_data = new_img;
   % update image_yaxis
   obj.eg.image_yaxis = depth_uniform;
   % update y label
@@ -228,6 +285,18 @@ end
 ylim(obj.h_axes,sort([y_min y_max]))
 
 %% Apply the display mode
-obj.left_panel.imagewin.set_cdata(obj.eg.image_data);
+% obj.left_panel.imagewin.set_cdata(obj.eg.image_data); % <-- This might be
+% needed: If so, document the need better when it is uncommented because
+% this is the second call to set_cdata.
+
+if set_busy_mode
+  obj.busy_mode = false;
+  if obj.zoom_mode
+    set(obj.h_fig,'Pointer','custom');
+  else
+    set(obj.h_fig,'Pointer','Arrow');
+  end
+  obj.status_text_set(sprintf(' done. (%s)', datestr(now,'HH:MM:SS')),'append');
+end
 
 end

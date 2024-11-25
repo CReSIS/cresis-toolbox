@@ -26,7 +26,7 @@ fprintf('=====================================================================\n
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
 fprintf('=====================================================================\n');
 
-%% Input Checks
+%% Input Checks: cmd
 % =====================================================================
 
 if ~isempty(param.cmd.frms)
@@ -34,13 +34,11 @@ if ~isempty(param.cmd.frms)
   param.cmd.frms = []; % All frames
 end
 
+%% Input Checks: analysis
+% =====================================================================
+
 if ~isfield(param,'analysis') || isempty(param.analysis)
   error('The analysis field (worksheet) is missing.');
-end
-
-if ~isfield(param.analysis,'bit_mask') || isempty(param.analysis.bit_mask)
-  % Set to 3 to mask out stationary and bad records (useful for coherent noise estimation on ground based data that may have stationary records)
-  param.analysis.bit_mask = 1;
 end
 
 if ~isfield(param.analysis,'block_size') || isempty(param.analysis.block_size)
@@ -64,15 +62,24 @@ if ~isfield(param.analysis,'presums') || isempty(param.analysis.presums)
   param.analysis.presums = 1;
 end
 
+if ~isfield(param.analysis,'resample') || isempty(param.analysis.resample)
+  param.analysis.resample = [1 1; 1 1];
+end
+if ~isequal(param.analysis.resample(2,1:2),[1 1])
+  error('The bottom row of param.analysis.resample must be [1 1] because resampling in the along-track is not supported. Use line_rng and dline instead.');
+end
+
 if ~isfield(param.analysis,'surf_layer') || isempty(param.analysis.surf_layer)
   param.analysis.surf_layer.name = 'surface';
-  param.analysis.surf_layer.source = 'layerData';
+  param.analysis.surf_layer.source = 'layerdata';
 end
 % Never check for the existence of files
 param.analysis.surf_layer.existence_check = false;
 
+%% Input Checks: analysis.cmd
+% =====================================================================
 % For each command in the list, set its default settings
-enabled_cmds = 0;
+enabled_cmds = {};
 for cmd_idx = 1:length(param.analysis.cmd)
   cmd = param.analysis.cmd{cmd_idx};
   
@@ -82,7 +89,6 @@ for cmd_idx = 1:length(param.analysis.cmd)
   if ~cmd.en
     continue;
   end
-  enabled_cmds = enabled_cmds + 1;
   
   if ~isfield(cmd,'out_path') || isempty(cmd.out_path)
     cmd.out_path = param.analysis.out_path;
@@ -161,7 +167,89 @@ for cmd_idx = 1:length(param.analysis.cmd)
   cmd.method = lower(cmd.method);
   switch cmd.method
     case {'burst_noise'}
+      % Set defaults for burst noise analysis method
+      
+      % max_bad_waveforms: wf-adc recorded waveforms/range-lines with burst
+      % noise detected are saved, but only up to this many. Set to inf to
+      % save all waveforms with burst noise detected.
+      if ~isfield(cmd,'max_bad_waveforms') || isempty(cmd.max_bad_waveforms)
+        cmd.max_bad_waveforms = 100;
+      end
+      
+      % noise_fh: This function is used to create the temporary variable
+      % data_noise in analysis burst. This output is available to test_fh
+      % and threshold_fh.
       %
+      % Examples:
+      %  cmd.noise_fh{img} = @(raw_data,wfs) lp(fir_dec(fir_dec(abs(raw_data.').^2,ones(1,11)/11,1).',ones(1,101)/101,1));
+      %  cmd.noise_fh{img} = @(raw_data,wfs) lp(medfilt2(abs(raw_data).^2,[11 101]));
+      %  cmd.noise_fh{img} = @(raw_data,wfs) [];
+      if ~isfield(cmd,'noise_fh') || isempty(cmd.noise_fh)
+        for img = 1:length(param.analysis.imgs)
+          cmd.noise_fh{img} = @(raw_data,wfs) lp(fir_dec(fir_dec(abs(raw_data.').^2,ones(1,11)/11,1).',ones(1,101)/101,1));
+        end
+      end
+      
+      % signal_fh: This function is used to create the temporary variable
+      % data_signal in analysis burst. This output is available to test_fh
+      % and threshold_fh.
+      %
+      % Examples:
+      %  cmd.signal_fh{img} = @(raw_data,wfs) lp(fir_dec(abs(raw_data.').^2,ones(1,11)/11,1).');
+      %  cmd.signal_fh{img} = @(raw_data,wfs) lp(abs(raw_data).^2,1));
+      %  cmd.signal_fh{img} = @(raw_data,wfs) lp(abs(fft(raw_data(300:end,:))).^2);
+      %  cmd.signal_fh{img} = @(raw_data,wfs) [];
+      if ~isfield(cmd,'signal_fh') || isempty(cmd.signal_fh)
+        for img = 1:length(param.analysis.imgs)
+          cmd.signal_fh{img} = @(raw_data,wfs) lp(fir_dec(abs(raw_data.').^2,ones(1,11)/11,1).');
+        end
+      end
+
+      % test_fh: This function is used to create the output variable
+      % test_metric in analysis burst. This output is available to
+      % threshold_fh and is also stored in the output file.
+      %
+      % Examples:
+      %  cmd.test_fh{img} = @(data_signal,data_noise,wfs) max(data_signal-data_noise,[],1);
+      %  cmd.test_fh{img} = @(data_signal,data_noise,wfs) data_signal-data_noise;
+      %  cmd.test_fh{img} = @(data_signal,data_noise,wfs)% max(data_signal(10:end-9,:))-median(data_signal(10:end-9,:));
+      %  cmd.test_fh{img} = @(raw_data,wfs) [];
+      if ~isfield(cmd,'test_fh') || isempty(cmd.test_fh)
+        for img = 1:length(param.analysis.imgs)
+          cmd.test_fh{img} = @(data_signal,data_noise,wfs) max(data_signal-data_noise,[],1);
+        end
+      end
+
+      % test_fh: This function is used to create the temporary variable
+      % bad_samples in analysis burst. If the output is a row vector, then
+      % it is assumed to be a mask of the bad records (interpretation is
+      % that the entire record is bad). If the output is a matrix, then it
+      % is assumed to be a mask of the bad samples (interpretation is that
+      % just those samples are bad and not the whole record).
+      %
+      % Examples:
+      %  cmd.threshold_fh{img} = @(data_signal,data_noise,test_metric,wfs) data_noise > 80;
+      %  cmd.threshold_fh{img} = @(data_signal,data_noise,test_metric,wfs) test_metric > 20;
+      %  cmd.threshold_fh{img} = @(data_signal,data_noise,test_metric,wfs) repmat(data_signal-data_noise > 20,[wfs.Nt_raw 1]);
+      %  cmd.threshold_fh{img} = @(data_signal,data_noise,test_metric,wfs) max(data_signal(10:end-9,:))-median(data_signal(10:end-9,:));
+      if ~isfield(cmd,'threshold_fh') || isempty(cmd.threshold_fh)
+        for img = 1:length(param.analysis.imgs)
+          cmd.threshold_fh{img} = @(data_signal,data_noise,test_metric,wfs) test_metric > 20;
+        end
+      end
+      
+      % valid_bins: Restricts the range of bins where burst detections are
+      % allowed to occur. The default is [1 inf] which allows burst
+      % detections anywhere in the range line. Typical usage would be to
+      % exclude the feedthrough or nadir surface signal that may be large
+      % and variable and lead to false alarms if it is nonstationary.
+      if ~isfield(cmd,'valid_bins') || isempty(cmd.valid_bins)
+        cmd.valid_bins = {};
+        for img = 1:length(param.analysis.imgs)
+          cmd.valid_bins{img} = [1 inf];
+        end
+      end
+
     case {'coh_noise'}
       % Set defaults for coherent noise analysis method
       
@@ -171,6 +259,15 @@ for cmd_idx = 1:length(param.analysis.cmd)
       if mod(param.analysis.block_size,cmd.block_ave)
         error('The param.analysis.block_size (%d) must be a multiple of cmd.block_ave (%d).', ...
           param.analysis.block_size, cmd.block_ave);
+      end
+      
+      % distance_weight: default is false; if true, then the coherent
+      % averaging is weighted by the distance travelled. This is primarily
+      % useful for ground based traverses where long stops can bias the
+      % coherent noise estimate. Setting this to true will reduce the
+      % affect the long stops have on the estimated coherent noise mean.
+      if ~isfield(cmd,'distance_weight') || isempty(cmd.distance_weight)
+        cmd.distance_weight = false;
       end
       
       if ~isfield(cmd,'mag_en') || isempty(cmd.mag_en)
@@ -196,6 +293,12 @@ for cmd_idx = 1:length(param.analysis.cmd)
         end
       end
       
+      if ~isfield(cmd,'threshold_coh_ave')
+        cmd.threshold_coh_ave = 1;
+      elseif mod(cmd.threshold_coh_ave-1,2)
+        error('param.analysis.cmd{%d}.threshold_coh_ave must be odd; currently %g.', cmd_idx, cmd.threshold_coh_ave);
+      end
+      
       if ~isfield(cmd,'threshold_removeDC') || isempty(cmd.threshold_removeDC)
         % Default is to not remove slow-time DC before determining good
         % samples to use in coh_ave and coh_ave_mag
@@ -209,28 +312,62 @@ for cmd_idx = 1:length(param.analysis.cmd)
     case {'specular'}
       % Set defaults for specular analysis method
       
+      % cmd.gps_times: vector of GPS times in ANSI C format (seconds since
+      % Jan 1, 1970) for which the STFT block will automatically have its
+      % waveform extracted even if the cmd.threshold is not exceeded.
       if ~isfield(cmd,'gps_times') || isempty(cmd.gps_times)
         cmd.gps_times = [];
       end
       
+      % cmd.max_rlines: maximum number of STFT waveforms to extract (so
+      % even if there are more than cmd.max_rlines blocks which detect a
+      % coherent/specular scatterer only the first cmd.max_rlines will be
+      % extracted for deconvolution)
       if ~isfield(cmd,'max_rlines') || isempty(cmd.max_rlines)
         cmd.max_rlines = 10;
       end
       
+      % cmd.rlines: STFT block size, the data are broken into 50%
+      % overlapping blocks of this length to detect coherent/specular
+      % scatterers using a short time Fourier transform
       if ~isfield(cmd,'rlines') || isempty(cmd.rlines)
         cmd.rlines = 128;
       end
       
+      % cmd.noise_doppler_bins: bins of STFT to use for clutter power
+      % detection
+      guard = round(cmd.rlines/32);
       if ~isfield(cmd,'noise_doppler_bins') || isempty(cmd.noise_doppler_bins)
-        cmd.noise_doppler_bins = [12:cmd.rlines-11];
+        cmd.noise_doppler_bins = [1+3*guard:cmd.rlines-3*guard];
       end
       
+      % cmd.signal_doppler_bins: bins of STFT to use for signal power
+      % estimation
       if ~isfield(cmd,'signal_doppler_bins') || isempty(cmd.signal_doppler_bins)
-        cmd.signal_doppler_bins = [1:4 cmd.rlines+(-3:0)];
+        cmd.signal_doppler_bins = [1:guard cmd.rlines+(-guard+1:0)];
       end
       
+      % cmd.threshold: peakiness threshold to decide whether or not to
+      % extract the waveform from a particular STFT block. This is in dB
+      % and is the ratio (peak signal to mean noise/clutter power):
+      % peakiness = lp(max(abs(H(cmd.signal_doppler_bins,:)).^2) ./ mean(abs(H(cmd.noise_doppler_bins,:)).^2));
       if ~isfield(cmd,'threshold') || isempty(cmd.threshold)
         cmd.threshold = 40;
+      end
+      
+      % cmd.peak_sgolay_filt: cell array with 2 elements containing the
+      % 2nd and 3rd input arguments to sgolayfilt that is used to filter
+      % the peak values in the along-track dimension. This ensures that the
+      % frame size to sgolayfilt.m is odd and is approximately 40% of the
+      % length of the cmd.rlines.
+      if ~isfield(cmd,'peak_sgolay_filt') || isempty(cmd.peak_sgolay_filt)
+        cmd.peak_sgolay_filt = {3,round(0.2*cmd.rlines)*2+1};
+      end
+      if length(cmd.peak_sgolay_filt) < 2
+        cmd.peak_sgolay_filt{2} = round(0.2*cmd.rlines)*2+1;
+      end
+      if ~mod(cmd.peak_sgolay_filt{2},2)
+        cmd.peak_sgolay_filt{2} = cmd.peak_sgolay_filt{2}+1;
       end
       
     case {'statistics'}
@@ -290,11 +427,29 @@ for cmd_idx = 1:length(param.analysis.cmd)
   
   % Update the command structure
   param.analysis.cmd{cmd_idx} = cmd;
+  enabled_cmds{end+1} = cmd.method;
 end
 
-if enabled_cmds == 0
+if isempty(enabled_cmds)
   ctrl_chain = {};
   return;
+end
+
+if ~isfield(param.analysis,'bit_mask') || isempty(param.analysis.bit_mask)
+  % Set to 3 to mask out stationary and bad records (useful for coherent noise estimation on ground based data that may have stationary records)
+  if all(strcmp('coh_noise',enabled_cmds))
+    % Remove bad records (bit_mask==1), remove stationary records
+    % (bit_mask==2), and remove bad records (bit_mask==4)
+    param.analysis.bit_mask = 1 + 2 + 4;
+  elseif all(strcmp('burst_noise',enabled_cmds))
+    % Remove bad records (bit_mask==1), leave stationary records
+    % (bit_mask==2), and leave bad records (bit_mask==4)
+    param.analysis.bit_mask = 1;
+  else
+    % Remove bad records (bit_mask==1), leave stationary records
+    % (bit_mask==2), and remove bad records (bit_mask==4)
+    param.analysis.bit_mask = 1 + 4;
+  end
 end
 
 %% Setup processing
@@ -304,8 +459,7 @@ end
 [~,~,radar_name] = ct_output_dir(param.radar_name);
 
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 % Apply presumming
 if param.analysis.presums > 1
   records.lat = fir_dec(records.lat,param.analysis.presums);
@@ -315,7 +469,6 @@ if param.analysis.presums > 1
   records.pitch = fir_dec(records.pitch,param.analysis.presums);
   records.heading = fir_dec(records.heading,param.analysis.presums);
   records.gps_time = fir_dec(records.gps_time,param.analysis.presums);
-  records.surface = fir_dec(records.surface,param.analysis.presums);
 end
 
 % Compute all estimates with pulse compressed numbers even though raw data
@@ -342,6 +495,11 @@ elseif any(strcmpi(radar_name,{'snow','kuband','snow2','kuband2','snow3','kuband
   cpu_time_mult = 4e-8;
   mem_mult = 17;
   
+elseif strcmpi(radar_name,'snow9')
+  total_num_sam = 45000 * ones(size(param.analysis.imgs));
+  cpu_time_mult = 4e-8;
+  mem_mult = 17;
+  
 else
   error('radar_name %s not supported yet.', radar_name);
   
@@ -364,7 +522,15 @@ for img = 1:length(param.analysis.imgs)
       
     switch cmd.method
       case {'burst_noise'}
-        %
+        for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
+          wf = param.analysis.imgs{img}(wf_adc,1);
+          adc = param.analysis.imgs{img}(wf_adc,2);
+          out_fn = fullfile(out_segment_fn_dir,sprintf('burst_noise_%s_wf_%d_adc_%d.mat',param.day_seg,wf,adc));
+          combine_file_success{end+1} = out_fn;
+          if ~ctrl.cluster.rerun_only && exist(out_fn,'file')
+            ct_file_lock_check(out_fn,3);
+          end
+        end
         
       case {'coh_noise'}
         for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
@@ -474,7 +640,7 @@ for break_idx = 1:length(breaks)
   dparam.file_success = {};
   success_error = 64;
   % Loading in the data: cpu_time and mem
-  dparam.mem = 250e6;
+  dparam.mem = 500e6;
   for img = 1:length(param.analysis.imgs)
     dparam.cpu_time = dparam.cpu_time + 10 + size(param.analysis.imgs{img},1)*Nx*total_num_sam(img)*log2(Nx)*cpu_time_mult;
     dparam.mem = dparam.mem + size(param.analysis.imgs{img},1)*Nx*total_num_sam(img)*mem_mult;
@@ -498,7 +664,20 @@ for break_idx = 1:length(breaks)
       % Process commands
       switch cmd.method
         case {'burst_noise'}
-          %
+          for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
+            wf = param.analysis.imgs{img}(wf_adc,1);
+            adc = param.analysis.imgs{img}(wf_adc,2);
+            out_fn = fullfile(tmp_out_fn_dir,sprintf('burst_noise_wf_%d_adc_%d_%d_%d.mat',wf,adc,actual_cur_recs));
+            dparam.file_success{end+1} = out_fn;
+            if ~ctrl.cluster.rerun_only && exist(out_fn,'file')
+              delete(out_fn);
+            end
+            dparam.cpu_time = dparam.cpu_time + 10 + Nx*total_num_sam(img)*log2(Nx)*cpu_time_mult;
+            dparam.mem = max(dparam.mem,data_load_memory + Nx*total_num_sam(img)*mem_mult);
+            if isempty(cmd_method_str)
+              cmd_method_str = '_burst_noise';
+            end
+          end
 
         case {'coh_noise'}
           for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
@@ -590,8 +769,8 @@ for break_idx = 1:length(breaks)
   
   % Rerun only mode: Test to see if we need to run this task
   % =================================================================
-  dparam.notes = sprintf('%s%s:%s:%s %s %d of %d recs %d-%d', ...
-    mfilename, cmd_method_str, param.radar_name, param.season_name, param.day_seg, ...
+  dparam.notes = sprintf('%s%s %s:%s:%s %s %d of %d recs %d-%d', ...
+    mfilename, cmd_method_str, param.analysis.cmd{1}.out_path, param.radar_name, param.season_name, param.day_seg, ...
     break_idx, length(breaks), actual_cur_recs);
   if ctrl.cluster.rerun_only
     % If we are in rerun only mode AND the analysis task file success
@@ -658,13 +837,17 @@ for img = 1:length(param.analysis.imgs)
   
     switch cmd.method
       case {'burst_noise'}
-        %
+        for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
+          num_sam_hint = 1;
+          sparam.cpu_time = sparam.cpu_time + Nx*num_sam_hint*log2(Nx)*cpu_time_mult;
+          sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx*num_sam_hint*mem_mult);
+        end
         
       case {'coh_noise'}
         Nx_cmd = Nx / cmd.block_ave;
         for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
           sparam.cpu_time = sparam.cpu_time + Nx_cmd*num_sam_hint*log2(Nx_cmd)*cpu_time_mult;
-          sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult);
+          sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult);
         end
         
       case {'qlook'}
@@ -677,14 +860,14 @@ for img = 1:length(param.analysis.imgs)
         Nx_cmd = Nx / param.analysis.block_size * cmd.max_rlines;
         for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
           sparam.cpu_time = sparam.cpu_time + Nx_cmd*num_sam_hint*log2(Nx_cmd)*cpu_time_mult;
-          sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult*1.5);
+          sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult*1.5);
         end
         
       case {'statistics'}
         Nx_cmd = Nx / cmd.block_ave;
         for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
           sparam.cpu_time = sparam.cpu_time + Nx_cmd*num_sam_hint*log2(Nx_cmd)*cpu_time_mult;
-          sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult);
+          sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_cmd*num_sam_hint*mem_mult);
         end
         
       case {'waveform'}
@@ -696,20 +879,18 @@ for img = 1:length(param.analysis.imgs)
         end
         for wf_adc = param.analysis.cmd{cmd_idx}.wf_adcs{img}(:).'
           sparam.cpu_time = sparam.cpu_time + Nx_cmd*Nt*log2(Nx_cmd)*cpu_time_mult;
-          sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_cmd*Nt*mem_mult);
+          sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_cmd*Nt*mem_mult);
         end
         
     end
   end
 end
 sparam.file_success = combine_file_success;
-sparam.notes = sprintf('%s:%s:%s %s combine', ...
-  mfilename, param.radar_name, param.season_name, param.day_seg);
+sparam.notes = sprintf('%s %s:%s:%s %s combine', ...
+  mfilename, param.analysis.cmd{1}.out_path, param.radar_name, param.season_name, param.day_seg);
 
 ctrl = cluster_new_task(ctrl,sparam,[]);
 
 ctrl_chain{end+1} = ctrl;
     
 fprintf('Done %s\n', datestr(now));
-
-return

@@ -2,7 +2,9 @@ function lidar_fns = get_filenames_lidar(param,lidar_source,gps_time)
 % lidar_fns = get_filenames_lidar(param,lidar_source,gps_time)
 %
 % Gets a cell array of absolute filename strings for LIDAR files. Works
-% with AWI LIDAR and DTU LIDAR data.
+% with AWI LIDAR and DTU LIDAR data. Also works with generic LAS files. For
+% LAS files, see read_lidar_las.m to see how these files must be setup for
+% this to work.
 %
 % Input:
 %   param: structure controlling which LIDAR files are loaded
@@ -54,7 +56,18 @@ elseif strcmpi(lidar_source,'awi_L2B')
     lidar_fns(end+(1:length(new_fns)),1) = new_fns;
   end
 
-else
+elseif strcmpi(lidar_source,'las')
+  [year month day] = datevec(epoch_to_datenum(gps_time(1)));
+  day_of_year_start = datenum(year,month,day) - datenum(year,0,0);
+  [year month day] = datevec(epoch_to_datenum(gps_time(end)));
+  day_of_year_end = datenum(year,month,day) - datenum(year,0,0);
+  lidar_fns = {};
+  for day_of_year = day_of_year_start:day_of_year_end
+    new_fns = get_filenames(in_base_path, datestr(datenum(year,0,day_of_year),'yyyymmdd'), '', '.las');
+    lidar_fns(end+(1:length(new_fns)),1) = new_fns;
+  end
+
+else % strcmpi(lidar_source,'dtu')
   % dec.hour(UTC) latitude longitude  elevation  amplitude  #points/swath  GPS.h  range
   [year month day] = datevec(epoch_to_datenum(gps_time(1)));
   day_of_year_start = datenum(year,month,day) - datenum(year,0,0);

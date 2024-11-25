@@ -23,23 +23,38 @@ physical_constants;
 
 %% basic_noise_analysis preparation
 [fn_dir fn_name] = fileparts(fn);
-if ~isfield(param,'seg') || isempty(param.seg)
-  param.seg = '';
+
+if ~isfield(param,'basic_noise_analysis')
+  param.basic_noise_analysis = [];
 end
-if ~isfield(param,'noise_burst_removal') || isempty(param.noise_burst_removal)
-  param.noise_burst_removal = 0;
+
+if ~isfield(param.basic_noise_analysis,'seg') || isempty(param.basic_noise_analysis.seg)
+  param.basic_noise_analysis.seg = '';
 end
+
+if ~isfield(param.basic_noise_analysis,'psd_en') || isempty(param.basic_noise_analysis.psd_en)
+  param.basic_noise_analysis.psd_en = true;
+end
+
+if ~isfield(param.basic_noise_analysis,'pdf_en') || isempty(param.basic_noise_analysis.pdf_en)
+  param.basic_noise_analysis.pdf_en = false;
+end
+
+if ~isfield(param.basic_noise_analysis,'noise_burst_removal') || isempty(param.basic_noise_analysis.noise_burst_removal)
+  param.basic_noise_analysis.noise_burst_removal = 0;
+end
+
 clear data_tmp;
 
 default_noise_rbins = 1:size(data,1);
-if ~isfield(param,'noise_rbins') || isempty(param.noise_rbins)
+if ~isfield(param.basic_noise_analysis,'noise_rbins') || isempty(param.basic_noise_analysis.noise_rbins)
   noise_rbins = default_noise_rbins;
-elseif param.noise_rbins(end) > size(data,1)
-  noise_rbins = param.noise_rbins(1):size(data,1);
-elseif param.noise_rbins(1) <= 0
-  noise_rbins = size(data,1)+param.noise_rbins;
+elseif param.basic_noise_analysis.noise_rbins(end) > size(data,1)
+  noise_rbins = param.basic_noise_analysis.noise_rbins(1):size(data,1);
+elseif param.basic_noise_analysis.noise_rbins(1) <= 0
+  noise_rbins = size(data,1)+param.basic_noise_analysis.noise_rbins;
 else
-  noise_rbins = param.noise_rbins(1):param.noise_rbins(end);
+  noise_rbins = param.basic_noise_analysis.noise_rbins(1):param.basic_noise_analysis.noise_rbins(end);
 end
 noise_rbins = intersect(noise_rbins,default_noise_rbins);
 
@@ -77,55 +92,55 @@ fprintf('1: Choose the black box (high altitude)\n');
 fprintf('2: Choose the red box (low altitude)\n');
 fprintf('Custom: Enter with square brackets two numbers to choose the start\n');
 fprintf('   and stop bin for the noise region. For example "[3400 %d]".\n', 3400+Nt_noise);
-param.noise_rbins = [];
-while any(size(param.noise_rbins) ~= [1 2])
+param.basic_noise_analysis.noise_rbins = [];
+while any(size(param.basic_noise_analysis.noise_rbins) ~= [1 2])
   try
-    param.noise_rbins = input(sprintf('[%d]: ', default_box));
-    if isempty(param.noise_rbins)
+    param.basic_noise_analysis.noise_rbins = input(sprintf('[%d]: ', default_box));
+    if isempty(param.basic_noise_analysis.noise_rbins)
       if noise_power_highalt > noise_power_lowalt
-        param.noise_rbins = box_lowalt;
+        param.basic_noise_analysis.noise_rbins = box_lowalt;
       else
-        param.noise_rbins = box_highalt;
+        param.basic_noise_analysis.noise_rbins = box_highalt;
       end
-    elseif length(param.noise_rbins) == 1
-      if param.noise_rbins == 2
-        param.noise_rbins = box_lowalt;
+    elseif length(param.basic_noise_analysis.noise_rbins) == 1
+      if param.basic_noise_analysis.noise_rbins == 2
+        param.basic_noise_analysis.noise_rbins = box_lowalt;
       else
-        param.noise_rbins = box_highalt;
+        param.basic_noise_analysis.noise_rbins = box_highalt;
       end
     end
-    param.noise_rbins = sort(param.noise_rbins);
+    param.basic_noise_analysis.noise_rbins = sort(param.basic_noise_analysis.noise_rbins);
   end
 end
 
 default_noise_rbins = 1:size(data,1);
-if ~isfield(param,'noise_rbins') || isempty(param.noise_rbins)
+if ~isfield(param.basic_noise_analysis,'noise_rbins') || isempty(param.basic_noise_analysis.noise_rbins)
   noise_rbins = default_noise_rbins;
-elseif param.noise_rbins(end) > size(data,1)
-  noise_rbins = param.noise_rbins(1):size(data,1);
-elseif param.noise_rbins(1) <= 0
-  noise_rbins = size(data,1)+param.noise_rbins;
+elseif param.basic_noise_analysis.noise_rbins(end) > size(data,1)
+  noise_rbins = param.basic_noise_analysis.noise_rbins(1):size(data,1);
+elseif param.basic_noise_analysis.noise_rbins(1) <= 0
+  noise_rbins = size(data,1)+param.basic_noise_analysis.noise_rbins;
 else
-  noise_rbins = param.noise_rbins(1):param.noise_rbins(end);
+  noise_rbins = param.basic_noise_analysis.noise_rbins(1):param.basic_noise_analysis.noise_rbins(end);
 end
 noise_rbins = intersect(noise_rbins,default_noise_rbins);
 
 %% Convert from quantization to voltage @ ADC and Additional software presums
 for wf_adc = 1:size(data,3)
-  wf = abs(param.img(wf_adc,1));
+  wf = abs(param.config.img(wf_adc,1));
 
   % Quantization to voltage
   data(:,:,wf_adc) = data(:,:,wf_adc) ...
-    * default.radar.adc_full_scale/2^default.radar.adc_bits ...
+    * default.radar.Vpp_scale/2^default.radar.adc_bits ...
     * 2^hdr.wfs(abs(wf)).bit_shifts / hdr.wfs(wf).presums;
 
   % Software presums
-  data(:,1:floor(size(data,2)/param.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.presums);
+  data(:,1:floor(size(data,2)/param.config.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.config.presums);
 end
-data = data(:,1:floor(size(data,2)/param.presums),:);
+data = data(:,1:floor(size(data,2)/param.config.presums),:);
 
 %% Noise Burst Removal
-if param.noise_burst_removal
+if param.basic_noise_analysis.noise_burst_removal
   noise_burst_removal;
 end
 
@@ -136,30 +151,38 @@ end
 [output_dir,radar_type,radar_name] = ct_output_dir(param.radar_name);
 if strcmp(radar_name,'mcords5') && isfield(hdr,'DDC') && hdr.DDC(1) >= 2
   % Add 3 dB for IQ combination
-  fprintf('Expected ADC noise floor @ ADC %.1f dBm\n', lp((default.radar.adc_full_scale/2/sqrt(2))^2/50,1)+30 - default.radar.adc_SNR_dB + 3 );
-  fprintf('Expected Rx noise floor @ ADC %.1f dBm\n', lp(BoltzmannConst*290*hdr.BW_noise*default.radar.noise_figure*10^(hdr.rx_gain/10),1) + 3 +30);
+  fprintf('Expected ADC noise floor @ ADC %.1f dBm\n', lp((default.radar.Vpp_scale/2/sqrt(2))^2/50,1)+30 - param.config.adc_SNR_dB + 3 );
+  fprintf('Expected Rx noise floor @ ADC %.1f dBm\n', lp(BoltzmannConst*290*hdr.BW_noise*param.config.noise_figure*10^(hdr.rx_gain/10),1) + 3 +30);
 else
-  fprintf('Expected ADC noise floor @ ADC %.1f dBm\n', lp((default.radar.adc_full_scale/2/sqrt(2))^2/50,1)+30 - default.radar.adc_SNR_dB );
-  fprintf('Expected Rx noise floor @ ADC %.1f dBm\n', lp(BoltzmannConst*290*hdr.BW_noise*default.radar.noise_figure*10^(hdr.rx_gain/10),1)+30);
+  fprintf('Expected ADC noise floor @ ADC %.1f dBm\n', lp((default.radar.Vpp_scale/2/sqrt(2))^2/50,1)+30 - param.config.adc_SNR_dB );
+  fprintf('Expected Rx noise floor @ ADC %.1f dBm\n', lp(BoltzmannConst*290*hdr.BW_noise*param.config.noise_figure*10^(hdr.rx_gain/10),1)+30);
 end
 fprintf('All powers are compensated to mimic no presums.\n');
 fprintf('Noise power (dBm) at each ADC rx input and relative to 50 ohm (dB):\n')
 noise_power_dBm = zeros(1,size(data,3));
 default_noise_50ohm = zeros(1,size(data,3));
 for wf_adc = 1:size(data,3)
-  wf = abs(param.img(wf_adc,1));
-  adc = abs(param.img(wf_adc,2));
+  wf = abs(param.config.img(wf_adc,1));
+  adc = abs(param.config.img(wf_adc,2));
   noise_power_dBm(wf_adc) = lp(mean(mean(abs(data(noise_rbins,:,wf_adc)).^2/50, 1), 2) ...
-    * hdr.wfs(wf).presums * param.presums, 1) + 30;
-  default_noise_50ohm(wf_adc) = default.noise_50ohm(default.radar.rx_paths(adc));
+    * hdr.wfs(wf).presums * param.config.presums, 1) + 30;
+  if isfield(default.radar.wfs,'rx_paths')
+    if length(default.radar.wfs) >= wf
+      default_noise_50ohm(wf_adc) = param.config.noise_50ohm(default.radar.wfs(wf).rx_paths(adc));
+    else
+      default_noise_50ohm(wf_adc) = param.config.noise_50ohm(default.radar.wfs(1).rx_paths(adc));
+    end
+  else
+    default_noise_50ohm(wf_adc) = param.config.noise_50ohm(default.radar.rx_paths(adc));
+  end
 end
-fprintf('wf-adc\t'); fprintf('%2.0f-%2.0f\t', param.img.'); fprintf('\n');
+fprintf('wf-adc\t'); fprintf('%2.0f-%2.0f\t', param.config.img.'); fprintf('\n');
 fprintf('Noise \t'); fprintf('%+5.1f\t', noise_power_dBm); fprintf('\n');
 fprintf('Rel   \t'); fprintf('%+5.1f\t', noise_power_dBm - default_noise_50ohm); fprintf('\n');
 
 %% Quantization analysis
 % =====================================================================
-if param.pdf_en
+if param.basic_noise_analysis.pdf_en
   for wf_adc = 1:size(data,3)
     figure(wf_adc); clf;
     plot(real(data(:,1,wf_adc)),'.');
@@ -196,7 +219,7 @@ end
 
 %% Power Spectrum
 % =====================================================================
-if param.psd_en
+if param.basic_noise_analysis.psd_en
   plot_combined_psd = true;
   combined_psd_cmap = hsv(size(data,3));
   combined_psd_legend = {};
@@ -205,10 +228,10 @@ if param.psd_en
   end
   
   for wf_adc = 1:size(data,3)
-    wf = abs(param.img(wf_adc,1));
-    adc = abs(param.img(wf_adc,2));
+    wf = abs(param.config.img(wf_adc,1));
+    adc = abs(param.config.img(wf_adc,2));
     
-    fir_data = fir_dec(data(noise_rbins(1):noise_rbins(end),:,wf_adc),param.presums);
+    fir_data = fir_dec(data(noise_rbins(1):noise_rbins(end),:,wf_adc),param.config.presums);
     
     if strcmp(radar_name,'mcords5') && isfield(hdr,'DDC') && hdr.DDC(1) >= 2
       dt = pc_param.time(2) - pc_param.time(1);
@@ -219,7 +242,7 @@ if param.psd_en
       figure(400+adc); clf;
       set(400+adc,'WindowStyle','docked','NumberTitle','off','Name',sprintf('M%d',wf_adc));
       plot(freq/1e6, lp(mean(abs(fftshift(fft(fir_data),1)).^2*2^2 / 50,2)/size(fir_data,1)) + 30)
-      title(sprintf('MeanFFT adc%d ave%d %s/%s', adc, param.presums, param.seg, fn_name),'Interpreter','none');
+      title(sprintf('MeanFFT adc%d ave%d %s/%s', adc, param.config.presums, param.basic_noise_analysis.seg, fn_name),'Interpreter','none');
       ylabel('Relative power (dB)');
       xlabel('Frequency (MHz)');
       grid on;
@@ -231,7 +254,7 @@ if param.psd_en
       figure(300+adc); clf;
       set(300+adc,'WindowStyle','docked','NumberTitle','off','Name',sprintf('FFT%d',wf_adc));
       imagesc([], freq/1e6, lp(fftshift(fft(fir_data),1)) + 30 + 10*log10(2^2/50/size(fir_data,1)) )
-      title(sprintf('Freq-space adc%d ave%d %s/%s', adc, param.presums, param.seg, fn_name),'Interpreter','none');
+      title(sprintf('Freq-space adc%d ave%d %s/%s', adc, param.config.presums, param.basic_noise_analysis.seg, fn_name),'Interpreter','none');
       xlabel('Range line');
       ylabel('Frequency (MHz)');
       h = colorbar;
@@ -258,7 +281,7 @@ if param.psd_en
       figure(300+adc); clf;
       set(300+adc,'WindowStyle','docked','NumberTitle','off','Name',sprintf('FFT%d',wf_adc));
       imagesc([], freq/1e6, lp(fft(fir_data)) + 30 + 10*log10(2^2/50/size(fir_data,1)) )
-      title(sprintf('Freq-space adc%d ave%d %s/%s', adc, param.presums, param.seg, fn_name),'Interpreter','none');
+      title(sprintf('Freq-space adc%d ave%d %s/%s', adc, param.config.presums, param.basic_noise_analysis.seg, fn_name),'Interpreter','none');
       xlabel('Range line');
       ylabel('Frequency (MHz)');
       if fc<(freq(1)+freq(end))/2
@@ -272,7 +295,7 @@ if param.psd_en
       figure(400+adc); clf;
       set(400+adc,'WindowStyle','docked','NumberTitle','off','Name',sprintf('M%d',wf_adc));
       plot(freq/1e6, lp(mean(abs(fft(fir_data)).^2*2^2 / 50,2)/size(fir_data,1)) + 30)
-      title(sprintf('MeanFFT adc%d ave%d %s/%s', adc, param.presums, param.seg, fn_name),'Interpreter','none');
+      title(sprintf('MeanFFT adc%d ave%d %s/%s', adc, param.config.presums, param.basic_noise_analysis.seg, fn_name),'Interpreter','none');
       ylabel('Relative power (dB)');
       xlabel('Frequency (MHz)');
       if fc<(freq(1)+freq(end))/2
@@ -288,10 +311,12 @@ if param.psd_en
       end
     end
   end
+  link_figures(300+(1:size(data,3)));
+  link_figures(400+(1:size(data,3)));
 end
 if plot_combined_psd
   legend(h_psd_axes,combined_psd_legend,'location','best')
-  title(sprintf('PSD All ave%d %s/%s', param.presums, param.seg, fn_name),'Interpreter','none','parent',h_psd_axes);
+  title(sprintf('PSD All ave%d %s/%s', param.config.presums, param.basic_noise_analysis.seg, fn_name),'Interpreter','none','parent',h_psd_axes);
 end
 
 %% Done

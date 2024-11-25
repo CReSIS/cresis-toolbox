@@ -26,15 +26,15 @@ if obj.map.fline_source==1
   if ~isempty(season_match)
     season_match = find(cellfun(@(x) ~isempty(regexpi(x,season_match)), obj.cur_map_pref_settings.seasons));
     % Get a logical mask indicating all indices that match the frame
-    frm_mask = floor(obj.layerdata.frm_id/10^(13-length(frm_id_str))) == frm_id;
-    season_mask = false(size(obj.layerdata.season_idx));
+    frm_mask = floor(obj.trackdata.frm_id/10^(13-length(frm_id_str))) == frm_id;
+    season_mask = false(size(obj.trackdata.season_idx));
     for idx = 1:length(season_match)
-      season_mask = season_mask | obj.layerdata.season_idx == season_match(idx);
+      season_mask = season_mask | obj.trackdata.season_idx == season_match(idx);
     end
     frm_mask = frm_mask & season_mask;
   else
     % Get a logical mask indicating all indices that match the frame
-    frm_mask = floor(obj.layerdata.frm_id/10^(13-length(frm_id_str))) == frm_id;
+    frm_mask = floor(obj.trackdata.frm_id/10^(13-length(frm_id_str))) == frm_id;
   end
   
   % Find the first matching frame in the list
@@ -44,8 +44,8 @@ if obj.map.fline_source==1
     return;
   end
   % Extract out frame, system, and season name
-  frm_id = obj.layerdata.frm_id(idx);
-  season_idx = obj.layerdata.season_idx(idx);
+  frm_id = obj.trackdata.frm_id(idx);
+  season_idx = obj.trackdata.season_idx(idx);
   season_name = obj.cur_map_pref_settings.seasons{season_idx};
   [sys,season_name] = strtok(season_name,'_');
   season_name = season_name(2:end);
@@ -63,8 +63,8 @@ if obj.map.fline_source==1
     data.properties.frame = frm_str;
     data.properties.season = season_name;
     data.properties.segment_id = str2num(frm_id(1:10));
-    data.properties.X = obj.layerdata.x(frm_mask);
-    data.properties.Y = obj.layerdata.y(frm_mask);
+    data.properties.X = obj.trackdata.x(frm_mask);
+    data.properties.Y = obj.trackdata.y(frm_mask);
     new_xdata = data.properties.X;
     new_ydata = data.properties.Y;    
   else
@@ -84,8 +84,8 @@ if obj.map.fline_source==1
     data.properties.frame = frm_str;
     data.properties.season = frm_data.properties.season;
     data.properties.segment_id = frm_data.properties.segment_id;
-    data.properties.X = obj.layerdata.x(frm_mask);
-    data.properties.Y = obj.layerdata.y(frm_mask);
+    data.properties.X = obj.trackdata.x(frm_mask);
+    data.properties.Y = obj.trackdata.y(frm_mask);
     new_xdata = data.properties.X;
     new_ydata = data.properties.Y;
   end

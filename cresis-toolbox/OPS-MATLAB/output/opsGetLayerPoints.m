@@ -14,7 +14,9 @@ function [status,data] = opsGetLayerPoints(sys,param)
 %       properties.segment = string
 %
 % OR INSTEAD OF THE ABOVE
-%     properties.point_path_id: integer array
+%     properties.location = string ('arctic' or 'antarctic')
+%     properties.point_path_id: integer array as row vector
+%       (also requires location, season, segment_id currently...)
 %
 % OPTIONAL:
 %     properties.start_gps_time = double

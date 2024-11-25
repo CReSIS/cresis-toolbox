@@ -10,10 +10,12 @@
 %% User Settings
 % =====================================================================
 
-params = read_param_xls(ct_filename_param('rds_param_2019_Antarctica_Ground.xls'));
+% params = read_param_xls(ct_filename_param('rds_param_2012_Greenland_P3.xls'));
+params = read_param_xls(ct_filename_param('snow_param_2012_Greenland_P3.xls'));
 
 params = ct_set_params(params,'cmd.generic',0);
-params = ct_set_params(params,'cmd.generic',1,'day_seg','20200107_01');
+% params = ct_set_params(params,'cmd.generic',1,'day_seg','20120330_03');
+params = ct_set_params(params,'cmd.generic',1,'day_seg','20120330_04');
 
 layer_params = [];
 idx = 0;
@@ -29,10 +31,18 @@ if 0
   layer_params(idx).echogram_source = 'qlook';
 
 elseif 1
-  %% Load a single layer from the layerData file
+  %% Load two layers from the layerData file
   ref_idx = 1;
   idx = idx + 1;
-  layer_params(idx).name = 'surface';
+  layer_params(idx).name = {'surface','bottom'};
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
+
+elseif 0
+  %% Load two layers from the layerData file
+  ref_idx = 1;
+  idx = idx + 1;
+  layer_params(idx).name = {'surface','layer.*'};
   layer_params(idx).source = 'layerdata';
   layer_params(idx).layerdata_source = 'layer';
 
@@ -51,7 +61,7 @@ elseif 0
   layer_params(idx).name = 'surface';
   layer_params(idx).source = 'records';
  
-elseif 1
+elseif 0
   %% Compare echogram and custom layers in layerData
   ref_idx = 1;
   idx = idx + 1;
@@ -92,6 +102,36 @@ elseif 0
   idx = idx + 1;
   layer_params(idx).name = 'surface';
   layer_params(idx).source = 'lidar';
+elseif 0
+  %% load surface, bottom and MacGregor layers
+  ref_idx = 1;
+  idx = idx + 1;
+  layer_params(idx).name = 'surface';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
+  idx = idx + 1;
+  layer_params(idx).name = 'bottom';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
+  idx = idx + 1;
+  layer_params(idx).regexp = 'L';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer_MacGregor';
+else
+  %% load surface, bottom and snow layers
+  ref_idx = 1;
+  idx = idx + 1;
+  layer_params(idx).name = 'surface';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
+  idx = idx + 1;
+  layer_params(idx).name = 'bottom';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
+  idx = idx + 1;
+  layer_params(idx).regexp = 'snow';
+  layer_params(idx).source = 'layerdata';
+  layer_params(idx).layerdata_source = 'layer';
 end
 
 % =====================================================================
@@ -103,6 +143,8 @@ global gRadar;
 %% Load each of the day segments
 layers = {};
 day_seg = {};
+params_list = {};
+new_layer_params = [];
 for param_idx = 1:length(params)
   param = params(param_idx);
   if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) ...
@@ -115,6 +157,7 @@ for param_idx = 1:length(params)
   fprintf('opsLoadLayers %s\n', param.day_seg);
   [layers{end+1},new_layer_params] = opsLoadLayers(param,layer_params);
   day_seg{end+1} = param.day_seg;
+  params_list{end+1} = param;
 end
 layer_params = new_layer_params;
 
@@ -162,28 +205,30 @@ if 1
         || isempty(layer_params(ref_idx).twtt_offset)
       layer_params(ref_idx).twtt_offset = 0;
     end
+
     figure(1); clf;
     h_axes = axes('Parent',1);
-    h_plot = plot(layers{seg_idx}(ref_idx).gps_time, ...
+    [~,ref_frm,~] = get_frame_id(params_list{seg_idx},layers{seg_idx}(ref_idx).gps_time,struct('segment_id_num',true));
+    h_plot = plot(ref_frm, ...
       layers{seg_idx}(ref_idx).twtt + layer_params(ref_idx).twtt_offset, ...
       'k.','Parent',h_axes);
     title(sprintf('%s', day_seg{seg_idx}),'Interpreter','none','Parent',h_axes);
     legend_strs = {sprintf('Ref %d', ref_idx)};
     hold(h_axes,'on');
     grid(h_axes,'on');
-    xlabel('GPS time (sec)','Parent',h_axes);
+    xlabel('Frame','Parent',h_axes);
     ylabel('TWTT (us)','Parent',h_axes);
     
     figure(2); clf(2);
     h_axes_comp = axes('Parent',2);
-    h_plot_comp = plot(layers{seg_idx}(ref_idx).gps_time, ...
+    h_plot_comp = plot(ref_frm, ...
       layers{seg_idx}(ref_idx).twtt_ref + layer_params(ref_idx).twtt_offset ...
       - (layers{seg_idx}(ref_idx).twtt_ref + layer_params(ref_idx).twtt_offset), ...
       'k.','Parent',h_axes_comp);
     title(sprintf('%s', day_seg{seg_idx}),'Interpreter','none','Parent',h_axes_comp);
     hold(h_axes_comp,'on');
     grid(h_axes_comp,'on');
-    xlabel('GPS time (sec)','Parent',h_axes_comp);
+    xlabel('Frame','Parent',h_axes_comp);
     ylabel('TWTT Difference (us)','Parent',h_axes_comp);
     
     fprintf('Layer Index\tMedian Offset\tMean Offset\n');
@@ -194,12 +239,13 @@ if 1
         layer_params(lay_idx).twtt_offset = 0;
       end
       
-      h_plot(end+1) = plot(layers{seg_idx}(lay_idx).gps_time, ...
+      [~,lay_frm,~] = get_frame_id(params_list{seg_idx},layers{seg_idx}(lay_idx).gps_time,struct('segment_id_num',true));
+      h_plot(end+1) = plot(lay_frm, ...
         layers{seg_idx}(lay_idx).twtt + layer_params(lay_idx).twtt_offset, ...
         plot_modes{mod(lay_idx-1,length(plot_modes))+1},'Parent',h_axes);
       legend_strs{end+1} = sprintf('Layer %d', lay_idx);
 
-      h_plot_comp(end+1) = plot(layers{seg_idx}(ref_idx).gps_time, ...
+      h_plot_comp(end+1) = plot(ref_frm, ...
         layers{seg_idx}(lay_idx).twtt_ref + layer_params(lay_idx).twtt_offset ...
         - (layers{seg_idx}(ref_idx).twtt_ref + layer_params(ref_idx).twtt_offset), ...
         plot_modes{mod(lay_idx-1,length(plot_modes))+1},'Parent',h_axes_comp);
@@ -233,7 +279,7 @@ if 0
   for seg_idx = 1:length(layers)
 
     figure(1); clf;
-    plot(layers{seg_idx}(2).gps_time, layers{seg_idx}(ref_idx).twtt, 'k.');
+    plot(layers{seg_idx}(ref_idx).gps_time, layers{seg_idx}(ref_idx).twtt, 'k.');
     title(sprintf('%s', day_seg{seg_idx}),'Interpreter','none');
     hold on;
     for lay_idx = lay_idxs
@@ -243,7 +289,7 @@ if 0
     h_axis = gca;
     grid on
     xlabel('GPS time (sec)');
-    ylabel('TWTT ({\mieu}s)');
+    ylabel('TWTT ({\mu}s)','interpreter','tex');
     
     figure(2); clf;
     plot(layers{seg_idx}(ref_idx).gps_time, layers{seg_idx}(ref_idx).twtt, '.');
@@ -256,7 +302,7 @@ if 0
     end
     h_axis(2) = gca;
     xlabel('GPS time (sec)');
-    ylabel('TWTT ({\mieu}s)');
+    ylabel('TWTT ({\mu}s)','interpreter','tex');
     
     figure(3); clf;
     for lay_idx = lay_idxs
@@ -275,7 +321,7 @@ if 0
     hold off;
     h_axis(3) = gca;
     xlabel('GPS time (sec)');
-    ylabel('TWTT ({\mieu}s)');
+    ylabel('TWTT ({\mu}s)','interpreter','tex');
     fprintf('\n');
 
     linkaxes(h_axis,'x');

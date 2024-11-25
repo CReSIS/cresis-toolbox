@@ -48,4 +48,5 @@ else
     obj.h_gui.min_slider.set_value(clims(1));
     obj.h_gui.max_slider.set_value(clims(end));
   end
+  
 end

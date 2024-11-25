@@ -39,7 +39,9 @@ function ctrl_chain = array(param,param_override)
 
 %% General Setup
 % =====================================================================
-param = merge_structs(param, param_override);
+if exist('param_override','var')
+  param = merge_structs(param, param_override);
+end
 
 fprintf('=====================================================================\n');
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
@@ -73,7 +75,10 @@ end
 %  {{[1 1],[1 2],[1 3],[1 4],[1 5]},{[2 1],[2 2],[2 3],[2 4],[2 5]}}
 %  If the image is a cell array it describes multilooking across apertures
 if ~iscell(param.array.imgs{1})
-  % No special multilooking, reformat old syntax to new multilooking syntax
+  % param.array.imgs is not using multilooking syntax; reformat
+  % param.array.imgs non-multilooking syntax to multilooking syntax to
+  % ensure param.array.imgs is always in the multilooking syntax. This
+  % makes coding easier since the format is always the same.
   for img = 1:length(param.array.imgs)
     param.array.imgs{img} = {param.array.imgs{img}};
   end
@@ -102,13 +107,28 @@ if ~isfield(param.array,'chunk_len') || isempty(param.array.chunk_len)
   end
 end
 
+if ~isfield(param.array,'fcs_pos_averaged') || isempty(param.array.fcs_pos_averaged)
+  param.array.fcs_pos_averaged = true;
+end
+
 if ~isfield(param.array,'frm_types') || isempty(param.array.frm_types)
   param.array.frm_types = {-1,-1,-1,-1,-1};
+end
+
+if ~isfield(param.array,'ft_over_sample') || isempty(param.array.ft_over_sample)
+  param.array.ft_over_sample = 1;
 end
 
 if ~isfield(param.array,'img_comb') || isempty(param.array.img_comb)
   param.array.img_comb = [];
 end
+
+% Check img_comb length
+if ~isempty(param.array.img_comb) && length(param.array.img_comb) ~= 3*(length(param.array.imgs)-1)
+  error('param.array.img_comb not the right length. Since it is not empty, there should be 3 entries for each image combination interface ([Tpd second image for surface saturation, -inf for second image blank, Tpd first image to avoid roll off] is typical).');
+end
+
+param = img_combine_input_check(param,'array');
 
 if ~isfield(param.array,'in_path') || isempty(param.array.in_path)
   param.array.in_path = 'sar';
@@ -116,10 +136,6 @@ end
 
 if ~isfield(param.array,'out_path') || isempty(param.array.out_path)
   param.array.out_path = param.array.method;
-end
-
-if ~isfield(param.array,'fcs_pos_averaged') || isempty(param.array.fcs_pos_averaged)
-  param.array.fcs_pos_averaged = true;
 end
 
 if ~isfield(param.array,'presums') || isempty(param.array.presums)
@@ -131,6 +147,10 @@ if ~isfield(param.array,'presums') || isempty(param.array.presums)
   else
     param.array.presums = param.sar.presums;
   end
+end
+
+if ~isfield(param.array,'radiometric_corr_dB') || isempty(param.array.radiometric_corr_dB)
+  param.array.radiometric_corr_dB = NaN;
 end
 
 if ~isfield(param.array,'sar_type') || isempty(param.array.sar_type)
@@ -187,6 +207,14 @@ if ~isfield(param.array,'fcs_pos_averaged') || isempty(param.array.fcs_pos_avera
   end
 end
 
+if ~isfield(param.array,'sv_model') || isempty(param.array.sv_model)
+  param.array.sv_model = 'ideal';
+end
+
+if ~isfield(param.array,'sv_lut_path') || isempty(param.array.sv_lut_path)
+  param.array.sv_lut_path = 'analysis';
+end
+
 %% Setup processing
 % =====================================================================
 
@@ -197,8 +225,7 @@ end
 array_out_dir = ct_filename_out(param, param.array.out_path);
 
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 % Apply presumming
 if param.sar.presums > 1
   records.lat = fir_dec(records.lat,param.sar.presums);
@@ -227,8 +254,10 @@ cluster_compile({'array_task.m','array_combine_task.m'},ctrl.cluster.hidden_depe
 total_num_sam_input = zeros(size(param.array.imgs));
 total_num_sam_output = zeros(size(param.array.imgs));
 if param.array.tomo_en
-  Nsv = param.array.Nsv;
+  % Accounts for "Data" and "Tomo.img"
+  Nsv = 1 + param.array.Nsv;
 else
+  % Accounts for "Data"
   Nsv = 1;
 end
 if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3'}))
@@ -240,9 +269,9 @@ if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3
       for ml_idx = 1:length(param.array.imgs{img})
         num_chan = num_chan + size(param.array.imgs{img}{ml_idx},1);
       end
-      total_num_sam_output(img) = total_num_sam_output(img) + wfs(wf).Nt/param.array.dbin*num_chan;
+      total_num_sam_output(img) = total_num_sam_output(img) + wfs(wf).Nt/param.array.dbin*num_chan*param.array.ft_over_sample;
     else
-      total_num_sam_output(img) = total_num_sam_output(img) + wfs(wf).Nt/param.array.dbin*Nsv;
+      total_num_sam_output(img) = total_num_sam_output(img) + wfs(wf).Nt/param.array.dbin*Nsv*param.array.ft_over_sample;
     end
     
     for ml_idx = 1:length(param.array.imgs{img})
@@ -252,22 +281,22 @@ if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3
         * size(param.array.imgs{img}{ml_idx},1) * numel(param.array.subaps{img}{ml_idx});
     end
   end
-  cpu_time_mult = 6e-9;
-  mem_mult = 32;
+  cpu_time_mult = 1e-9;
+  mem_mult = 40;
   
 elseif any(strcmpi(radar_name,{'snow','kuband','snow2','kuband2','snow3','kuband3','kaband','kaband3','snow5','snow8'}))
   estimated_num_sam = 32000;
   for img = 1:length(param.array.imgs)
     wf = param.array.imgs{img}{1}(1,1);
-    total_num_sam_output(img) = total_num_sam_output(img) + estimated_num_sam/param.array.dbin*Nsv;
+    total_num_sam_output(img) = total_num_sam_output(img) + estimated_num_sam/param.array.dbin*Nsv*param.array.ft_over_sample;
     for ml_idx = 1:length(param.array.imgs{img})
       wf = param.array.imgs{img}{ml_idx}(1,1);
       total_num_sam_input(img) = total_num_sam_input(img) + estimated_num_sam ...
-        * size(param.array.imgs{img}{ml_idx},1) * numel(param.array.subaps{img}{ml_idx});
+        * size(param.array.imgs{img}{ml_idx},1) * numel(param.array.subaps{img}{ml_idx}) * param.array.ft_over_sample;
     end
   end
   cpu_time_mult = 4e-9;
-  mem_mult = 32;
+  mem_mult = 40;
   
 else
   error('radar_name %s not supported yet.', radar_name);
@@ -275,24 +304,33 @@ else
 end
 
 cpu_time_method_mult = 0;
+Nsv_mult = 0;
 for method_idx = 1:length(param.array.method)
   switch (param.array.method(method_idx))
     case STANDARD_METHOD
       cpu_time_method_mult = cpu_time_method_mult + 1;
+      Nsv_mult = Nsv_mult + 0.2;
     case MVDR_METHOD
-      cpu_time_method_mult = cpu_time_method_mult + 4;
+      cpu_time_method_mult = cpu_time_method_mult + 1.5;
+      Nsv_mult = Nsv_mult + 0.2;
     case MUSIC_METHOD
-      cpu_time_method_mult = cpu_time_method_mult + 6;
+      cpu_time_method_mult = cpu_time_method_mult + 1.5;
+      Nsv_mult = Nsv_mult + 0.2;
     case GEONULL_METHOD
       cpu_time_method_mult = cpu_time_method_mult + 8;
+      Nsv_mult = Nsv_mult + 0.2;
     case GSLC_METHOD
       cpu_time_method_mult = cpu_time_method_mult + 8;
+      Nsv_mult = Nsv_mult + 0.2;
     case SNAPSHOT_METHOD
       cpu_time_method_mult = cpu_time_method_mult + 32;
+      Nsv_mult = Nsv_mult + 0.2;
     case MLE_METHOD
       cpu_time_method_mult = cpu_time_method_mult + 480;
+      Nsv_mult = Nsv_mult + 1;
     otherwise
       cpu_time_method_mult = cpu_time_method_mult + 1;
+      Nsv_mult = Nsv_mult + 0.2;
   end
 end
 cpu_time_mult = cpu_time_mult * cpu_time_method_mult;
@@ -301,7 +339,6 @@ cpu_time_mult = cpu_time_mult * cpu_time_method_mult;
 sparam.argsin{1} = param; % Static parameters
 sparam.task_function = 'array_task';
 sparam.num_args_out = 1;
-prev_frm_num_chunks = [];
 for frm_idx = 1:length(param.cmd.frms);
   frm = param.cmd.frms(frm_idx);
   
@@ -355,6 +392,28 @@ for frm_idx = 1:length(param.cmd.frms);
     warning('Frame %d length (%g m) is smaller than the param.array.chunk_len (%g m), there could be problems. Consider making the chunk length smaller for this frame. Possibly the frame is too small and should be combined with a neighboring frame.', frm_dist, param.array.chunk_len);
     num_chunks = 1;
   end
+
+  % Determine number of chunks in the previous frame
+  if frm == 1
+    prev_frm_num_chunks = 0;
+  else
+    % Current frame goes from the start record specified in the frames file
+    % to the record just before the start record of the next frame.  For
+    % the last frame, the stop record is just the last record in the segment.
+    prev_frm_start_rec = ceil(frames.frame_idxs(frm-1)/param.sar.presums);
+    if frm-1 < length(frames.frame_idxs)
+      prev_frm_stop_rec = ceil((frames.frame_idxs(frm)-1)/param.sar.presums);
+    else
+      prev_frm_stop_rec = length(records.gps_time);
+    end
+    
+    prev_frm_frm_dist = along_track_approx(prev_frm_stop_rec) - along_track_approx(prev_frm_start_rec);
+    prev_frm_num_chunks = round(prev_frm_frm_dist / param.array.chunk_len);
+    if prev_frm_num_chunks == 0
+      warning('Previous frame %d length (%g m) is smaller than the param.array.chunk_len (%g m), there could be problems. Consider making the chunk length smaller for this frame. Possibly the frame is too small and should be combined with a neighboring frame.', frm_dist, param.array.chunk_len);
+      prev_frm_num_chunks = 1;
+    end
+  end
   
   %% Process each chunk (unless it is a skip frame)
   for chunk_idx = 1:num_chunks*~skip_frame
@@ -381,7 +440,7 @@ for frm_idx = 1:length(param.cmd.frms);
     % Rerun only mode: Test to see if we need to run this task
     % =================================================================
     dparam.notes = sprintf('%s %s:%s:%s %s_%03d (%d of %d)/%d of %d', ...
-      sparam.task_function, array_proc_method_str(param.array.method(1)), param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
+      sparam.task_function, param.array.out_path, param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
       chunk_idx, num_chunks);
     if ctrl.cluster.rerun_only
       % If we are in rerun only mode AND the array task file success
@@ -402,17 +461,27 @@ for frm_idx = 1:length(param.cmd.frms);
     Nx = round(frm_dist / num_chunks / param.sar.sigma_x);
     dparam.cpu_time = 0;
     dparam.mem = 0;
+    [~,max_img] = max(total_num_sam_output);
     for img = 1:length(param.array.imgs)
-      dparam.cpu_time = dparam.cpu_time + 10 + Nx*total_num_sam_input(img)*total_num_sam_output(img)*cpu_time_mult;
+      dparam.cpu_time = dparam.cpu_time + 10 + Nx*total_num_sam_input(img)*total_num_sam_output(img)*cpu_time_mult/Nsv*(1 + (Nsv-1)*Nsv_mult);
       % Take the max of the input data size and the output data size
-      dparam.mem = max(dparam.mem,250e6 + Nx*total_num_sam_input(img)*mem_mult ...
+      dparam.mem = max(dparam.mem,500e6 + Nx*total_num_sam_input(img)*mem_mult ...
         + Nx/param.array.dline*total_num_sam_output(img)*mem_mult );
+      if img == max_img
+        % Account for the fact that any command operating on the whole
+        % image usually requires twice the image memory to complete the
+        % operation.
+        dparam.mem = max(dparam.mem,500e6 + 2*Nx*total_num_sam_input(img)*mem_mult ...
+          + Nx/param.array.dline*total_num_sam_output(img)*mem_mult );
+      else
+        dparam.mem = max(dparam.mem,500e6 + Nx*total_num_sam_input(img)*mem_mult ...
+          + Nx/param.array.dline*total_num_sam_output(img)*mem_mult );
+      end
     end
     
     ctrl = cluster_new_task(ctrl,sparam,dparam,'dparam_save',0);
     
   end
-  prev_frm_num_chunks = num_chunks;
 end
 
 ctrl = cluster_save_dparam(ctrl);
@@ -424,8 +493,8 @@ ctrl_chain = {ctrl};
 ctrl = cluster_new_batch(param);
 
 if any(strcmpi(radar_name,{'acords','hfrds','hfrds2','mcords','mcords2','mcords3','mcords4','mcords5','mcords6','mcrds','rds','seaice','accum2','accum3'}))
-  cpu_time_mult = 1e-6;
-  mem_mult = 16;
+  cpu_time_mult = 2e-6;
+  mem_mult = 8;
   
 elseif any(strcmpi(radar_name,{'snow','kuband','snow2','kuband2','snow3','kuband3','kaband','kaband3','snow5','snow8'}))
   cpu_time_mult = 1e-6;
@@ -459,16 +528,17 @@ end
 records_var = whos('records');
 for img = 1:length(param.array.imgs)
   sparam.cpu_time = sparam.cpu_time + (Nx*total_num_sam_output(img)/Nsv*cpu_time_mult) * (1 + (Nsv-1)*0.2);
+  
   if isempty(param.array.img_comb)
     % Individual images, so need enough memory to hold the largest image
-    sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_max*total_num_sam_output(img)*mem_mult);
+    sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_max*total_num_sam_output(img)*mem_mult);
   else
     % Images combined into one so need enough memory to hold all images
-    sparam.mem = max(sparam.mem,350e6 + records_var.bytes + Nx_max*sum(total_num_sam_output)*mem_mult);
+    sparam.mem = max(sparam.mem,500e6 + records_var.bytes + Nx_max*sum(total_num_sam_output)*mem_mult);
   end
 end
 sparam.notes = sprintf('%s %s:%s:%s %s combine frames', ...
-  sparam.task_function, array_proc_method_str(param.array.method(1)), param.radar_name, param.season_name, param.day_seg);
+  sparam.task_function, param.array.out_path, param.radar_name, param.season_name, param.day_seg);
 
 % Create success condition
 sparam.file_success = {};
@@ -503,4 +573,3 @@ ctrl_chain{end+1} = ctrl;
     
 fprintf('Done %s\n', datestr(now));
 
-return;

@@ -50,7 +50,7 @@ default.records.gps.time_offset = 1;
 default.records.file.adcs = [2:16];
 default.records.frames.mode = 1;
 default.records.frames.geotiff_fn = 'greenland\Landsat-7\mzl7geo_90m_lzw.tif';
-default.records.presum_bug_fixed = 0;
+default.records.presum_mode = 1;
 
 %% Qlook worksheet
 default.qlook.out_path = '';

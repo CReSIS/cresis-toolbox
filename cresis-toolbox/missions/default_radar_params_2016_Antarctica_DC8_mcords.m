@@ -15,7 +15,7 @@ param.radar_name = 'mcords3';
 default.xml_file_prefix = 'mcords3';
 default.data_file_prefix = 'mcords3';
 default.header_load_func = @basic_load_mcords3;
-default.header_load_params = struct('clk',150e6,'presum_bug_fixed',false);
+default.header_load_params = struct('clk',150e6,'presum_mode',1);
 default.xml_version = 2.0;
 
 % default.noise_50ohm = [-41.6	-42.2	-42.4	-41.9	-42.5	-42.9	-41.7	-43.0	-44.1	-44.7	-43.1	-44.1	-41.8	-42.6	-41.4	-42.6	-41.8	-43.1	-42.0	-42.7	-41.1	-43.4	-42.1	-41.9];
@@ -65,7 +65,7 @@ default.records.file.adcs = [1:6];
 default.records.file.adc_headers = [1:6];
 default.records.gps.en = 1;
 default.records.frame_mode = 0;
-default.records.presum_bug_fixed = 0;
+default.records.presum_mode = 1;
 default.records.tmp_fn_uses_adc_folder_name = 1;
 
 %% Get heights (quick-look) worksheet in parameter spreadsheet
@@ -138,8 +138,6 @@ default.combine.rline_rng = -5:5;
 default.combine.dbin = 1;
 default.combine.dline = 6;
 default.combine.DCM = [];
-default.combine.three_dim.en = 0;
-default.combine.three_dim.layer_fn = '';
 default.combine.Nsv = 1;
 default.combine.theta_rng = [0 0];
 default.combine.sv_fh = @array_proc_sv;

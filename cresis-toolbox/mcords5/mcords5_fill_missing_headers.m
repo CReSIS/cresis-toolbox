@@ -96,7 +96,6 @@ if 1
   reuse_tmp_files = true; % Set to false if you want to overwrite current results
   file_prefix_override = ''; % most of the time
   counter_correction_en = true;
-  presum_bug_fixed = true; % Seasons from 2015 Greenland Polar6 onward should be set to true
   union_time_epri_gaps = true;
   
   % Parameters below this point OFTEN NEEDS TO BE CHANGED

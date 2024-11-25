@@ -27,8 +27,11 @@ classdef (HandleCompatible = true) clip_vectors < handle
     old_ylims
     
     % Function handle hooks for customizing clip_vectors
+    fh_close_win
     fh_button_up
+    fh_button_motion
     fh_key_press
+    user_data
 
     % tool_list: structure array of tools
     %  .event_key: string containing the matching event.Key,
@@ -71,11 +74,20 @@ classdef (HandleCompatible = true) clip_vectors < handle
       if ~isfield(param,'bad_val')
         param.bad_val = NaN;
       end
+      if ~isfield(param,'fh_close_win')
+        param.fh_close_win = [];
+      end
+      if ~isfield(param,'fh_button_motion')
+        param.fh_button_motion = [];
+      end
       if ~isfield(param,'fh_button_up')
         param.fh_button_up = [];
       end
       if ~isfield(param,'fh_key_press')
         param.fh_key_press = [];
+      end
+      if ~isfield(param,'user_data')
+        param.user_data = [];
       end
       if ~isfield(param,'tool_list')
         obj.tool_list = [];
@@ -106,8 +118,11 @@ classdef (HandleCompatible = true) clip_vectors < handle
       % Set parameters
       obj.h_plots = h_plots;
       obj.bad_val = param.bad_val;
+      obj.fh_close_win = param.fh_close_win;
       obj.fh_button_up = param.fh_button_up;
+      obj.fh_button_motion = param.fh_button_motion;
       obj.fh_key_press = param.fh_key_press;
+      obj.user_data = param.user_data;
       obj.actions.getting_polygon = 0;
       
       % Get the parent axes and parent figure
@@ -142,7 +157,10 @@ classdef (HandleCompatible = true) clip_vectors < handle
       end
       
       % Set figure call back functions
+      set(obj.h_fig,'CloseRequestFcn',@obj.close_win);
       set(obj.h_fig,'WindowButtonUpFcn',@obj.button_up);
+      set(obj.h_fig,'WindowButtonUpFcn',@obj.button_up);
+      set(obj.h_fig,'WindowButtonMotionFcn',@obj.button_motion);
       set(obj.h_fig,'WindowButtonDownFcn',@obj.button_down);
       set(obj.h_fig,'WindowScrollWheelFcn',@obj.button_scroll);
       set(obj.h_fig,'WindowKeyPressFcn',@obj.key_press);
@@ -163,6 +181,20 @@ classdef (HandleCompatible = true) clip_vectors < handle
       try
         delete(obj.sf.h_fig);
       end
+      try
+        delete(obj.h_fig);
+      end
+    end
+    
+    function close_win(obj,varargin)
+      try
+        if ~isempty(obj.fh_close_win)
+          obj.fh_close_win(obj);
+        end
+      end
+      try
+        delete(obj);
+      end
     end
     
     function button_down(obj,h_obj,event)
@@ -174,6 +206,12 @@ classdef (HandleCompatible = true) clip_vectors < handle
       [obj.x,obj.y,but] = get_mouse_info(obj.h_fig,obj.h_axes);
       fprintf('Button Down: x = %.3f, y = %.3f, but = %d\n', obj.x, obj.y, but); % DEBUG ONLY
       rbbox;
+    end
+    
+    function button_motion(obj,h_obj,event)
+      if ~isempty(obj.fh_button_motion)
+        obj.fh_button_motion(obj,h_obj,event);
+      end
     end
     
     function button_up(obj,h_obj,event)
@@ -245,7 +283,11 @@ classdef (HandleCompatible = true) clip_vectors < handle
         switch event.Key
           
           case 'f1'
+            fprintf('============================================================\n');
+            fprintf('clip_vectors.m help message\n');
+            fprintf('============================================================\n');
             fprintf('Key Short Cuts\n');
+            fprintf('F1: print this help message\n');
             fprintf('f: open the selection filter window\n');
             fprintf('p: draw a polygon to select the working area\n');
             fprintf('u: undo the last command\n');
@@ -266,6 +308,7 @@ classdef (HandleCompatible = true) clip_vectors < handle
             fprintf('left-click: zoom in at point\n');
             fprintf('right-click: zoom out at point\n');
             fprintf('scroll: zoom in/out at point\n');
+            fprintf('============================================================\n');
             
           case 'z'
             if ctrl_pressed

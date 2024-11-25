@@ -32,27 +32,47 @@ param = merge_structs(param, param_override);
 % =====================================================================
 
 % Load records
-fn_records = ct_filename_support(param,'','records');
-records = load(fn_records);
+records = records_load(param);
 
 % Check BW_window_gen parameters
 if ~isfield(param,'BW_window_gen') || isempty(param.BW_window_gen)
   param.BW_window_gen = [];
 end
 
+% BW_guard: Two element vector which specifies the bandwidth guard to
+% remove at the start and end of the bandwidth (e.g. if the signal is poor
+% on the edges or you are selecting a subband; subband is normally done
+% during deconvolution and not with BW_guard). Default is [1 1] and the
+% units are set to '%' which means 1% of the bandwidth if removed at the
+% start and end.
 if ~isfield(param.BW_window_gen,'BW_guard') || isempty(param.BW_window_gen.BW_guard)
-  param.BW_window_gen.BW_guard = [5 5];
+  param.BW_window_gen.BW_guard = [1 1];
   param.BW_window_gen.BW_guard_units = '%';
 end
 
+if length(param.BW_window_gen.BW_guard) ~= 2 || any(~param.BW_window_gen.BW_guard < 0)
+  error('param.BW_window_gen.BW_guard must be a 2 element vector with nonnegative numbers');
+end
+
+% BW_guard_units: String containing 'Hz' or '%' and affects how the
+% BW_guard field is interpreted. '%' is a percentage of abs(f1-f0).
 if ~isfield(param.BW_window_gen,'BW_guard_units') || isempty(param.BW_window_gen.BW_guard_units)
   param.BW_window_gen.BW_guard_units = 'Hz';
 end
 
+% param.BW_window_gen.imgs: Which wf-adc pairs to calculate bandwidths for.
+% Default is {[1 1]}
 if ~isfield(param.BW_window_gen,'imgs') || isempty(param.BW_window_gen.imgs)
   param.BW_window_gen.imgs = {[1 1]};
 end
 param.load.imgs = param.BW_window_gen.imgs;
+
+% nice_BW_ratio: Specify the range of bandwidth to search for a nicer round
+% number for the bandwidth. This is a percentage of abs(f1-f0). Default is
+% 1% or 0.01.
+if ~isfield(param.BW_window_gen,'nice_BW_ratio') || isempty(param.BW_window_gen.nice_BW_ratio)
+  param.BW_window_gen.nice_BW_ratio = 0.01;
+end
 
 % stretch_deramp: LO is extended so that RF is fully supported
 if ~isfield(param.BW_window_gen,'stretch_deramp') || isempty(param.BW_window_gen.stretch_deramp)
@@ -83,4 +103,24 @@ BW_window(2) = BW_window_ideal(2) - ~param.BW_window_gen.stretch_deramp*(max(par
 % Ensure that the BW window is a multiple of df
 BW_window = round(BW_window(1)/df)*df + [0 round(diff(BW_window)/df)*df];
 
-fprintf('%s\t[%.12g %.12g]\n',param.day_seg, BW_window);
+% Find BW_window_nice which is BW_window adjusted to choose round numbers
+% without long non-zero decimals
+last_char = [];
+steps = [0 : round(diff(BW_window)*param.BW_window_gen.nice_BW_ratio/df)];
+for idx = 1:length(steps)
+  str = sprintf('%.12g', BW_window(1) + df*steps(idx));
+  last_char(idx) = find(str ~= '0' & str ~= '.',1,'last');
+end
+[~,idx] = min(last_char);
+BW_window_nice(1) = BW_window(1) + steps(idx)*df;
+
+last_char = [];
+steps = [0 : round(diff(BW_window)*param.BW_window_gen.nice_BW_ratio/df)];
+for idx = 1:length(steps)
+  str = sprintf('%.12g', BW_window(2) - df*steps(idx));
+  last_char(idx) = find(str ~= '0' & str ~= '.',1,'last');
+end
+[~,idx] = min(last_char);
+BW_window_nice(2) = BW_window(2) - steps(idx)*df;
+
+fprintf('%s\t[%.3g %.3g]\t[%.12g %.12g]\t[%.12g %.12g]\t%.12g\n',param.day_seg,  BW_window/1e9, BW_window, BW_window_nice, df);

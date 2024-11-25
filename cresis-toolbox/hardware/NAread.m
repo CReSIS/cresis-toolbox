@@ -37,9 +37,9 @@ function [hdr, data] = NAread(ports,param)
 %   data(2,1,:,1) represents first S21 measurement taken
 %
 % Examples:
-%  [hdr, data] = NAread([1 2],struct('ip_addr','10.117.4.117'));
+%  [hdr, data] = NAread([2 3],struct('ip_addr','172.16.0.201'));
 %  [hdr, data] = NAread([1 2],struct('usb_addr','USB0::0x0957::0x0118::MY51421306::0::INSTR'))
-%  [hdr, data] = NAread([1 3 4],struct('ip_addr','10.117.4.117'));
+%  [hdr, data] = NAread([1 3 4],struct('ip_addr','172.16.0.201'));
 %
 % Author: Hara Talasila and John Paden
 %

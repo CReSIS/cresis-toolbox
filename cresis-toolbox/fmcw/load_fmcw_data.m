@@ -1209,7 +1209,7 @@ for board_idx = 1:length(boards)
                 % If the frame is not found in the list, then closest_idx
                 % will be empty and the deconv waveform that is closest in
                 % time will be selected below (which is the default mode).
-                load(ct_filename_support(param,'','frames'));
+                frames = frames_load(param);
                 frm = find(mean(param.load.recs) >= frames.frame_idxs,1,'last');
                 closest_idx = param.proc.deconv_enforce_wf_idx(find(param.proc.deconv_enforce_wf_idx(:,1) == frm),2);
               else

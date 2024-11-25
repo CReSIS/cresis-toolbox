@@ -22,7 +22,7 @@ function [lat,lon,egm96] = egm96_loader(fn)
 %
 % fn = string containing input filename (path to WW15MGH.DAC file)
 % lat = Nx1 double vector, latitude (deg,N)
-% lon = Mx1 double vector, longitude (deg,N)
+% lon = Mx1 double vector, longitude (deg,E)
 % egm = NxM double matrix containing error from WGS-84 of actual sea level (m)
 %   First axis (row): Latitude
 %   Second axis (col): Longitude

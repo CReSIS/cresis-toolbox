@@ -1,4 +1,12 @@
 function loc = project_locations
+% loc = project_locations
+%
+% Common locations of interest
+%
+%  This function needs to be formalized better. It is a placeholder for a
+%  better function right now.
+%
+% See Also: physical_constants.m, proj_load_standard.m, project_locations.m
 
 loc.melt.gzds.lat = -(75+12.208/60);
 loc.melt.gzds.lon = -(104+49.850/60);
@@ -28,3 +36,6 @@ loc.gisp2.lon = -(38+27/60+33.07/3600);
 
 loc.ngrip.lat = 75+1/60;
 loc.ngrip.lon = -(42+32/60);
+
+loc.egrip.lat = 75+38/60;
+loc.egrip.lon = -(36+0/60);

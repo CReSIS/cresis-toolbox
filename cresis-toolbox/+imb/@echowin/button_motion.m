@@ -54,8 +54,14 @@ else
   % Get the CData
   cdata = 10*log10(obj.eg.image_data(min(size(obj.eg.image_data,1),max(1,1+round((y-obj.eg.image_yaxis(1))/(obj.eg.image_yaxis(2)-obj.eg.image_yaxis(1))))), rline));
   
+  % Get the frame number
+  cur_frm = find(obj.eg.image_gps_time(rline) >= obj.eg.start_gps_time,1,'last');
+  if isempty(cur_frm)
+    cur_frm = 1;
+  end
+
   % Print mouse position to status bar
-  set(obj.right_panel.status_panel.mouseCoordText,'String',sprintf('%.3fN %.3fW %.0f %g %.0f',obj.eg.image_lat(rline),obj.eg.image_lon(rline),x,y,cdata));
+  set(obj.right_panel.status_panel.mouseCoordText,'String',sprintf('%03d %.3fN %.3fW |%.0f|%g|%.0f',cur_frm,obj.eg.image_lat(rline),obj.eg.image_lon(rline),x,y,cdata));
   
   % OLD: Print mouse position to status bar
   %       yaxis_unit = get(obj.left_panel.yaxisPM,'Value');

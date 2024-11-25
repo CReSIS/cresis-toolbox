@@ -12,6 +12,13 @@ function ctrl = cluster_update_task(ctrl,task_id,update_mode)
 %  .out = up-to-Nx1 vector of cells containing the outputs for each
 %    job as they complete (read in from the output.mat files)
 % job_id: the job id to check up on
+% update_mode: scalar integer (-1, 0, 1, or 2). Default is 1.
+%   -1: populates cpu_time and like fields and returns without checking
+%   ==0: is not subject to cluster_hold
+%   >0: check stdout/stderr
+%   >0: print error information
+%   >0: cpu time and memory warnings
+%   >0: retry failed jobs
 %
 % Outputs:
 % ctrl = updated ctrl structure
@@ -28,11 +35,17 @@ function ctrl = cluster_update_task(ctrl,task_id,update_mode)
 %
 % Author: John Paden
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list, 
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 if ~exist('update_mode','var') || isempty(update_mode)
   update_mode = 1;
@@ -178,6 +191,13 @@ if any(strcmpi(ctrl.cluster.type,{'torque','slurm'}))
       if ~isempty(regexp(error_file_str,'PBS: job killed: walltime'))
         error_mask = bitor(error_mask,walltime_exceeded_error);
       end
+      % slurmstepd: error: *** JOB 15269436 ON prod-0105 CANCELLED AT 2022-05-15T23:32:22 DUE TO TIME LIMIT ***
+      if ~isempty(regexp(error_file_str,'CANCELLED'))
+        error_mask = bitor(error_mask,cluster_killed_error);
+      end
+      if ~isempty(regexp(error_file_str,'DUE TO TIME LIMIT'))
+        error_mask = bitor(error_mask,walltime_exceeded_error);
+      end
     end
   end
 end
@@ -225,7 +245,13 @@ end
 
 if isfield(out,'errorstruct')
   if ~isempty(out.errorstruct)
-    error_mask = bitor(error_mask,errorstruct_contains_error);
+    if regexp(out.errorstruct.message,'Out of memory')
+      % Warning: Out of memory. Type "help memory" for your options.
+      error_mask = bitor(error_mask,max_mem_exceeded_error);
+      error_mask = bitor(error_mask,matlab_task_out_of_memory);
+    else
+      error_mask = bitor(error_mask,errorstruct_contains_error);
+    end
   end
 else
   error_mask = bitor(error_mask,errorstruct_exist_error);
@@ -278,7 +304,8 @@ else
 end
 
 if update_mode && ctrl.error_mask(task_id)
-  warning(' Job Error %d:%d/%d (lead task %d)\n', ctrl.batch_id, task_id, job_id, task_id_out);
+  fprintf('%s\n','='*ones(1,80));
+  warning(' Job Error %d:%d/%d (lead task %d) (%s)\n', ctrl.batch_id, task_id, job_id, task_id_out, datestr(now));
   if any(strcmpi(ctrl.cluster.type,{'torque','slurm'}))
     fprintf('   hostname:%s attempt:%d max_attempts:%d\n', hostname, attempt, max_attempts);
   end
@@ -301,7 +328,7 @@ if update_mode && ctrl.error_mask(task_id)
     fprintf('  errorstruct contains an error:\n');
     warning('%s',out.errorstruct.getReport);
     if ctrl.cluster.stop_on_error
-      fprintf('\nctrl.cluster.stop_on_error is enabled which causes the cluster running process to stop whenever there is a Matlab coding error. To disable this for this batch, you can run "ctrl.cluster.stop_on_error=false". Fix the coding bug printed above which might require running cluster_compile.m if you change cluster task code and then run "dbcont".\n');
+      fprintf('\nctrl.cluster.stop_on_error is enabled which causes the cluster running process to stop whenever there is a Matlab coding error. To disable this for this batch, you can run "ctrl.cluster.stop_on_error=false". Fix the coding bug printed above which might require running cluster_compile.m if you change cluster task code and then run "dbcont". You may also run "cluster_run_mode=-1" to stop cluster_run.m in a clean way (it will complete updating this branch and then exit). You can test the function by running "cluster_exec_task(ctrl,task_id);". If the task completes successfully, then the error mask can be set to zero by running "ctrl.error_mask(task_id)=0;".\n');
       keyboard
     end
   end
@@ -309,27 +336,28 @@ if update_mode && ctrl.error_mask(task_id)
     fprintf('  Max memory potentially exceeded\n');
     fprintf('    Job max_mem used is %.1f GB\n', max_mem/1e9);
     fprintf('    Task id %d:%d\n', ctrl.batch_id, task_id);
-    fprintf('    Task memory requested %.1f GB\n', ctrl.mem(task_id)/1e9);
+    fprintf('    Task memory requested %.1f*%.1f = %.1f GB\n', ctrl.mem(task_id)/1e9, ctrl.cluster.mem_mult, ctrl.mem(task_id)*ctrl.cluster.mem_mult/1e9);
     fprintf('    Job''s last executed task id %d\n', last_task_id);
   end
-  if bitand(ctrl.error_mask(task_id),max_mem_exceeded_error) && task_id == last_task_id
+  if bitand(ctrl.error_mask(task_id),matlab_task_out_of_memory) ...
+    || bitand(ctrl.error_mask(task_id),max_mem_exceeded_error) && task_id == last_task_id
     fprintf('  Task max memory exceeded.\n');
-    if ~isempty(regexpi(ctrl.cluster.max_mem_mode,'debug'))
-      ctrl.cluster.max_mem_mode
-      fprintf('  task memory (%.1f GB) exceeded the maximum memory requested (%.1f GB):\n', max_mem/1e9, ctrl.mem(task_id)*ctrl.cluster.mem_mult/1e9);
+    if ~isempty(regexpi(ctrl.cluster.mem_mult_mode,'debug'))
+      ctrl.cluster.mem_mult_mode
+      fprintf('  task memory (%.1f GB) exceeded the maximum memory requested (%.1f*%.1f = %.1f GB):\n', max_mem/1e9, ctrl.mem(task_id)/1e9, ctrl.cluster.mem_mult, ctrl.mem(task_id)*ctrl.cluster.mem_mult/1e9);
       fprintf('%s\n',ones(1,80)*'=');
       fprintf('Options:\n');
       fprintf('  1. Increase ctrl.mem(task_id) or ctrl.cluster.mem_mult\n');
       fprintf('  2. Run job locally by running cluster_exec_task(ctrl,task_id);\n');
       fprintf('     Be sure to run ctrl.error_mask(task_id) = 0 after successfully\n');
       fprintf('     running task.\n');
-      fprintf('  3. Set ctrl.cluster.max_mem_mode = ''auto'';\n');
+      fprintf('  3. Set ctrl.cluster.mem_mult_mode = ''auto''; to automatically increase the memory requested.\n');
       fprintf('After making changes, run dbcont to continue.\n');
       keyboard
     end
-    if ~isempty(regexpi(ctrl.cluster.max_mem_mode,'auto'))
-      fprintf('    Automatically doubling memory request for this task.\n');
-      ctrl.mem(task_id) = max_mem*1.5/ctrl.cluster.mem_mult;
+    if ~isempty(regexpi(ctrl.cluster.mem_mult_mode,'auto'))
+      fprintf('    Automatically 1.5x the memory request for this task.\n');
+      ctrl.mem(task_id) = max(max_mem/ctrl.cluster.mem_mult,ctrl.mem(task_id))*1.5;
     end
   end
   if bitand(ctrl.error_mask(task_id),insufficient_mcr_space)
@@ -346,6 +374,8 @@ if update_mode && ctrl.error_mask(task_id)
   end
   if bitand(ctrl.error_mask(task_id),walltime_exceeded_error)
     fprintf('  Cluster killed this job due to wall time. This means the job requested too little cpu time. cluster.cpu_time_mult should be increased.\n');
+    fprintf('    Automatically doubling wall time request for this task.\n');
+    ctrl.cpu_time(task_id) = ctrl.cpu_time(task_id)*2/ctrl.cluster.cpu_time_mult;
   end
   if bitand(ctrl.error_mask(task_id),file_success_error)
     fprintf('  File success check failed (missing files)\n');
@@ -362,11 +392,11 @@ end
 
 if update_mode
   if ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id)*0.9 < ctrl.cpu_time_actual(task_id)
-    warning(' %d:%d/%d: CPU time actual (%.0f sec) is more than 90%% of estimated time (%.0f sec). Consider revising estimates.', ...
-      ctrl.batch_id, task_id, job_id, ctrl.cpu_time_actual(task_id), ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id));
+    warning(' %d:%d/%d: CPU time actual (%.0f sec) is more than 90%% of estimated time (%.0f sec). Consider revising estimates. (%s)', ...
+      ctrl.batch_id, task_id, job_id, ctrl.cpu_time_actual(task_id), ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id), datestr(now));
   elseif ctrl.cpu_time_actual(task_id)>0 && ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id)*0.2 > ctrl.cpu_time_actual(task_id)
-    warning(' %d:%d/%d: CPU time actual (%.0f sec) is less than 20%% of estimated time (%.0f sec). Consider revising estimates.', ...
-      ctrl.batch_id, task_id, job_id, ctrl.cpu_time_actual(task_id), ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id));
+    warning(' %d:%d/%d: CPU time actual (%.0f sec) is less than 20%% of estimated time (%.0f sec). Consider revising estimates. (%s)', ...
+      ctrl.batch_id, task_id, job_id, ctrl.cpu_time_actual(task_id), ctrl.cluster.cpu_time_mult*ctrl.cpu_time(task_id), datestr(now));
   end
 end
 

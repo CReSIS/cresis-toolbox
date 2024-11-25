@@ -44,39 +44,39 @@ for file_idx = 1:num_files
   if file_idx == 1
     fn = fns{1};
   else
-    param.file_search_mode = 'default+s';
+    param.config.file_search_mode = 'default+s';
     [data,fn,settings,default,gps,hdr,pc_param,settings_enc] = basic_file_loader(param,defaults);
   end
-  if size(data,2) < param.presums
+  if size(data,2) < param.config.presums
     error('Not enough data in file to process. Choose a different file.');
   end
   
   %% Convert from quantization to voltage @ ADC
-  wf = abs(param.img(1,1));
+  wf = abs(param.config.img(1,1));
   data = data ...
-    * default.radar.adc_full_scale/2^default.radar.adc_bits ...
+    * default.radar.Vpp_scale/2^default.radar.adc_bits ...
     * 2^hdr.wfs(abs(wf)).bit_shifts / hdr.wfs(wf).presums;
   
   %% Additional software presums
   for wf_adc = 1:size(data,3)
-    data(:,1:floor(size(data,2)/param.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.presums);
+    data(:,1:floor(size(data,2)/param.config.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.config.presums);
   end
-  data = data(:,1:floor(size(data,2)/param.presums),:);
-  hdr.radar_time = fir_dec(hdr.radar_time,param.presums);
-  hdr.gps_time = fir_dec(hdr.gps_time,param.presums);
-  hdr.lat = fir_dec(hdr.lat,param.presums);
-  hdr.lon = fir_dec(hdr.lon,param.presums);
-  hdr.elev = fir_dec(hdr.elev,param.presums);
-  hdr.roll = fir_dec(hdr.roll,param.presums);
-  hdr.pitch = fir_dec(hdr.pitch,param.presums);
-  hdr.heading = fir_dec(hdr.heading,param.presums);
+  data = data(:,1:floor(size(data,2)/param.config.presums),:);
+  hdr.radar_time = fir_dec(hdr.radar_time,param.config.presums);
+  hdr.gps_time = fir_dec(hdr.gps_time,param.config.presums);
+  hdr.lat = fir_dec(hdr.lat,param.config.presums);
+  hdr.lon = fir_dec(hdr.lon,param.config.presums);
+  hdr.elev = fir_dec(hdr.elev,param.config.presums);
+  hdr.roll = fir_dec(hdr.roll,param.config.presums);
+  hdr.pitch = fir_dec(hdr.pitch,param.config.presums);
+  hdr.heading = fir_dec(hdr.heading,param.config.presums);
   
   %% Pulse compression
   [pc_signal,pc_time,pc_freq] = pulse_compress(data,pc_param);
 
   %% Track surface
-  ml_data = lp(fir_dec(abs(pc_signal(:,:,param.ref_wf_adc)).^2,ones(1,5)/5,1));
-  good_time_bins = find(pc_time > pc_param.Tpd*1.1 & pc_time > default.basic_surf_track_min_time);
+  ml_data = lp(fir_dec(abs(pc_signal(:,:,param.config.ref_wf_adc)).^2,ones(1,5)/5,1));
+  good_time_bins = find(pc_time > pc_param.Tpd*1.1 & pc_time > param.config.basic_surf_track_min_time);
   [max_value,surf_bin] = max(ml_data(good_time_bins,:));
   surf_bin = surf_bin + good_time_bins(1)-1;
   
@@ -111,8 +111,17 @@ for file_idx = 1:num_files
   else
     param.mocomp_type = 4;
   end
-  param.tx_weights = double(settings.DDS_Setup.Ram_Amplitude(logical(default.tx_DDS_mask)));
-  param.rx_paths = {}; param.rx_paths{wf} = default.radar.rx_paths;
+  param.tx_weights = double(settings.DDS_Setup.Ram_Amplitude(logical(param.config.tx_DDS_mask)));
+  param.rx_paths = {};
+  if isfield(default.radar.wfs,'rx_paths')
+    if length(default.radar.wfs) >= wf
+      param.rx_paths{wf} = default.radar.wfs(wf).rx_paths;
+    else
+      param.rx_paths{wf} = default.radar.wfs(1).rx_paths;
+    end
+  else
+    param.rx_paths{wf} = default.radar.rx_paths;
+  end
   param.lever_arm_fh = @lever_arm;
   
   param.combine_channels = false;
@@ -143,9 +152,9 @@ for file_idx = 1:num_files
 end
 
 %% Print Results
-for wf_adc = 1:size(param.img,1)
-  wf = abs(param.img(wf_adc,1));
-  adc = param.img(wf_adc,2);
+for wf_adc = 1:size(param.config.img,1)
+  wf = abs(param.config.img(wf_adc,1));
+  adc = param.config.img(wf_adc,2);
   rx_path(wf_adc) = param.rx_paths{wf}(adc);
 end
 [rx_path_sort,rx_path_sort_idxs] = sort(rx_path);
@@ -155,8 +164,8 @@ fprintf('Recommended equalization coefficients (averaged results)\n');
 
 sw_version = current_software_version;
 fprintf('  mocomp:%d, wf/adc:%d/%d method:"%s" bins:%d-%d git-hash:%s (%s)\n', ...
-  param.mocomp_type, param.img(param.ref_wf_adc,1), ...
-  param.img(param.ref_wf_adc,2), param.delay.method, param.rbins(1), param.rbins(end), ...
+  param.mocomp_type, param.config.img(param.config.ref_wf_adc,1), ...
+  param.config.img(param.config.ref_wf_adc,2), param.config.delay.method, param.rbins(1), param.rbins(end), ...
   sw_version.rev, sw_version.cur_date_time);
 fprintf('td settings\n');
 for file_idx = 1:num_files
@@ -186,8 +195,8 @@ phase_ave = angle(mean(exp(j*phase_out/180*pi),2))*180/pi;
 
 fprintf('Rx Path\n');
 for wf_adc = rx_path_sort_idxs
-  wf = abs(param.img(wf_adc,1));
-  adc = param.img(wf_adc,2);
+  wf = abs(param.config.img(wf_adc,1));
+  adc = param.config.img(wf_adc,2);
   fprintf('%d\t', param.rx_paths{wf}(adc));
 end
 fprintf('\n');

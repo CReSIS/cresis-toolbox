@@ -25,6 +25,9 @@ function fn = ct_filename_out(param,fn,tmp_dir,generic_data_flag)
 %   no effect.
 % generic_data_flag: if enabled, the segment ID is excluded from the path
 %
+% ct_filename_out(param,'qlook')
+% ct_filename_out(param,'standard')
+%
 % Author: John Paden
 %
 % See also: ct_filename_data, ct_filename_out, ct_filename_support,

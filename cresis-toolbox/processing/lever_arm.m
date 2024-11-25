@@ -1,36 +1,53 @@
 function [phase_center] = lever_arm(param, tx_weights, rxchannel)
 % [phase_center] = lever_arm(param, tx_weights, rxchannel)
 %
-% Returns lever arm position for antenna phase center.
+% Returns lever arm position for antenna phase center. See remarks below
+% to understand the coordinate system for output "phase_center".
 %
-% param = parameter struct
-%   .season_name = string containing the season name (e.g. 2011_Greenland_TO)
-%   .radar_name = string containing the radar name (e.g. snow2)
-%   .gps_source = string from GPS file using format SOURCE-VERSION
-%      Only the source is used (e.g. ATM-final_20120303)
-% tx_weights = transmit amplitude weightings (from the radar worksheet of
-%   the parameter spreadsheet)
-%   These are amplitude weights, not power weights.
-% rxchannel = receive channel to return phase_center for (scalar,
-%   positive integer)
-%   Setting rxchannel to 0, causes the "reference" position to be returned.
-%   This is usually the position of one of the center receive elements
-%   and equal weights on all transmitters.
+% =========================================================================
+% INPUTS:
 %
-% phase_center = lever arm to each phase center specified by
-%   tx_weights and rxchannel
+% param: parameter struct
+%
+%  .season_name: string containing the season name (e.g. 2011_Greenland_TO)
+%
+%  .radar_name: string containing the radar name (e.g. snow2)
+%
+%  .gps_source: string from GPS file using format SOURCE-VERSION (e.g.
+%  ATM-final_20120303). The SOURCE portion is used to determine which lever
+%  arm set to use for a particular dataset since some field seasons have
+%  more than one GPS source.
+%
+% tx_weights: transmit amplitude weightings (from the radar worksheet of
+% the parameter spreadsheet) These are amplitude weights, not power
+% weights.
+%
+% rxchannel: receive channel to return phase_center for (scalar, positive
+% integer) Setting rxchannel to 0, causes the "reference" position to be
+% returned. This is usually the position of one of the center receive
+% elements and equal weights on all transmitters.
+%
+% =========================================================================
+% OUTPUTS:
+%
+% phase_center: lever arm to each phase center specified by tx_weights and
+% rxchannel. See remarks below to understand the coordinate system for
+% output "phase_center".
+%
 %
 % =========================================================================
 % REMARKS:
 %
 % 1). Lever arm refers to a (3 x 1) vector that expresses the position of
 %     each phase center relative to the position that the GPS trajectory
-%     was processed to.  The basis for the vector is the coordinate
-%     system of the plane's body (Xb, Yb, Zb).  This is a righthanded,
-%     orthogonal system that agrees with aerospace convention.  +Xb points
-%     from the plane's center of gravity towards its nose.  +Yb points from
-%     the plane's center of gravity along the right wing.  +Zb points from
-%     the plane's center of gravity down towards the Earth's surface.
+%     was processed to (this is often the GPS antenna or IMU measurement
+%     center).  The basis for the vector is the coordinate system of the
+%     plane's body (Xb, Yb, Zb).  This is a righthanded, orthogonal system
+%     that agrees with aerospace convention.  +Xb points from the plane's
+%     center of gravity towards its nose.  +Yb points from the plane's
+%     center of gravity along the right wing.  +Zb points from the plane's
+%     center of gravity down towards the Earth's surface (i.e. increasing
+%     Zb points downwards!).
 %
 % 2). The lever arm of the Nth receive channel is defined using the
 %     following syntax:
@@ -78,6 +95,30 @@ radar_name = ct_output_dir(param.radar_name);
 % For the full simulator, remove 'sim' at the end($) of param.season_name
 param.season_name = regexprep(param.season_name,'sim$','','ignorecase');
 
+if any(strcmpi(param.season_name,{'2022_Greenland_X6'}))
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if any(strcmpi(param.season_name,{'2022_Greenland_Vapor'}))
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if any(strcmpi(param.season_name,{'2021_Arctic_Vanilla'}))
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if any(strcmpi(param.season_name,{'2019_SouthDakota_N1KU','2020_SouthDakota_N1KU'}))
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
 if any(strcmpi(param.season_name,{'2019_Arctic_GV','2019_Antarctica_GV'})) %...
 %     && any(strcmpi(gps_source,{'nmea'})) && any(strcmpi(gps_source,{'atm-field'}))
 %   warning('ACTUAL LEVER ARM ACTUAL LEVER ARM NEEDS TO BE DETERMINED');
@@ -96,8 +137,31 @@ if (strcmpi(param.season_name,'2018_Antarctica_Ground') && any(strcmpi(gps_sourc
 end
 
 if (strcmpi(param.season_name,'2019_Antarctica_Ground') && any(strcmpi(gps_source,{'arena','cresis'})))
-%   warning('ACTUAL LEVER ARM ACTUAL LEVER ARM NEEDS TO BE DETERMINED');
   % Platform: Ground based sled
+  %
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_BaslerMKB') && any(strcmpi(gps_source,{'arena','cresis','novatelraw','utig'})))
+  % Platform: Airborne Radar Kenn Borek Air Basler call sign MKB (COLDEX 1, COLDEX 2, UTIG)
+  %
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if any(strcmpi(param.season_name,{'2022_Antarctica_Ground','2023_Greenland_Ground'})) && any(strcmpi(gps_source,{'arena','cresis'}))
+  % Platform: Ground based sled (EAGER 1, EAGER 2)
+  %
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_GroundGHOST') && any(strcmpi(gps_source,{'arena','cresis'})))
+  % Platform: Ground based sled (GHOST 1, GHOST 2)
   %
   gps.x = 0;
   gps.y = 0;
@@ -114,8 +178,8 @@ if any(strcmpi(param.season_name,{'2019_Greenland_TO'})) %...
   gps.z = 0;
 end
 
-if any(strcmpi(param.season_name,{'2018_Alaska_SO','2019_Alaska_SO'})) ...
-    && any(strcmpi(gps_source,{'nmea','ualidar'}))
+if any(strcmpi(param.season_name,{'2018_Alaska_SO','2021_Alaska_SO'})) ...
+    && any(strcmpi(gps_source,{'nmea','lidar'}))
   % The snow radar shared the same GPS antenna with the lidar of the univ. of Fairbanks
   % Emily measured the positions of the snow radar rx and tx antennas relative to the GPS antenna
   gps.x = 0;
@@ -131,11 +195,10 @@ if (strcmpi(param.season_name,'2017_Antarctica_TObas') && strcmpi(gps_source,'ba
   gps.z = 1300;
 end
 
-if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas','2019_Antarctica_TObas'})) && any(strcmpi(gps_source,{'arena','bas'})))
-  % See (strcmpi(param.season_name,'2018_Antarctica_TObas') && strcmpi(gps_source,'arena'))
-  %
+if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas'})) && any(strcmpi(gps_source,{'arena','bas'})))
   % 2018 Antarctica TObas (Jan-Feb 2019) GPS data are processed to the IMAR
-  % gravimeter.
+  % gravimeter. The origin that we use here is the aft GPS antenna above
+  % the radar system.
   %
   % From Tom Jordan at BAS:
   % My best solution is that the IMAR solution to the GPS above the radar is as follows (all in m):
@@ -143,8 +206,6 @@ if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas','2019_Antarctica_TOba
   % Y (Positive port)  0.1116
   % Z (Positive up) 1.4762
   %
-  %
-  % 
   % Aircraft: British Antarctic Survey (BAS) VP-FBL
   %
   % Carl Robinson at BAS Aug 2018: Though we do have measurements for
@@ -178,6 +239,43 @@ if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas','2019_Antarctica_TOba
   gps.x = 2.9369; % Gravimeter was in front of GPS antenna
   gps.y = 0.1116; % Gravimeter was on the right side of the plane/GPS
   gps.z = 1.4762; % Gravimeter was below (down is positive-z) the GPS
+end
+
+if (any(strcmpi(param.season_name,{'2019_Antarctica_TObas'})) && any(strcmpi(gps_source,{'bas','bas_imu_to_gps'})))
+  % 2019 Antarctica TObas (Dec 2019-Jan 2020) GPS data are processed to the
+  % IMAR gravimeter for some flights and forward GPS antenna for some
+  % flights. This handles the data that are stored relative to the IMAR
+  % gravimeter.
+  %
+  % From Tom Jordan at BAS.
+
+  % T06 flight (before merging with GNSS only data), T07 flight
+  gps.x = -0.0538; % Gravimeter was just behind the antenna
+  gps.y = 0.349; % Gravimeter was on the right side of the plane/GPS
+  gps.z = 1.4803; % Gravimeter was below (down is positive-z) the GPS
+end
+
+if (any(strcmpi(param.season_name,{'2019_Antarctica_TObas'})) && any(strcmpi(gps_source,{'arena','bas_gnss'})))
+  % 2019 Antarctica TObas (Dec 2019-Jan 2020) GPS data are processed to the
+  % IMAR gravimeter for some flights and forward GPS antenna for some
+  % flights. This handles the data that are stored relative to the forward
+  % GPS antenna.
+  %
+  % From Tom Jordan at BAS.
+
+  % End of T06 flight when IMU failed, all January flights
+  gps.x = 0; % Forward GPS antenna
+  gps.y = 0; % Forward GPS antenna
+  gps.z = 0; % Forward GPS antenna
+end
+
+if (any(strcmpi(param.season_name,{'2022_Greenland_Ground'})) && any(strcmpi(gps_source,{'arena','cresis'})))
+  % GPS antenna is mounted almost on the radar antenna phase center
+  % Need to update exactly what the vertical offset is.
+
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
 end
 
 if (strcmpi(param.season_name,'2016_Greenland_TOdtu') && strcmpi(gps_source,'dtu'))
@@ -292,6 +390,13 @@ if (strcmpi(param.season_name,'2013_Antarctica_Sled'))% && strcmpi(gps_source,'n
   gps.z = 0;
 end
 
+if any(strcmpi(param.season_name,{'2015_Antarctica_Ground','2015_Greenland_Ground'}))
+  % NMEA data only and unknown lever arm
+  gps.x = 0;
+  gps.y = 0;
+  gps.z = 0;
+end
+
 if (strcmpi(param.season_name,'2013_Antarctica_Basler') && strcmpi(gps_source,'cresis'))
   % Absolute position of IMU for radar systems
   % For 2013:
@@ -349,6 +454,47 @@ if (strcmpi(param.season_name,'2017_Antarctica_Basler') && (strcmpi(gps_source,'
   gps.x = 0;
   gps.y = 0;
   gps.z = 0;
+end
+
+if (strcmpi(param.season_name,'2022_Greenland_P3') && any(strcmpi(gps_source,{'ARENA','CReSIS_GNSS'})))
+  % Trajectory is referenced to the GNSS antenna, so gps struct contains
+  % the offset to the GNSS antenna
+  %
+  % Very rough sanity check:
+  % GPS antenna connector is just aft of 305" flight station (308.5" flight
+  % station).
+  % IMU is aft of the GPS antenna by ~48". +308.5 = 356.5" flight station (IMU to GPS Y = +48")
+  % IMU is ~24" (below floor) + 94" (above floor) = 118" (IMU to GPS Z = +118")
+  % IMU is starboard of GPS antenna by about 24" (IMU to GPS X = -24")
+  %
+  % Inertial Explorer lever arm offset (IMU to GPS):
+  % SETIMUTOANTOFFSET -0.430 1.310 3.498 0.2 0.2 0.2
+  %
+  % Coordinates from Emily Arnold/Brad Schroeder CAD model, Aaron Paden CAD model, John Paden
+  % Name	FS (X)	BL (Y)	WL (Z)	Notes
+  % GPS	  318.4	  0.0	214.0	w/ Inertial Explorer Flight Station Correction
+  % IMU   370.0	 17.9	 77.9	This is the measurement center of the IMU
+  % Viv 1	354.0	-19.4	 68.5	Antenna numbering F-B and L-R
+  % Viv2	354.0	 -0.1	 68.5
+  % Viv3	354.0	  4.9	 68.5
+  % Viv4	354.0	 20.0	 68.5
+  % Viv5	386.1	-19.4	 68.2
+  % Viv6	386.1	-13.7	 68.2
+  % Viv7	386.1	  9.2	 68.2
+  % Viv8	386.1	 16.8	 68.2
+  % Horn1	359.2	-12.3	 72.9
+  % Horn2	391.2	 -2.4	 72.6
+  gps.x = -318.4*2.54/100;
+  gps.y = 0.0*2.54/100;
+  gps.z = -214.0*2.54/100;
+end
+
+if (strcmpi(param.season_name,'2022_Greenland_P3') && any(strcmpi(gps_source,{'CReSIS'})))
+  % Trajectory is of the IMU, so gps struct contains the offset to the IMU
+  % See initial GPS entry for notes.
+  gps.x = -370.0*2.54/100;
+  gps.y = 17.9*2.54/100;
+  gps.z = -77.9*2.54/100;
 end
 
 if (strcmpi(param.season_name,'2019_Greenland_P3') && any(strcmpi(gps_source,{'ATM','NMEA','DMS','novatel'}))) ...
@@ -476,7 +622,7 @@ if (strcmpi(param.season_name,'2013_Antarctica_P3') && strcmpi(gps_source,'gravi
 end
 
 if (strcmpi(param.season_name,'2009_Antarctica_DC8') && strcmpi(gps_source,'DMS')) ...
-    || (strcmpi(param.season_name,'2010_Antarctica_DC8') && strcmpi(gps_source,'DMSATM'))
+    || (strcmpi(param.season_name,'2010_Antarctica_DC8') && any(strcmpi(gps_source,{'DMSATM','DMSATM_20101026'}))) ...
   % Absolute position of ATM antenna
   % For 2009:
   %  DMS data are processed to the GPS antenna.
@@ -620,7 +766,19 @@ if (strcmpi(param.season_name,'2003_Greenland_P3')) ...
   
 end
 
-if (any(strcmpi(param.season_name,{'2015_Greenland_Polar6','2016_Greenland_Polar6','2017_Arctic_Polar5','2017_Antarctica_Polar6','2018_Greenland_Polar6','2019_Antarctica_Polar6','2019_Arctic_Polar6','2020_Arctic_Polar6'})) && any(strcmpi(gps_source,{'AWI','NMEA'})))
+if (any(strcmpi(param.season_name, ...
+    {'2015_Greenland_Polar6', ...
+    '2016_Greenland_Polar6', ...
+    '2017_Arctic_Polar5', ...
+    '2017_Antarctica_Polar6', ...
+    '2018_Greenland_Polar6', ...
+    '2019_Antarctica_Polar6', ...
+    '2019_Arctic_Polar6', ...
+    '2020_Arctic_Polar6', ...
+    '2021_Greenland_Polar5', ...
+    '2022_Greenland_Polar5', ...
+    '2022_Antarctica_Polar5', ...
+    })) && any(strcmpi(gps_source,{'AWI','NMEA'})))
   % Measurements are from Richard Hale Aug 12, 2015 for RDS and Aug 15,
   % 2015 for Snow Radar. Measurements are made relative to the AWI Aft
   % Science GPS antenna known as ST5.
@@ -692,9 +850,9 @@ end
 %% Accumulation Radar
 % =========================================================================
 
-if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas','2019_Antarctica_TObas'})) && strcmpi(radar_name,'accum'))
+if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas'})) && strcmpi(radar_name,'accum'))
   % See GPS section for 2018_Antarctica_TObas for details:
-  % 	3+5/8" from back of antenna box
+  % 	3+5/8" from back/aft-side of antenna box
   % 	9+15/16" from right/starboard side of lid (used edge of lid)
   % 	64+1/16" below to the lid of the antenna
   %
@@ -727,6 +885,85 @@ if (any(strcmpi(param.season_name,{'2018_Antarctica_TObas','2019_Antarctica_TOba
   LAtx(3,:)   = ( (+(64+1/16) - 0.75 + 10.04) + [0 0 0 0])*0.0254 - gps.z; % m
   
   LAtx = mean(LAtx,2); % Combine all 4 elements into a single element
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (any(strcmpi(param.season_name,{'2019_Antarctica_TObas'})) && strcmpi(radar_name,'accum'))
+  % See GPS section for 2019_Antarctica_TObas for details:
+  % 	-2.8274 from forward-side of antenna box
+  %   -0.1757 from right/starboard side of lid (used edge of lid)
+  % 	-1.7068 below to the lid of the antenna
+  %
+  % The offset from the outer back right top corner of the box to the
+  % center of the aperture of each of the antennas is:
+  %   (reference is aft, starboard, top)
+  %
+  % With the box (outer surfaces) as reference, the measurements (in
+  % inches) are the following:
+  % Element 1 (starboard): (x,y,z) = (6.8125, 1.69885,10.04).
+  % Element 2 (next to starboard): (x,y,z) = (6.8125, 6.44885, 10.04)
+  % Element 3 (next to port): (x,y,z) = (6.8125,11.19885, 10.04)
+  % Element 4 (port): (x,y,z) = (6.8125, 15.94885, 10.04)
+  % The thickness of each antenna element is 0.125 in.
+  %
+  % The bars were 0.75 in. thick. This decreases the z-position of all
+  % elements by 0.75 in.
+
+  % Accumulation antenna
+  LArx = [];
+  LArx(1,:)   = ( (-2.8274/0.0254 - 6.8125) + [0 0 0 0])*0.0254 - gps.x; % m
+  LArx(2,:)   = ( (+0.1757/0.0254) - [15.9489   11.1989    6.4489    1.6988])*0.0254 - gps.y; % m
+  LArx(3,:)   = ( (+1.7068/0.0254 - 0.75 + 10.04) + [0 0 0 0])*0.0254 - gps.z; % m
+  
+  LArx = mean(LArx,2); % Combine all 4 elements into a single element
+  
+  LAtx = [];
+  LAtx(1,:)   = ( (-2.8274/0.0254 - 6.8125) + [0 0 0 0])*0.0254 - gps.x; % m
+  LAtx(2,:)   = ( (+0.1757/0.0254) - [15.9489   11.1989    6.4489    1.6988])*0.0254 - gps.y; % m
+  LAtx(3,:)   = ( (+1.7068/0.0254 - 0.75 + 10.04) + [0 0 0 0])*0.0254 - gps.z; % m
+  
+  LAtx = mean(LAtx,2); % Combine all 4 elements into a single element
+  
+  if strcmpi(gps_source,'bas_imu_to_gps')
+    % Special code for doing IMU to GPS lever arm rather than to radar
+    LArx = [-gps.x; -gps.y; -gps.z];
+    LAtx = [-gps.x; -gps.y; -gps.z];
+  end
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (any(strcmpi(param.season_name,{'2022_Greenland_Ground'})) && strcmpi(radar_name,'accum'))
+
+  % Accumulation antenna
+  LArx = [];
+  LArx(1,:)   = ( 0*0.0254 ) - gps.x; % m
+  LArx(2,:)   = ( 0*0.0254 ) - gps.y; % m
+  LArx(3,:)   = ( 0*0.0254 ) - gps.z; % m
+  
+  LArx = mean(LArx,2); % Combine all elements into a single element
+  
+  LAtx = [];
+  LAtx(1,:)   = ( 0*0.0254 ) - gps.x; % m
+  LAtx(2,:)   = ( 0*0.0254 ) - gps.y; % m
+  LAtx(3,:)   = ( 0*0.0254 ) - gps.z; % m
+  
+  LAtx = mean(LAtx,2); % Combine all elements into a single element
   
   if ~exist('rxchannel','var') || isempty(rxchannel)
     rxchannel = 1;
@@ -789,13 +1026,13 @@ if (strcmpi(param.season_name,'2018_Greenland_P3') && strcmpi(radar_name,'accum'
   % along-track elements are combined using in cabin power combiners.
   % Each of the four combined channels are individually transmitted and
   % received on.
-  LArx(1,:)   = (-433.3*0.0254 + [0 0 0 0]) - gps.x; % m
-  LArx(2,:)   = (0 + [-0.39 -0.13 0.13 0.39]) - gps.y; % m
-  LArx(3,:)   = (-72.5*0.0254 + [0 0 0 0]) - gps.z; % m
+  LArx(1,:)   = (-433.3*0.0254 + [0 0 0 0 0]) - gps.x; % m
+  LArx(2,:)   = (0 + [-0.39 -0.13 0.13 0.39 0]) - gps.y; % m
+  LArx(3,:)   = (-72.5*0.0254 + [0 0 0 0 0]) - gps.z; % m
 
-  LArx(1,:)   = (-433.3*0.0254 + [0 0 0 0]) - gps.x; % m
-  LAtx(2,:)   = (0 + [-0.39 -0.13 0.13 0.39]) - gps.y; % m
-  LAtx(3,:)   = (-72.5*0.0254 + [0 0 0 0]) - gps.z; % m
+  LAtx(1,:)   = (-433.3*0.0254 + [0 0 0 0 0]) - gps.x; % m
+  LAtx(2,:)   = (0 + [-0.39 -0.13 0.13 0.39 0]) - gps.y; % m
+  LAtx(3,:)   = (-72.5*0.0254 + [0 0 0 0 0]) - gps.z; % m
   
   if ~exist('rxchannel','var') || isempty(rxchannel)
     rxchannel = 1:4;
@@ -859,6 +1096,27 @@ if (strcmpi(param.season_name,'2014_Greenland_P3') && strcmpi(radar_name,'accum'
   end
 end
 
+if any(strcmpi(param.season_name,{'2015_Antarctica_Ground','2015_Greenland_Ground'})) && strcmpi(radar_name,'accum')
+  % Accumulation antenna
+  % NMEA data only and unknown lever arm
+  LArx(1,:)   = ([0]) - gps.x; % m
+  LArx(2,:)   = ([0]) - gps.y; % m
+  LArx(3,:)   = ([0]) - gps.z; % m
+  
+  LAtx(1,:)   = ([0]) - gps.x; % m
+  LAtx(2,:)   = ([0]) - gps.y; % m
+  LAtx(3,:)   = ([0]) - gps.z; % m
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
 if (strcmpi(param.season_name,'2013_Antarctica_Ground') && strcmpi(radar_name,'accum'))
   % Accumulation antenna
   LArx(1,:)   = ([0 0 0 0 0 0]) - gps.x; % m
@@ -888,6 +1146,54 @@ if (strcmpi(param.season_name,'2013_Antarctica_Sled') && strcmpi(radar_name,'acc
   LAtx(1,:)   = ([0 0]) - gps.x; % m
   LAtx(2,:)   = ([-165 165]/100) - gps.y; % m
   LAtx(3,:)   = ([0 0]) - gps.z; % m
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_BaslerMKB') && strcmpi(radar_name,'accum'))
+  % Platform: Airborne Radar Kenn Borek Air Basler call sign MKB (COLDEX 1, COLDEX 2, UTIG)
+  % These values need to be updated with actual values.
+    
+  % Measurements, X,Y,Z are in aircraft coordinates, not IMU coordinates
+  %LArx(1,1:16) = 1.5859;
+  LArx(1,1:16) = -1.5; % GUESS
+  LArx(2,1:16) = [-9.2102*(0:15)] * 2.54/100;
+  LArx(2,1:16) = LArx(2,1:16) - mean(LArx(2,1:16));
+  LArx(3,1:16) = -3.4609; % GUESS
+  warning('This file needs to be updated with actual values for 2022.');
+  
+  LAtx = LArx(:,1:16);
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1:16;
+  end
+  
+  % Amplitude (not power) weightings for transmit side.
+  if rxchannel == 0
+    rxchannel = 8;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if any(strcmpi(param.season_name,{'2022_Antarctica_Ground','2023_Greenland_Ground'})) && strcmpi(radar_name,'accum')
+  % Sled antennas EAGER 1 and EAGER 2
+  %
+  % Primary GPS antenna: GPS positions are relative to primary which is in the center of the radar antenna array.
+  % Secondary GPS antenna: 22.5" forward and 12" right of the primary. Align information will be relative to this.
+  
+  % GPS Antenna to Antenna phase center
+  LArx = [0 0	-4 % along-track polarization/H-polarization
+    0 0	-4 % cross-track polarization/V-polarization
+    ].' * 2.54/100;
+  
+  LAtx = LArx(:,:);
   
   if ~exist('rxchannel','var') || isempty(rxchannel)
     rxchannel = 1;
@@ -1156,6 +1462,82 @@ end
 % =========================================================================
 %% Radar Depth Sounder
 % =========================================================================
+if any(strcmpi(param.season_name,{'2022_Greenland_X6'})) && strcmpi(radar_name,'rds')
+  % X,Y,Z are in aircraft coordinates relative to GPS antenna
+  % Undetermined, temporarily set to zeros
+  LArx = [0	0	0].';
+  LAtx = [0	0	0].';
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if any(strcmpi(param.season_name,{'2022_Greenland_Vapor'})) && strcmpi(radar_name,'rds')
+  % X,Y,Z are in aircraft coordinates relative to GPS antenna
+  % Undetermined, temporarily set to zeros
+  LArx = [0	0	0].';
+  LAtx = [0	0	0].';
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_BaslerMKB') && strcmpi(radar_name,'rds'))
+  % Platform: Airborne Radar Kenn Borek Air Basler call sign MKB (COLDEX 1, COLDEX 2, UTIG)
+  % These values need to be updated with actual values.
+    
+  % Measurements, X,Y,Z are in aircraft coordinates, not IMU coordinates
+  LArx = [];
+  LArx(1,1:2) = [-1.5 -1.5]; % GUESS
+  LArx(2,1:2) = [-9 9]; % GUESS
+  LArx(3,1:2) = [1.5 1.5]; % GUESS
+  warning('This file needs to be updated with actual values for 2022.');
+  
+  LAtx = [-1.5; 0; 1.5];
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1:2;
+  end
+  
+  % Amplitude (not power) weightings for transmit side.
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_GroundGHOST') && strcmpi(radar_name,'rds'))
+  % Sled antennas GHOST 1
+  %
+  % Primary GPS antenna: GPS positions are relative to primary which is in the center of the radar antenna array.
+  % Secondary GPS antenna: 6*30 = 180" (WILD GUESS!!!!) right of the primary. Align information will be relative to this.
+  
+  % GPS Antenna to Antenna phase center
+  LArx = [zeros(1,6);
+    28*[0 1 2 3 4 5];
+    zeros(1,6)] * 2.54/100;
+  
+  LAtx = LArx(:,:);
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 4;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 4;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
 
 if any(strcmpi(param.season_name,{'2019_Antarctica_GV'})) ...
     && strcmpi(radar_name,'rds')
@@ -1315,16 +1697,18 @@ end
 if (strcmpi(param.season_name,'2019_Antarctica_Ground') && strcmpi(radar_name,'rds'))
   % Sled antennas
   % Center elements left to right
-  LArx = [0	-64.4623	10.5
-    0	-46.0371	10.5
-    0 -27.6119	10.5
-    0 -9.1867	10.5
-    0 9.2337	10.5
-    0 27.6637	10.5
-    0 46.0889	10.5
-    0 64.5141	10.5].' * 2.54/100;
   
-  LAtx = LArx(:,[1 2 7 8]);
+  % GPS Antenna to Antenna ports (top side of antenna glass to bottom center of GPS antenna)
+  LArx = [-18.475	-119.94 14.596
+    -18.475	-101.57   14.596
+    -18.475 -83.24	 14.596
+    -18.475 -64.87  14.596
+    -18.475 -46.54  14.596
+    -18.475 -28.17  14.596
+    -18.475 -9.84 14.596
+    -18.475 8.53 14.596].' * 2.54/100;
+  
+  LAtx = LArx(:,[1 7 2 8]);
   
   if ~exist('rxchannel','var') || isempty(rxchannel)
     rxchannel = 4;
@@ -1332,6 +1716,36 @@ if (strcmpi(param.season_name,'2019_Antarctica_Ground') && strcmpi(radar_name,'r
   
   if rxchannel == 0
     rxchannel = 4;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if (strcmpi(param.season_name,'2022_Antarctica_Ground') && strcmpi(radar_name,'rds'))
+  % Sled antennas
+  % Center elements left to right
+  
+  % GPS Antenna to Antenna ports (top side of antenna glass to bottom center of GPS antenna)
+  LArx = [0 -83.24 0 % along-track polarization/H-polarization
+    0 -64.87  0
+    0 -46.54  0
+    0 -28.17 0
+    0 -9.84 0
+    0 8.53 0
+    0 -83.24 0 % cross-track polarization/V-polarization
+    0 -64.87 0
+    0 -46.54 0
+    0 -28.17 0
+    0 -9.84 0
+    0 8.53 0].' * 2.54/100;
+  
+  LAtx = LArx(:,:);
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 3;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 3;
     tx_weights = ones(1,size(LAtx,2));
   end
 end
@@ -1379,7 +1793,10 @@ if (strcmpi(param.season_name,'2016_Greenland_P3') && strcmpi(radar_name,'rds'))
 end
 
 % Only for 24ch configuration
-if (any(strcmpi(param.season_name,{'2015_Greenland_Polar6','2016_Greenland_Polar6','2017_Antarctica_Polar6'})) && strcmpi(radar_name,'rds'))
+if (any(strcmpi(param.season_name,{'2015_Greenland_Polar6', ...
+    '2016_Greenland_Polar6', ...
+    '2017_Antarctica_Polar6', ...
+    })) && strcmpi(radar_name,'rds'))
   % See notes in GPS section
   
   % Center elements left to right
@@ -1430,7 +1847,11 @@ if (any(strcmpi(param.season_name,{'2015_Greenland_Polar6','2016_Greenland_Polar
 end
 
 % Only for 8ch configuration
-if (any(strcmpi(param.season_name,{'2018_Greenland_Polar6','2019_Antarctica_Polar6'})) && strcmpi(radar_name,'rds'))
+if (any(strcmpi(param.season_name,{'2018_Greenland_Polar6', ...
+    '2019_Antarctica_Polar6', ...
+    '2021_Greenland_Polar5', ...
+    '2022_Greenland_Polar5', ...
+    })) && strcmpi(radar_name,'rds'))
   % See notes in GPS section
   
   % Center elements left to right
@@ -1514,7 +1935,9 @@ if (strcmpi(param.season_name,'2013_Antarctica_Basler') && strcmpi(radar_name,'r
 end
 
 if (strcmpi(param.season_name,'2017_Antarctica_Basler') && strcmpi(radar_name,'rds'))
-  % See notes in GPS section
+  % These values need to be updated with actual values. They appear to not
+  % be using the total station survey values that Craig from ATM provided
+  % and the offsets from those that Richard Hale provided.
     
   % Measurements, X,Y,Z are in aircraft coordinates, not IMU coordinates
   LArx(1,1:8) = 1.5859;
@@ -1535,72 +1958,8 @@ if (strcmpi(param.season_name,'2017_Antarctica_Basler') && strcmpi(radar_name,'r
   end
 end
 
-if (strcmpi(param.season_name,'2019_Greenland_P3') && strcmpi(radar_name,'rds'))
-  % IMPORTANT NOTE:
-  %
-  % CHANNELS 4 and 5 WERE SWAPPED.
-  %
-  % This lever arm is the same as all the other P3 OIB campaigns except
-  % that channels 4 and 5 are swapped.
-  
-  % Offsets from the ground plane (based on the CAD model)
-  if 1
-    XYZ_offset = ...
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0; ...
-      1.8, 0.4, 1.5, 0, -1.5, -0.4, -1.8, 2, 2, 2.1, 2.1, -2.1, -2.1, -2, -2; ...
-      -15.4, -14.8, -16.5, -13.3, -16.5, -14.8, -15.4, -16.7, -16.7, -16.7, -16.7, -16.7, -16.7, -16.7, -16.7];
-  else
-    XYZ_offset = zeros(3,15);
-  end
- 
-  % Center elements left to right (in inches)
-  LArx(:,1) = [-587.7	-88.6	-72.8];
-  LArx(:,2) = [-587.7	-58.7	-71];
-  LArx(:,3) = [-587.7	-30.4	-69.2];
-  LArx(:,4) = [-587.7	0	-68.1];
-  LArx(:,5) = [-587.7	30.4	-69.2];
-  LArx(:,6) = [-587.7	58.7	-71];
-  LArx(:,7) = [-587.7	88.6	-72.8];
-  % Left outer elements, left to right (in inches)
-  LArx(:,8) = [-586.3	-549.2	-128.7];
-  LArx(:,9) = [-586.3	-520.6	-125.2];
-  LArx(:,10) = [-586.3	-491.2	-121.6];
-  LArx(:,11) = [-586.3	-462.2	-118.1];
-  % Right outer elements, left to right (in inches)
-  LArx(:,12) = [-586.3	462.2	-118.1];
-  LArx(:,13) = [-586.3	491.2	-121.6];
-  LArx(:,14) = [-586.3	520.6	-125.2];
-  LArx(:,15) = [-586.3	549.2	-128.7];
-  
-  % Add offsets from ground plane
-  LArx = LArx + XYZ_offset;
-  
-  % Convert to meters units and add gps trajectory position
-  LArx(1,:)   = LArx(1,:)*0.0254 - gps.x;
-  LArx(2,:)   = LArx(2,:)*0.0254 - gps.y;
-  LArx(3,:)   = LArx(3,:)*0.0254 - gps.z;
-  
-  % SWAP CHANNELS
-  LArx = LArx(:,[1 2 3 5 4 6 7]);
-  
-  LAtx = LArx(:,1:7);
-  
-  % TEST EQUALIZATION
-%   LAtx(2,1:3) = LAtx(2,1:3)-30*0.0254;
-%   LAtx(2,4:7) = LAtx(2,4:7)+30*0.0254;
-  
-  if ~exist('rxchannel','var') || isempty(rxchannel)
-    rxchannel = 1:15;
-  end
-  
-  % Amplitude (not power) weightings for transmit side.
-  if rxchannel == 0
-    rxchannel = 4;
-    tx_weights = ones(1,size(LAtx,2));
-  end
-end
-
-if (strcmpi(param.season_name,'2018_Greenland_P3') && strcmpi(radar_name,'rds')) ...
+if (strcmpi(param.season_name,'2019_Greenland_P3') && strcmpi(radar_name,'rds')) ...
+    || (strcmpi(param.season_name,'2018_Greenland_P3') && strcmpi(radar_name,'rds')) ...
     || (strcmpi(param.season_name,'2017_Antarctica_P3') && strcmpi(radar_name,'rds')) ...
     || (strcmpi(param.season_name,'2017_Greenland_P3') && strcmpi(radar_name,'rds')) ...
     || (strcmpi(param.season_name,'2014_Greenland_P3') && strcmpi(radar_name,'rds')) ...
@@ -1959,6 +2318,62 @@ end
 % =========================================================================
 %% Snow Radar
 % =========================================================================
+if any(strcmpi(param.season_name,{'2021_Arctic_Vanilla'})) && strcmpi(radar_name,'snow')
+  % X,Y,Z are in aircraft coordinates relative to GPS antenna
+  % Undetermined, temporarily set to zeros
+  LArx = [0	0	0].';
+  LAtx = [0	0	0].';
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  % Amplitude (not power) weightings for transmit side.
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if any(strcmpi(param.season_name,{'2019_SouthDakota_N1KU'})) ...
+    && strcmpi(radar_name,'snow')
+  % X,Y,Z are in aircraft coordinates relative to GPS antenna
+  LArx = [0.3827 -1.2155 -0.9425].';
+
+  LAtx = [0.3771 1.7367 -0.9409].';
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  % Amplitude (not power) weightings for transmit side.
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
+
+if any(strcmpi(param.season_name,{'2020_SouthDakota_N1KU'})) ...
+    && strcmpi(radar_name,'snow')
+  % X,Y,Z are in aircraft coordinates relative to GPS antenna
+  %
+  LAtx = [0.5486 0.2423 -1.6352].';
+
+  LArx = [0.2952 -2.1810 0.7222].';
+  LArx(:,2) = [0.3836 -1.6054 1.0586].';
+  LArx(:,3) = [0.4637  -1.0808 1.3995].';
+  LArx(:,4) = [0.4647  0.5980 1.3891].';
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  % Amplitude (not power) weightings for transmit side.
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
+end
 
 if any(strcmpi(param.season_name,{'2019_Arctic_GV','2019_Antarctica_GV'})) ...
     && strcmpi(radar_name,'snow')
@@ -1983,7 +2398,7 @@ if any(strcmpi(param.season_name,{'2019_Arctic_GV','2019_Antarctica_GV'})) ...
   end
 end
 
-if any(strcmpi(param.season_name,{'2018_Alaska_SO','2019_Alaska_SO'})) ...
+if any(strcmpi(param.season_name,{'2018_Alaska_SO','2021_Alaska_SO'})) ...
     && strcmpi(radar_name,'snow')
   % X,Y,Z are in aircraft coordinates relative to GPS antenna
   LArx(1,1) = -0.288;
@@ -2026,7 +2441,14 @@ if (strcmpi(param.season_name,'2016_Greenland_P3') && strcmpi(radar_name,'snow')
   end
 end
 
-if (any(strcmpi(param.season_name,{'2015_Greenland_Polar6','2016_Greenland_Polar6','2017_Arctic_Polar5','2018_Greenland_Polar6','2019_Arctic_Polar6','2020_Arctic_Polar6'})) && strcmpi(radar_name,'snow'))
+if (any(strcmpi(param.season_name,{ ...
+    '2015_Greenland_Polar6', ...
+    '2016_Greenland_Polar6', ...
+    '2017_Arctic_Polar5', ...
+    '2018_Greenland_Polar6', ...
+    '2019_Arctic_Polar6', ...
+    '2020_Arctic_Polar6', ...
+    '2022_Antarctica_Polar5'})) && strcmpi(radar_name,'snow'))
   % See notes in GPS section
   
   LArx(1,1:2) = -[95.5 95.5]*2.54/100;
@@ -2143,6 +2565,40 @@ if (strcmpi(param.season_name,'2013_Antarctica_Basler') && strcmpi(radar_name,'s
   end
 end
 
+if (strcmpi(param.season_name,'2022_Greenland_P3') && strcmpi(radar_name,'snow'))
+  % See initial GPS entry for notes.
+  %
+  % General layout (forward antennas first):
+  %     Tx1 TxHV   Rx3 Rx4        Tx2
+  %     Rx1 Rx2       RxHV   Rx5 Rx6
+  
+  % Vivaldi Rx (left to right) followed by rx horn antenna V/H
+  % Vivaldi antennas 3 and 4 are in the front row, all other receive
+  % antennas are in the back row.
+  % rx_path order:
+  % [Rx1 Rx2 Rx3 Rx4 Rx5 Rx6 RxV RxH]
+  LArx(1,:)   = [-386.1 -386.1 -354.0 -354.0 -386.1 -386.1 -391.2 -391.2]*0.0254 - gps.x; % m
+  LArx(2,:)   = [ -19.4  -13.7   -0.1    4.9    9.2   16.8   -2.4   -2.4]*0.0254 - gps.y; % m
+  LArx(3,:)   = [ -68.2  -68.2  -68.5  -68.5  -68.2  -68.2  -72.6  -72.6]*0.0254 - gps.z; % m
+  
+  % Vivaldi Tx (left to right) followed by tx horn antenna V/H
+  % All transmitters are in the front row
+  % tx_path order:
+  % [Tx1 Tx2 TxV TxH]
+  LAtx(1,:)   = [-354.0 -354.0 -359.2 -359.2]*0.0254 - gps.x; % m
+  LAtx(2,:)   = [ -19.4   20.0  -12.3  -12.3]*0.0254 - gps.y; % m
+  LAtx(3,:)   = [ -68.5  -68.5  -72.9  -72.9]*0.0254 - gps.z; % m
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = [1 0 0 0];
+  end
+end
+
 if (strcmpi(param.season_name,'2019_Greenland_P3') && strcmpi(radar_name,'snow')) ...
     || (strcmpi(param.season_name,'2018_Greenland_P3') && strcmpi(radar_name,'snow')) ...
     || (strcmpi(param.season_name,'2017_Antarctica_P3') && strcmpi(radar_name,'snow')) ...
@@ -2192,6 +2648,15 @@ if (strcmpi(param.season_name,'2009_Greenland_P3') && strcmpi(radar_name,'snow')
   LAtx(1,:)   = [335.6]*0.0254; % m
   LAtx(2,:)   = [18.9]*0.0254; % m
   LAtx(3,:)   = [146]*0.0254; % m
+  
+  if ~exist('rxchannel','var') || isempty(rxchannel)
+    rxchannel = 1;
+  end
+  
+  if rxchannel == 0
+    rxchannel = 1;
+    tx_weights = ones(1,size(LAtx,2));
+  end
 end
 
 if (strcmpi(param.season_name,'2010_Antarctica_DC8') && strcmpi(radar_name,'snow')) ...

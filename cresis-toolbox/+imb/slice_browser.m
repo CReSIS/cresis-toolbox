@@ -79,7 +79,7 @@ classdef slice_browser < handle
   
   methods
     %% constructor/slice_browser:
-    function obj = slice_browser(data,h_control_image,param)
+    function obj = slice_browser(mdata,h_control_image,param)
       if ~exist('param','var')
         param = [];
       end
@@ -110,7 +110,7 @@ classdef slice_browser < handle
       end
       undo_param.id = [];
       obj.undo_stack = imb.undo_stack(undo_param);
-      obj.data = data;
+      obj.data = 10*log10(mdata.Tomo.img);
       obj.slice = 1;
       obj.plot_visibility = true;
       obj.bounds_relative = param.bounds_relative;
@@ -125,13 +125,11 @@ classdef slice_browser < handle
       %start(obj.slice_tool.timer)
       
       % Load surface data
-      if isfield(param,'surfdata_fn') && ~isempty(param.surfdata_fn)
-        obj.sd = tomo.surfdata(param.surfdata_fn,param);
-        obj.surfdata_fn = param.surfdata_fn;
-      else
-        obj.sd = tomo.surfdata(param);
-        obj.surfdata_fn = '';
-      end
+      obj.sd = tomo.surfdata(param.surfdata_fn);
+      obj.sd.theta = mdata.Tomo.theta(:,1);
+      obj.sd.time = mdata.Time;
+      obj.sd.units('bins');
+      obj.surfdata_fn = param.surfdata_fn;
       
       if ~isempty(h_control_image)
         obj.h_control_is_child = false;
@@ -144,7 +142,7 @@ classdef slice_browser < handle
         obj.h_control_axes = axes('Parent',obj.h_control_fig,'YDir','reverse');
         hold(obj.h_control_axes,'on');
         if ~param.doa_method_flag
-          obj.h_control_image = imagesc(squeeze(obj.data(:,floor(size(data,2)/2)+1,:)),'Parent',obj.h_control_axes);
+          obj.h_control_image = imagesc(squeeze(obj.data(:,floor(size(obj.data,2)/2)+1,:)),'Parent',obj.h_control_axes);
           colormap(obj.h_control_axes,parula(256));
           xlabel(obj.h_control_axes,'Along-track range line');
           ylabel(obj.h_control_axes,'Range bin');
@@ -333,19 +331,19 @@ classdef slice_browser < handle
       set(obj.gui.prev10PB,'style','pushbutton')
       set(obj.gui.prev10PB,'string','<<')
       set(obj.gui.prev10PB,'Callback',@obj.prev10_button_callback)
-      set(obj.gui.prev10PB,'TooltipString','Move backward ten slices (<)');
+      set(obj.gui.prev10PB,'TooltipString','Move backward five slices (k)');
       
       obj.gui.next10PB = uicontrol('parent',obj.gui.left_panel);
       set(obj.gui.next10PB,'style','pushbutton')
       set(obj.gui.next10PB,'string','>>')
       set(obj.gui.next10PB,'Callback',@obj.next10_button_callback)
-      set(obj.gui.next10PB,'TooltipString','Move forward ten slices (>)');
+      set(obj.gui.next10PB,'TooltipString','Move forward five slices (l)');
       if ~obj.doa_method_flag
         obj.gui.savePB = uicontrol('parent',obj.gui.left_panel);
         set(obj.gui.savePB,'style','pushbutton')
         set(obj.gui.savePB,'string','(S)ave')
         set(obj.gui.savePB,'Callback',@obj.save_button_callback)
-        set(obj.gui.savePB,'TooltipString','(S)ave surfaces to file');
+        set(obj.gui.savePB,'TooltipString','Save surfaces to file (shift-S)');
         
         obj.gui.helpPB = uicontrol('parent',obj.gui.left_panel);
         set(obj.gui.helpPB,'style','pushbutton')
@@ -544,12 +542,12 @@ classdef slice_browser < handle
     
     %% next10_button_callback
     function next10_button_callback(obj,source,callbackdata)
-      obj.change_slice(obj.slice + 10,false);
+      obj.change_slice(obj.slice + 5,false);
     end
     
     %% prev10_button_callback
     function prev10_button_callback(obj,source,callbackdata)
-      obj.change_slice(obj.slice - 10,false);
+      obj.change_slice(obj.slice - 5,false);
     end
     
     %% undo_sync
@@ -566,7 +564,12 @@ classdef slice_browser < handle
                 = cmds_list{cmd_idx}{subcmd_idx}.redo.y;
               new_slice = cmds_list{cmd_idx}{subcmd_idx}.redo.slice;
             elseif strcmp(cmds_list{cmd_idx}{subcmd_idx}.type,'slice_dummy')
-              new_slice = cmds_list{cmd_idx}{subcmd_idx}.redo.slice;
+              if ~any(obj.slice==cmds_list{cmd_idx}{subcmd_idx}.redo.slice)
+                new_slice = cmds_list{cmd_idx}{subcmd_idx}.redo.slice(1);
+                fprintf('Redo slices %d-%d\n', min(cmds_list{cmd_idx}{subcmd_idx}.redo.slice), max(cmds_list{cmd_idx}{subcmd_idx}.redo.slice));
+              else
+                new_slice = obj.slice;
+              end
             end
           end
         end
@@ -580,7 +583,12 @@ classdef slice_browser < handle
                 = cmds_list{cmd_idx}{subcmd_idx}.undo.y;
               new_slice = cmds_list{cmd_idx}{subcmd_idx}.undo.slice;
             elseif strcmp(cmds_list{cmd_idx}{subcmd_idx}.type,'slice_dummy')
-              new_slice = cmds_list{cmd_idx}{subcmd_idx}.redo.slice;
+              if ~any(obj.slice==cmds_list{cmd_idx}{subcmd_idx}.redo.slice)
+                new_slice = cmds_list{cmd_idx}{subcmd_idx}.redo.slice(1);
+                fprintf('Undo slices %d-%d\n', min(cmds_list{cmd_idx}{subcmd_idx}.redo.slice), max(cmds_list{cmd_idx}{subcmd_idx}.redo.slice));
+              else
+                new_slice = obj.slice;
+              end
             end
           end
         end
@@ -888,17 +896,13 @@ classdef slice_browser < handle
             end
             
           case 'period'
-            if ~obj.shift_pressed
-              obj.change_slice(obj.slice + 5,false);
-            else
-              obj.change_slice(obj.slice + 1,false);
-            end
+            obj.change_slice(obj.slice + 1,false);
           case 'comma'
-            if ~obj.shift_pressed
-              obj.change_slice(obj.slice - 5,false);
-            else
-              obj.change_slice(obj.slice - 1,false);
-            end
+            obj.change_slice(obj.slice - 1,false);
+          case 'k'
+            obj.change_slice(obj.slice - 5,false);
+          case 'l'
+            obj.change_slice(obj.slice + 5,false);
             
           case 'delete'
             surf_idx = get(obj.gui.surfaceLB,'Value');
@@ -1062,7 +1066,14 @@ classdef slice_browser < handle
             'YData', tmp_y);
         end
       end
-      if ~isempty(get(obj.gui.surfaceLB,'String'))
+      surf_idx = get(obj.gui.surfaceLB,'value');
+      surfaceLB_str = get(obj.gui.surfaceLB,'string');
+      if ~isempty(get(obj.gui.surfaceLB,'String')) ...
+          && (isempty(surf_idx) || surf_idx == 0 || all(surf_idx ~= 1:length(surfaceLB_str)))
+        set(obj.gui.surfaceLB,'value',1);
+        surf_idx = 1;
+      end
+      if ~isempty(get(obj.gui.surfaceLB,'String')) && ~isempty(surf_idx)
         % Update surface selection related plots
         surf_idx = get(obj.gui.surfaceLB,'value');
         x_select = obj.sd.surf(surf_idx).x(:,obj.slice);
@@ -1231,7 +1242,8 @@ classdef slice_browser < handle
     
     %% Help
     function help_menu(obj)
-      fprintf('Key Short Cuts\n');
+      fprintf('\nMouse Operations\n');
+      fprintf('======================================================\n');
       
       fprintf('\nZoom Mode\n');
       fprintf('left-click and drag: zoom to selection\n');
@@ -1239,11 +1251,16 @@ classdef slice_browser < handle
       fprintf('right-click: zoom out at point\n');
       
       fprintf('\nPointer Mode In "slice" window\n');
-      fprintf('left-click: set layer point (or toggle logical value)\n');
-      fprintf('right-click and drag: select points (shift-key holds selection)\n');
+      fprintf('left-click: set ground truth point or toggle logical value if mask or quality selected\n');
+      fprintf('right-click and drag: select points to operate on (shift-key holds selection)\n');
       
-      fprintf('\nPointer Mode In "layer" and "echogram" window\n');
+      fprintf('\nPointer Mode In "surface" and "echogram" window\n');
       fprintf('left-click: sets current slice\n');
+      fprintf('right-click and drag: select region to operate on (shift-key holds selection)\n');
+      
+      fprintf('\nPointer Mode In "surface" window\n');
+      fprintf('right-click and drag: select region and apply tool\n');
+      fprintf('  For the quality tool, holding shift toggles setting true/false\n');
       
       fprintf('\nAll Modes\n');
       fprintf('scroll: zoom in/out at point\n');
@@ -1257,6 +1274,27 @@ classdef slice_browser < handle
           end
         end
       end
+      
+      fprintf('\nKeyboard Shortcuts\n');
+      fprintf('======================================================\n');
+      
+      fprintf('\nGeneral\n');
+      fprintf('F1: print this help menu\n');
+      fprintf('space: toggle surface visibility\n');
+      fprintf('u: undo the last operation\n');
+      fprintf('r: redo an operation that was undone with undo\n');
+      fprintf('shift-S: save surfaces to surfdata file\n');
+      fprintf('delete: deletes selected points (or sets to false if logical layer)\n');
+      
+      fprintf('\nMovement\n');
+      fprintf('period . : go forward 1 frame\n');
+      fprintf('comma , : go forward 1 frame\n');
+      fprintf('g: go to a specific frame\n');
+      fprintf('k: go back 5 frames\n');
+      fprintf('l: go forward 5 frames\n');
+      fprintf('arrow-keys: pan left/right/up/down in the image\n');
+      fprintf('z: toggle zoom mode on/off\n');
+      fprintf('ctrl-z: zoom reset (zooms all the way out to show the full image)\n');
     end
     
     %% getEventData

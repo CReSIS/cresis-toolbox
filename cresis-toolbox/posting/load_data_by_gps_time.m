@@ -196,40 +196,32 @@ else
   % ====================================================================
   % ====================================================================
   
-  % Get list of records and frames files
-  %  records_fn = '/cresis/scratch1/mdce/csarp_support/records/mcords/2009_Antarctica_DC8/records_20091016_seg1.mat';
-  %  records = records_aux_files_read(records_fn,[1 4000]);
-  %  check = load(records_fn);
-  
   % Get list of records files
-  records_dir = ct_filename_support(param, '', 'records');
-  fns = get_filenames(records_dir,'records','','.nc');
+  frames_dir = ct_filename_support(param, '', 'frames');
+  fns = get_filenames(frames_dir,'frames','','.mat');
 
   if isempty(fns)
-    error('No records file found in %s', records_dir);
+    error('No frames file found in %s', frames_dir);
   end
 
   % Load in first and last record from each records file
   first_gps_time = [];
+  last_gps_time = [];
   for file_idx = 1:length(fns)
-    records_fn = fns{file_idx};
-    [path name] = fileparts(records_fn);
-    cdf_fn = fullfile(path, sprintf('%s.nc', name));
+    frames_fn = fns{file_idx};
 
     try
-      ncid = netcdf.open(cdf_fn,'NOWRITE');
+      % Continue to run even if a frames file fails to load
+      frames = frames_load(frames_fn);
+      first_gps_time(file_idx) = frames.gps_time(1);
+      last_gps_time(file_idx) = frames.gps_time(end);
     catch ME
-      warning('Exception during file opening');
-      ME
-      keyboard
+      warning(ME.getReport)
     end
-    var_idx = netcdf.inqVarID(ncid,'gps_time');
-    first_gps_time(file_idx) = netcdf.getVar(ncid,var_idx,[0 0],[1 1]);
-    netcdf.close(ncid);
   end
   
   start_file_idx = find(start.gps_time >= first_gps_time,1,'last');
-  stop_file_idx = find(stop.gps_time >= first_gps_time,1,'last');
+  stop_file_idx = find(stop.gps_time <= last_gps_time,1);
   
   if isempty(start_file_idx)
     error('Start time (%s) is before any radar data exists (%s)', ...
@@ -247,31 +239,13 @@ else
       datestr(epoch_to_datenum(stop.gps_time)));
   end
   
-  records_fn = [fns{start_file_idx}(1:end-2) 'mat'];
-  [tmp records_fn_name] = fileparts(records_fn);
-  param.day_seg = records_fn_name(9:end);
+  frames = frames_load(fns{start_file_idx});
+  param.day_seg = frames.param.day_seg;
+  records = records_load(param);
   
-  frames_fn = ct_filename_support(param, '', 'frames');
-  load(frames_fn);
-  
-  records_ver = load(records_fn,'ver','file_version');
-  if isfield(records_ver,'ver') || isfield(records_ver,'file_version')
-    records = load(records_fn);
-  else
-    load(records_fn, 'records');
-  end
-  
-  % Determine which records must be loaded
-  start_record = find(records.gps_time >= start.gps_time,1);
-  stop_record = find(records.gps_time <= stop.gps_time,1,'last');
-  
-  if isempty(start_record)
-    error('No data found!');
-  end
-  
-  % Determine which frames contain these records
-  start_frame = find(frames.frame_idxs <= start_record,1,'last');
-  stop_frame = find(frames.frame_idxs <= stop_record,1,'last');
+  % Determine which frames need to be loaded
+  start_frame = find(start.gps_time >= frames.gps_time,1,'last');
+  stop_frame = find(stop.gps_time >= frames.gps_time,1,'last');
   
   start_frm_id = sprintf('%s_%03.0f', param.day_seg, start_frame);
   stop_frm_id = sprintf('%s_%03.0f', param.day_seg, stop_frame);
@@ -294,12 +268,8 @@ else
     end
         
     % Determine this frames valid GPS time range
-    frm_gps_time_start = records.gps_time(frames.frame_idxs(frm));
-    if frm < length(frames.frame_idxs)
-      frm_gps_time_stop = records.gps_time(frames.frame_idxs(frm+1));
-    else
-      frm_gps_time_stop = records.gps_time(end);
-    end
+    frm_gps_time_start = frames.gps_time(start_frame);
+    frm_gps_time_stop = frames.gps_time(stop_frame+1);
     
     fprintf('  %s\n', out_fn);
     if frm_idx == 1

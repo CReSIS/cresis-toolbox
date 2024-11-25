@@ -63,7 +63,6 @@ if ~isfield(surf,'threshold_rng') || isempty(surf.threshold_rng)
 end
 surf.dem = round(surf.dem);
 
-
 %% Determine the threshold value using range bins specified by noise_rng
 median_data = nan(1,size(data,2));
 for rline=1:size(data,2)
@@ -124,7 +123,7 @@ end
 %   particular range line (this is useful if the noise estimates are noisy)
 % surf.threshold_rel_max: Threshold in dB below the maximum value in the
 %   rbin range
-if ~isempty(surf.threshold_noise_dB) && all(isnan(median_data)) && surf.threshold_rel_max == -inf 
+if isempty(surf.threshold_noise_dB) && all(isnan(median_data)) && surf.threshold_rel_max == -inf 
   warning('Insufficient information to generate threshold since all values are zero.');
   surface = surf.dem;
   return

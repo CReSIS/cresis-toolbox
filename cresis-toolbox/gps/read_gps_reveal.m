@@ -27,7 +27,7 @@ function gps = read_gps_reveal(in_fn,param)
 %
 % Author: William Blake, John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 debug_level = 1;
 

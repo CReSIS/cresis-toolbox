@@ -114,7 +114,7 @@ function reorder_ascopes(obj,val,new_val)
 
 if new_val ~= val
   % Reorder layers
-  Nascopes = length(obj.eg.layers.lyr_name);
+  Nascopes = length(obj.ascope.echowin);
   new_order = [1:val-1, val+1:Nascopes];
   new_order = [new_order(1:new_val-1) val new_order(new_val:Nascopes-1)];
   
@@ -128,7 +128,9 @@ if new_val ~= val
   obj.ascope.surf_twtt = obj.ascope.surf_twtt(new_order);
   obj.ascope.lat = obj.ascope.lat(new_order);
   obj.ascope.lon = obj.ascope.lon(new_order);
-  obj.ascope.elev = obj.ascope.elev(new_order);
+  obj.ascope.target_twtt = obj.ascope.target_twtt(new_order);
+  obj.ascope.xlims = obj.ascope.xlims(new_order);
+  obj.ascope.ylims = obj.ascope.ylims(new_order);
   obj.ascope.visible = obj.ascope.visible(new_order);
   obj.ascope.selected = obj.ascope.selected(new_order);
   obj.plot_update();

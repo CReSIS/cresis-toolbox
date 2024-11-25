@@ -1,5 +1,8 @@
 function plot_update(obj)
 % plot_update(obj)
+%
+% This function is called any time anything changes that requires an update
+% in the ascope plot (change of order, new ascope, hide/visible, etc.)
 
 % Update plot based on selection
 set(obj.h_ascope(obj.ascope.selected),'Color','red');
@@ -12,7 +15,7 @@ set(obj.h_cursor(obj.ascope.visible),'Visible','on');
 set(obj.h_cursor(~obj.ascope.visible),'Visible','off');
 
 first_plot = ~isfinite(obj.xlims(1));
-    
+
 % Update list box entries
 LB_strings = cell(1,length(obj.ascope.echowin));
 obj.xlims = [inf -inf];
@@ -54,7 +57,13 @@ obj.ylims = [floor(obj.ylims(1)) ceil(obj.ylims(2))];
 val = get(obj.left_panel.xaxisPM,'Value');
 if val == 2
   physical_constants;
+  % Depth in air for above the surface
+  obj.xlims = obj.xlims/1e6 * c/2;
+elseif val == 3
+  physical_constants;
+  % Depth in air for above the surface
   obj.xlims(obj.xlims<0) = obj.xlims(obj.xlims<0)/1e6 * c/2;
+  % Depth in ice for below the surface
   obj.xlims(obj.xlims>0) = obj.xlims(obj.xlims>0)/1e6 * c/2/sqrt(er_ice);
 end
 if first_plot

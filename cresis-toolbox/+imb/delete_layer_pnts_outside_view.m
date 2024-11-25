@@ -23,7 +23,7 @@ for param_idx = 1:length(params)
   end
   fprintf('delete_pnts_outside_view %s\n', param.day_seg);
   
-  load(ct_filename_support(param,'','frames'));
+  frames = frames_load(param);
 
   layers = {'surface','bottom'};
   for layer = layers

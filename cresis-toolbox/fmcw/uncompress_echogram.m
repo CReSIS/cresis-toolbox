@@ -51,7 +51,7 @@ if isfield(mdata,'Truncate_Bins')
   end
   if isfield(mdata,'Data')
     % Some times the Data is not loaded, so we have a special check for this
-    mdata.Data = [zeros(Nz,size(mdata.Data,2)); mdata.Data];
+    mdata.Data = [nan(Nz,size(mdata.Data,2)); mdata.Data];
     for rline = 1:length(mdata.Elevation_Correction)
       mdata.Data(:,rline) = circshift(mdata.Data(:,rline),-mdata.Elevation_Correction(rline));
     end
@@ -71,5 +71,3 @@ if isfield(mdata,'Truncate_Bins')
       mdata = rmfield(mdata,'Data');
   end
 end
-
-return;

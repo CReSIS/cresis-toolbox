@@ -4,6 +4,20 @@ function ctrl_chain = cluster_set_chain(ctrl_chain,varargin)
 % ctrl_chain = cluster_set_chain(ctrl_chain,'cluster.cpu_time_mult',2,'cluster.mem_mult',1);
 % ctrl_chain = cluster_set_chain(ctrl_chain,'cluster.type','debug');
 % ctrl_chain = cluster_set_chain(ctrl_chain,'cluster.desired_time_per_job',24*60*60);
+%
+% Author: John Paden
+%
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 if isnumeric(ctrl_chain)
   ctrl_chain = cluster_load_chain(ctrl_chain);

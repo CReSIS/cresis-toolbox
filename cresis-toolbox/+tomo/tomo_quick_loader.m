@@ -14,35 +14,36 @@ function tomo_quick_loader
 % Example of multipass datasets
 if 0
   % Camp Century Multipass
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20110502_02_032_wf1_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20110506_01_004_wf1_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20110509_01_004_wf1_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20110509_02_034_wf1_music.mat';
-  
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20130419_01_004_wf1_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20130426_01_004_wf1_music.mat';
-  
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20140429_01_005_wf2_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20140429_01_067_wf1_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20140429_01_067_wf2_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_20140429_01_067_wf3_music.mat';
-  
-  fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_combine_wf2_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/rds_thule_combine_wf2_singlepass_music.mat';
+  fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/camp_century_2011_2012_2013_2014_music.mat';
   
   rbin = [250]; % Start bin
   rbins = [200]; % Number of bins
   
-elseif 1
+elseif 0
+  % Herc
+  fn = '/cresis/snfs1/dataproducts/ct_data/rds/2019_Antarctica_Ground/CSARP_music3D/20200107_01/Data_img_03_20200107_01_001.mat';
+  
+  % Multipass
+  rbin = [200]; % Start bin
+  rbins = [500]; % Number of bins
+  
+elseif 0
   % Summit Multipass
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/summit_2012_2014_wf2_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/summit_2012_2014_wf2_2012_music.mat';
-  % fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_insar/summit_2012_2014_wf2_2014_music.mat';
   fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/summit_2012_2014_allwf_2012_music.mat';
 
   % Multipass
   rbin = [200]; % Start bin
   rbins = [500]; % Number of bins
+  
+elseif 1
+  % EGIG Multipass
+  fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/egig_2011_2012_2014_2018_allwf_2014_music.mat';
+
+  % Multipass
+  rbin = [60]; % Start bin
+  rbins = [940]; % Number of bins
+  rbin = [100]; % Start bin
+  rbins = [400]; % Number of bins
   
 elseif 0
   % CAA 3D
@@ -50,7 +51,6 @@ elseif 0
   
   rbin = [300]; % Start bin
   rbins = [250]; % Number of bins
-  
   
 elseif 0
   % Eqip 3D
@@ -64,6 +64,15 @@ elseif 0
   
   rbin = [250]; % Start bin
   rbins = [200]; % Number of bins
+  
+elseif 0
+  % 2018 Greenland P3
+  fn ='/N/dcwan/projects/cresis/output/rds/2018_Greenland_P3/CSARP_music3D/20180406_01/Data_img_01_20180406_01_001.mat';
+  fn ='/N/dcwan/projects/cresis/output/rds/2018_Greenland_P3/CSARP_music3D/20180406_01/Data_img_01_20180406_01_002.mat';
+  
+  rbin = [600]; % Start bin
+  rbins = [1000]; % Number of bins
+
 end
 
 %% Automated Section

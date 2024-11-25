@@ -8,34 +8,50 @@ function [wfs,states] = data_load_wfs(param, records)
 %% Build raw data loading "states" structure
 % =========================================================================
 
+if ~iscell(param.load.imgs{1})
+  % param.load.imgs is not using multilooking syntax; reformat
+  % param.load.imgs non-multilooking syntax to multilooking syntax to
+  % ensure param.load.imgs is always in the multilooking syntax. This
+  % makes coding easier since the format is always the same.
+  for img = 1:length(param.load.imgs)
+    param.load.imgs{img} = {param.load.imgs{img}};
+  end
+end
+
 % Create list of unique boards to load
 board_list = [];
 board_idxs = [];
 for img = 1:length(param.load.imgs)
-  for wf_adc = 1:size(param.load.imgs{img},1)
-    [board_list(end+1),board_idxs(end+1)] = wf_adc_to_board(param,param.load.imgs{img}(wf_adc,:));
-    
-    % Follow wfs(wf).next field links for additional wf-adc pairsboards to load
-    wf = param.load.imgs{img}(wf_adc,1);
-    adc = param.load.imgs{img}(wf_adc,2);
-    if ~isfield(param.radar.wfs(wf),'next') || size(param.radar.wfs(wf).next,1) < adc || isnan(param.radar.wfs(wf).next(adc,1))
-      % if next is not specified, then this wf-adc pair is the last to be
-      % loaded in the next chain.
-      param.radar.wfs(wf).next(adc,1:2) = [NaN NaN];
-    end
-    next = param.radar.wfs(wf).next(adc,1:2);
-    while ~isnan(next)
-      wf = next(1);
-      adc = next(2);
+  for ml_idx = 1:length(param.load.imgs{img})
+    for wf_adc = 1:size(param.load.imgs{img}{ml_idx},1)
+      [board_list(end+1),board_idxs(end+1)] = wf_adc_to_board(param,param.load.imgs{img}{ml_idx}(wf_adc,:));
+      
+      % Follow wfs(wf).next field links for additional wf-adc pairsboards to load
+      wf = param.load.imgs{img}{ml_idx}(wf_adc,1);
+      adc = param.load.imgs{img}{ml_idx}(wf_adc,2);
       if ~isfield(param.radar.wfs(wf),'next') || size(param.radar.wfs(wf).next,1) < adc || isnan(param.radar.wfs(wf).next(adc,1))
         % if next is not specified, then this wf-adc pair is the last to be
         % loaded in the next chain.
-        param.radar.wfs(wf).next(adc,1:2) = [NaN NaN];
+        if isfield(param.radar.wfs(wf),'next') && size(param.radar.wfs(wf).next,1) < adc
+          param.radar.wfs(wf).next(end+1:adc,1:2) = NaN;
+        else
+          param.radar.wfs(wf).next(adc,1:2) = NaN;
+        end
       end
-      % Determine which board this wf-adc pair comes from
-      [board_list(end+1),board_idxs(end+1)] = wf_adc_to_board(param,[wf adc]);
-      % Follow the wfs(wf).next field link
       next = param.radar.wfs(wf).next(adc,1:2);
+      while ~isnan(next)
+        wf = next(1);
+        adc = next(2);
+        if ~isfield(param.radar.wfs(wf),'next') || size(param.radar.wfs(wf).next,1) < adc || isnan(param.radar.wfs(wf).next(adc,1))
+          % if next is not specified, then this wf-adc pair is the last to be
+          % loaded in the next chain.
+          param.radar.wfs(wf).next(adc,1:2) = [NaN NaN];
+        end
+        % Determine which board this wf-adc pair comes from
+        [board_list(end+1),board_idxs(end+1)] = wf_adc_to_board(param,[wf adc]);
+        % Follow the wfs(wf).next field link
+        next = param.radar.wfs(wf).next(adc,1:2);
+      end
     end
   end
 end
@@ -51,86 +67,98 @@ for state_idx = 1:length(boards)
     states(state_idx).board_idx = board_idxs(state_idx);
     states(state_idx).adc = [];
     states(state_idx).wf = [];
-    states(state_idx).mode = [];
-    states(state_idx).subchannel = [];
+    states(state_idx).mode = {};
+    states(state_idx).subchannel = {};
     states(state_idx).wf_adc = [];
     states(state_idx).img = [];
+    states(state_idx).ml_idx = [];
     states(state_idx).weight = [];
     states(state_idx).next = [];
+    states(state_idx).reset_sum = [];
   end
   for img = 1:length(param.load.imgs) % For each image img
-    for wf_adc = 1:size(param.load.imgs{img},1) % For ach wf-adc pair
-      wf = param.load.imgs{img}(wf_adc,1);
-      adc = param.load.imgs{img}(wf_adc,2);
-      
-      [board,~,profile] = wf_adc_to_board(param,param.load.imgs{img}(wf_adc,:));
-      % Determine if this wf,adc is from the current board
-      if board ~= states(state_idx).board
-        continue;
-      end
-      if any(param.records.file.version == [9 10 103 412])
-        mode_latch = profile(1);
-        subchannel = profile(2);
-      else
-        mode_latch = 0;
-        subchannel = 0;
-      end
-      
-      if ~isfield(param.radar.wfs(wf),'weight') || length(param.radar.wfs(wf).weight) < adc
-        % if weight is not specified, then this wf-adc pair is loaded with a
-        % weight of one
-        param.radar.wfs(wf).weight(adc) = 1;
-      end
-      % Create wf_adc_sum list from weight/next commands
-      states(state_idx).adc(end+1) = adc;
-      states(state_idx).wf(end+1) = wf;
-      states(state_idx).mode(end+1) = mode_latch;
-      states(state_idx).subchannel(end+1) = subchannel;
-      states(state_idx).wf_adc(end+1) = wf_adc;
-      states(state_idx).img(end+1) = img;
-      states(state_idx).weight(end+1) = param.radar.wfs(wf).weight(adc);
-      next = param.radar.wfs(wf).next(adc,1:2);
-      while ~isnan(next(1))
-        wf = next(1);
-        adc = next(2);
-        if ~isfield(param.radar.wfs(wf),'weight') || length(param.radar.wfs(wf).weight) < adc
-          % if weight is not specified, then this wf-adc pair is loaded with a
-          % weight of one
-          param.radar.wfs(wf).weight(adc) = 1;
+    for ml_idx = 1:length(param.load.imgs{img})
+      for wf_adc = 1:size(param.load.imgs{img}{ml_idx},1) % For ach wf-adc pair
+        wf = param.load.imgs{img}{ml_idx}(wf_adc,1);
+        adc = param.load.imgs{img}{ml_idx}(wf_adc,2);
+        
+        [board,~,profile] = wf_adc_to_board(param,param.load.imgs{img}{ml_idx}(wf_adc,:));
+        % Determine if this wf,adc is from the current board
+        if board ~= states(state_idx).board
+          continue;
         end
-        % Determine which board this wf-adc pair comes from
-        [board,~,profile] = wf_adc_to_board(param,[wf adc]);
-        next_state_idx = find(boards == board,1);
         if any(param.records.file.version == [9 10 103 412])
-          mode_latch = profile(1);
-          subchannel = profile(2);
+          mode_latch = profile{1}(:,1);
+          subchannel = profile{1}(:,2);
         else
           mode_latch = 0;
           subchannel = 0;
         end
-        % Add wf-adc pair to states list
-        if next_state_idx > length(states) || ~isfield(states(next_state_idx),'board') ...
-            || isempty(states(state_idx).board)
-          % Create new state if not already created.
-          states(next_state_idx).board = boards(next_state_idx);
-          states(next_state_idx).board_idx = board_idxs(next_state_idx);
-          states(next_state_idx).adc = [];
-          states(next_state_idx).wf = [];
-          states(next_state_idx).mode = [];
-          states(next_state_idx).subchannel = [];
-          states(next_state_idx).wf_adc = [];
-          states(next_state_idx).img = [];
-          states(next_state_idx).weight = [];
-          states(next_state_idx).next = [];
+        
+        if ~isfield(param.radar.wfs(wf),'weight')
+          % if weight is not specified, then this wf-adc pair is loaded with a
+          % weight of one
+          param.radar.wfs(wf).weight(adc) = 1;
+        elseif length(param.radar.wfs(wf).weight) < adc
+          param.radar.wfs(wf).weight(end+1:adc) = 1;
         end
-        states(next_state_idx).adc(end+1) = adc;
-        states(next_state_idx).wf(end+1) = wf;
-        states(next_state_idx).mode(end+1) = mode_latch;
-        states(next_state_idx).subchannel(end+1) = subchannel;
-        states(next_state_idx).wf_adc(end+1) = wf_adc;
-        states(next_state_idx).img(end+1) = img;
-        states(next_state_idx).weight(end+1) = param.radar.wfs(wf).weight(adc);
+        % Create wf_adc_sum list from weight/next commands
+        states(state_idx).adc(end+1) = adc;
+        states(state_idx).wf(end+1) = wf;
+        states(state_idx).mode{end+1} = mode_latch;
+        states(state_idx).subchannel{end+1} = subchannel;
+        states(state_idx).wf_adc(end+1) = wf_adc;
+        states(state_idx).img(end+1) = img;
+        states(state_idx).ml_idx(end+1) = ml_idx;
+        states(state_idx).weight(end+1) = param.radar.wfs(wf).weight(adc);
+        states(state_idx).reset_sum(end+1) = true;
         next = param.radar.wfs(wf).next(adc,1:2);
+        while ~isnan(next(1))
+          wf = next(1);
+          adc = next(2);
+          if ~isfield(param.radar.wfs(wf),'weight') || length(param.radar.wfs(wf).weight) < adc
+            % if weight is not specified, then this wf-adc pair is loaded with a
+            % weight of one
+            param.radar.wfs(wf).weight(adc) = 1;
+          end
+          % Determine which board this wf-adc pair comes from
+          [board,~,profile] = wf_adc_to_board(param,[wf adc]);
+          next_state_idx = find(boards == board,1);
+          if any(param.records.file.version == [9 10 103 412])
+            mode_latch = profile{1}(:,1);
+            subchannel = profile{1}(:,2);
+          else
+            mode_latch = 0;
+            subchannel = 0;
+          end
+          % Add wf-adc pair to states list
+          if next_state_idx > length(states) || ~isfield(states(next_state_idx),'board') ...
+              || isempty(states(state_idx).board)
+            % Create new state if not already created.
+            states(next_state_idx).board = boards(next_state_idx);
+            states(next_state_idx).board_idx = board_idxs(next_state_idx);
+            states(next_state_idx).adc = [];
+            states(next_state_idx).wf = [];
+            states(next_state_idx).mode = {};
+            states(next_state_idx).subchannel = {};
+            states(next_state_idx).wf_adc = [];
+            states(next_state_idx).img = [];
+            states(next_state_idx).ml_idx = [];
+            states(next_state_idx).weight = [];
+            states(next_state_idx).next = [];
+            states(next_state_idx).reset_sum = [];
+          end
+          states(next_state_idx).adc(end+1) = adc;
+          states(next_state_idx).wf(end+1) = wf;
+          states(next_state_idx).mode{end+1} = mode_latch;
+          states(next_state_idx).subchannel{end+1} = subchannel;
+          states(next_state_idx).wf_adc(end+1) = wf_adc;
+          states(next_state_idx).img(end+1) = img;
+          states(next_state_idx).ml_idx(end+1) = ml_idx;
+          states(next_state_idx).weight(end+1) = param.radar.wfs(wf).weight(adc);
+          states(next_state_idx).reset_sum(end+1) = false;
+          next = param.radar.wfs(wf).next(adc,1:2);
+        end
       end
     end
   end
@@ -156,12 +184,16 @@ for wf = 1:length(param.radar.wfs)
   % bad_value: Value to use for bad records (is also the value used to fill
   % in unused parts of the data matrix when the number of range bins is
   % allowed to vary on a range line to range line basis). The default value
-  % is 0. Typical values are 0 or NaN. If NaN, consider using "nan_dec"
-  % option in qlook.
+  % is 0 for non-deramp systems and NaN for deramp systems. Typical values
+  % are 0 or NaN. If NaN, consider using "nan_dec" option in qlook.
   if isfield(param.radar.wfs(wf),'bad_value') && ~isempty(param.radar.wfs(wf).bad_value)
     wfs(wf).bad_value   = param.radar.wfs(wf).bad_value;
   else
-    wfs(wf).bad_value   = 0;
+    if strcmpi(radar_type,'deramp')
+      wfs(wf).bad_value   = NaN;
+    else
+      wfs(wf).bad_value   = 0;
+    end
   end
   
   if isfield(param.radar.wfs(wf),'DDC_dec') && ~isempty(param.radar.wfs(wf).DDC_dec)
@@ -321,6 +353,8 @@ for wf = 1:length(param.radar.wfs)
   end
   if any(param.records.file.version == [405 406 410]) % acords and mcrds
     wfs(wf).Nt_raw = records.settings.wfs(1).wfs(wf).num_sam(1) - sum(wfs(wf).time_raw_trim);
+  elseif any(param.records.file.version == [415])
+    wfs(wf).Nt_raw = 3200;
   elseif isfield(records.settings.wfs,'num_sam')
     if numel(records.settings.wfs) >= wf
       wfs(wf).Nt_raw = records.settings.wfs(wf).num_sam(1);
@@ -361,6 +395,11 @@ for wf = 1:length(param.radar.wfs)
     wfs(wf).gain_dir   = param.radar.wfs(wf).gain_dir;
   else
     wfs(wf).gain_dir = '';
+  end
+  if isfield(param.radar.wfs(wf),'nz_complex') && ~isempty(param.radar.wfs(wf).nz_complex)
+    wfs(wf).nz_complex   = param.radar.wfs(wf).nz_complex;
+  else
+    wfs(wf).nz_complex   = false;
   end
   if isfield(param.radar.wfs(wf),'nz_trim') && ~isempty(param.radar.wfs(wf).nz_trim)
     wfs(wf).nz_trim   = param.radar.wfs(wf).nz_trim;
@@ -424,20 +463,26 @@ for wf = 1:length(param.radar.wfs)
         wfs(wf).coh_noise_arg.A_coh_noise   = 1;
       end
   end
+  if isfield(param.radar.wfs(wf),'burst') && ~isempty(param.radar.wfs(wf).burst)
+    wfs(wf).burst    = param.radar.wfs(wf).burst;
+  else
+    wfs(wf).burst    = [];
+  end
+  if ~isfield(wfs(wf).burst,'en') || isempty(wfs(wf).burst.en)
+    wfs(wf).burst.en = false;
+  end
+  if ~isfield(wfs(wf).burst,'fn') || isempty(wfs(wf).burst.fn)
+    wfs(wf).burst.fn = 'analysis';
+  end
   if isfield(param.radar.wfs(wf),'deconv') && ~isempty(param.radar.wfs(wf).deconv)
     wfs(wf).deconv    = param.radar.wfs(wf).deconv;
   else
     wfs(wf).deconv    = [];
-    param.radar.wfs(wf).deconv = [];
   end
-  if isfield(param.radar.wfs(wf).deconv,'en') && ~isempty(param.radar.wfs(wf).deconv.en)
-    wfs(wf).deconv.en = param.radar.wfs(wf).deconv.en;
-  else
+  if ~isfield(wfs(wf).deconv,'en') || isempty(wfs(wf).deconv.en)
     wfs(wf).deconv.en = false;
   end
-  if isfield(param.radar.wfs(wf).deconv,'fn') && ~isempty(param.radar.wfs(wf).deconv.fn)
-    wfs(wf).deconv.fn = param.radar.wfs(wf).deconv.fn;
-  else
+  if ~isfield(wfs(wf).deconv,'fn') || isempty(wfs(wf).deconv.fn)
     wfs(wf).deconv.fn = 'analysis';
   end
   % Per wf-adc pair amplitude equalization
@@ -469,18 +514,23 @@ for wf = 1:length(param.radar.wfs)
   else
     wfs(wf).ref_fn   = '';
   end
-
+  
   if isfield(param.radar.wfs(wf),'tx_weights') && ~isempty(param.radar.wfs(wf).tx_weights)
     wfs(wf).tx_weights   = param.radar.wfs(wf).tx_weights;
   else
     wfs(wf).tx_weights   = 1;
+  end
+  if isfield(param.radar.wfs(wf),'system_dB') && ~isempty(param.radar.wfs(wf).system_dB)
+    wfs(wf).system_dB   = param.radar.wfs(wf).system_dB;
+  else
+    wfs(wf).system_dB   = 0;
   end
   if isfield(param.radar.wfs(wf),'adc_gains_dB') && ~isempty(param.radar.wfs(wf).adc_gains_dB)
     wfs(wf).adc_gains_dB   = param.radar.wfs(wf).adc_gains_dB;
   else
     wfs(wf).adc_gains_dB   = 0;
   end
-
+  
   %% Compute supporting variables
   % =======================================================================
   wfs(wf).chirp_rate = (wfs(wf).f1-wfs(wf).f0) / wfs(wf).Tpd;
@@ -516,7 +566,7 @@ for wf = 1:length(param.radar.wfs)
   end
   wfs(wf).quantization_to_V ...
     = param.radar.Vpp_scale * 2.^wfs(wf).bit_shifts ...
-    / (2^param.radar.adc_bits*wfs(wf).presums);
+    ./ (2^param.radar.adc_bits*wfs(wf).presums);
   
   if strcmpi(radar_type,'deramp')
     %% FMCW: Create time and frequency axis information
@@ -555,7 +605,7 @@ for wf = 1:length(param.radar.wfs)
     % ---------------------------------------------------------------------
     dt = 1/wfs(wf).fs_raw;
     wfs(wf).time_raw = wfs(wf).t0_raw + dt*(0:wfs(wf).Nt_raw-1).';
-
+    
     nz0 = floor((wfs(wf).f0-wfs(wf).DDC_freq)/wfs(wf).fs_raw*2);
     nz1 = floor((wfs(wf).f1-wfs(wf).DDC_freq)/wfs(wf).fs_raw*2);
     
@@ -566,7 +616,7 @@ for wf = 1:length(param.radar.wfs)
     % requirements for cluster processing before data loading happens.
     if isfield(param.radar.wfs(wf),'complex') ...
         && ~isempty(param.radar.wfs(wf).complex)
-        wfs(wf).complex   = param.radar.wfs(wf).complex;
+      wfs(wf).complex   = param.radar.wfs(wf).complex;
     else
       if nz0 == nz1 && wfs(wf).DDC_dec == 1 && wfs(wf).DDC_freq == 0
         % Assume real sampling since signal does not cross Nyquist boundary
@@ -577,7 +627,7 @@ for wf = 1:length(param.radar.wfs)
         wfs(wf).complex   = true;
       end
     end
-
+    
     if ~wfs(wf).complex
       if mod(nz0,2)
         % Negative frequencies first since this is an odd Nyquist zone
@@ -618,7 +668,7 @@ for wf = 1:length(param.radar.wfs)
         wfs(wf).freq_raw = wfs(wf).freq_raw - floor((wfs(wf).freq_raw - (wfs(wf).fc-wfs(wf).fs_raw/2))/wfs(wf).fs_raw)*wfs(wf).fs_raw;
       end
     end
-
+    
     
     % Pulse compressed data is applied to complex base banded raw data
     % with f_LO = wfs(wf).fc-wfs(wf).DDC_freq
@@ -710,7 +760,7 @@ for wf = 1:length(param.radar.wfs)
       % Apply time correction so that start time will be a multiple of
       % the sampling frequency of the radar
       wfs(wf).ref{adc} = wfs(wf).ref{adc} .* exp(1i*2*pi*wfs(wf).freq_pc*wfs(wf).time_correction);
-
+      
       % Normalize reference function so that it is an estimator
       %  -- Accounts for pulse duration differences
       time_domain_ref = ifft(wfs(wf).ref{adc});
@@ -731,8 +781,8 @@ end
 % 6	snow4, kuband4 (NI based, Spring 2015 NRL version of DDC code, multichannel)
 % 7	snow5 (NI based, AWI version of DDC code, multichannel, multiwaveform). Note this is a standard file type loaded by basic_load.m
 % 8	snow8 (NI based, Keysight waveform generator). Some files start with snow4 from the test flight.
-% 9	snow9 (RSS based, Arena Snow Radar).
-% 10	snow10 (RSS based, Arena Helicopter Snow Radar).
+% 9	snow9 (Arena based, Arena Snow Radar).
+% 10	snow10 (Arena based, Arena Helicopter Snow Radar).
 % 11	data_v11 (NI based, Mini-Snow Radar).
 % 101	accum (Leuschen/Ledford based)
 % 102	accum2 (Sundance, Paden/Rink based)
@@ -747,7 +797,7 @@ end
 % 409	icards (?/Akins Linux PCI card based, introduced 1993 Greenland P3)
 % 410	mcrds (Akins based, introduced 2006 Greenland P3, multichannel/waveforms)
 % 411	hfrds (Leuschen eval board based, 2013 Antarctica G1XB???, 2016 Greenland G1XB)
-% 412	hfrds2 (RSS based, Arena HF Sounder, 2016 Greenland TOdtu).
+% 412	hfrds2 (Arena based, Arena HF Sounder, 2016 Greenland TOdtu).
 %
 % wfs(wf).wf_offset: bytes of data before this data waveform
 % wfs(wf).num_sam: bytes of data in this record
@@ -755,17 +805,17 @@ end
 for wf = 1:length(param.radar.wfs)
   
   switch param.records.file.version
-      
+    
     case {1,2,3,4,5,7,8,11}
-      if param.records.file.version == 1 
+      if param.records.file.version == 1
         HEADER_SIZE = 32;
         WF_HEADER_SIZE = 0;
       elseif param.records.file.version == 2
         HEADER_SIZE = 40;
         WF_HEADER_SIZE = 0;
       elseif param.records.file.version == 4
-          HEADER_SIZE = 32;
-          WF_HEADER_SIZE = 4;        
+        HEADER_SIZE = 32;
+        WF_HEADER_SIZE = 4;
       else
         HEADER_SIZE = 0;
         WF_HEADER_SIZE = 48;
@@ -787,6 +837,18 @@ for wf = 1:length(param.radar.wfs)
           + wfs(wf).sample_size*wfs(wf).adc_per_board*records.settings.wfs(wf-1).num_sam ...
           + HEADER_SIZE + WF_HEADER_SIZE;
       end
+    
+    case {415}
+      % UTIG MARFA/HICARS 60 MHz
+      HEADER_SIZE = 0;
+      WF_HEADER_SIZE = 0;
+      wfs(wf).wf_header_size = WF_HEADER_SIZE;
+      wfs(wf).record_mode = 2;
+      wfs(wf).complex = 0;
+      wfs(wf).sample_size = 2;
+      wfs(wf).adc_per_board = 4;
+      wfs(wf).sample_type = 'int16';
+      wfs(wf).offset = HEADER_SIZE + WF_HEADER_SIZE;
       
     case {9,10,103,412}
       wfs(wf).record_mode = 1;
@@ -874,7 +936,7 @@ for wf = 1:length(param.radar.wfs)
       end
       
   end
-end  
+end
 
 % if param.load.file_version == 402 || param.load.file_version == 403
 %   HEADER_SIZE = 32;
@@ -923,4 +985,4 @@ end
 %   sample_type = 'int32'; % HACK FIX LATER
 %   boards = unique(param.records.wf_adc_boards(1,param.load.adcs));
 % end
-% 
+%

@@ -14,7 +14,7 @@
 % =========================================================================
 param_override = []; param = [];
 
-run_preprocess_BAS; % REPLACE THIS LINE WITH CORRECT SETUP SCRIPT
+run_preprocess_settings_BAS; % REPLACE THIS LINE WITH CORRECT SETTINGS SCRIPT
 
 dbstop if error;
 param_override.config.reuse_tmp_files = true;

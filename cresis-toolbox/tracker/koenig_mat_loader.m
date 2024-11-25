@@ -7,13 +7,15 @@
 
 %% User Settings
 % Lora Koenig
-% base_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/greenland_picks_final_2009-2012_20140602';
-% out_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/greenland_picks_final_2009_2012_reformat/';
-% year_dir_type = 1;
+base_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/greenland_picks_final_2009-2012_20140602';
+out_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/greenland_picks_final_2009_2012_reformat/';
+year_dir_type = 1;
+
 % Lynn Montgomery
-base_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/Corrected_SEGL_picks_lnm_2009_2017';
-out_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/Corrected_SEGL_picks_lnm_2009_2017_reformat/';
-year_dir_type = 2;
+% base_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/Corrected_SEGL_picks_lnm_2009_2017';
+% out_dir = '/cresis/snfs1/dataproducts/public/data/temp/internal_layers/NASA_OIB_test_files/image_files/Corrected_SEGL_picks_lnm_2009_2017_reformat/';
+% year_dir_type = 2;
+
 block_size = 256;
 block_overlap = 6;
 debug_plot = false;
@@ -29,6 +31,7 @@ min_size = 300;
 % fns = get_filenames(base_dir, 'layers_','dec','.mat',struct('recursive',true));
 
 old_day_seg = '';
+total_along_track = 0; % Keep track of how many line-km are processed
 for fn_idx = 1:length(fns)
   fn = fns{fn_idx};
   [fn_dir,fn_name] = fileparts(fn);
@@ -36,6 +39,10 @@ for fn_idx = 1:length(fns)
   fprintf('  %s\n', fn);
   
   tmp = load(fn);
+  
+  % Keep track of how many line-km are processed
+  along_track = geodetic_to_along_track(tmp.lat, tmp.lon);
+  total_along_track = total_track + along_track(end);
   
   if debug_plot
     % Plot whole file

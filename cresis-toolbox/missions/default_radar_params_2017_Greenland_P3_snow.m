@@ -31,7 +31,8 @@ param.config.file.suffix = '.bin';
 param.config.max_time_gap = 10;
 param.config.min_seg_size = 2;
 
-param.config.ni.clk = 125e6;
+% param.config.ni.clk = 125e6;
+param.config.cresis.clk = 125e6;
 
 %% Command worksheet
 default.cmd.records = 1;
@@ -104,8 +105,6 @@ default.array.rline_rng = -5:5;
 default.array.dbin = 1;
 default.array.dline = 6;
 default.array.DCM = [];
-default.array.three_dim.en = 0;
-default.array.three_dim.layer_fn = '';
 default.array.Nsv = 1;
 default.array.theta_rng = [0 0];
 default.array.sv_fh = @array_proc_sv;

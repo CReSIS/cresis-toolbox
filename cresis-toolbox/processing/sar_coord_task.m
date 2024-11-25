@@ -23,8 +23,7 @@ wgs84 = wgs84Ellipsoid('meters');
 [~,~,radar_name] = ct_output_dir(param.radar_name);
 
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 % Apply presumming
 if param.sar.presums > 1
   records.lat = fir_dec(records.lat,param.sar.presums);
@@ -100,9 +99,9 @@ frame_length = round(param.sar.surf_filt_dist / median(diff(along_track(surf_idx
 if length(surf_idxs) < frame_length
   if mod(length(surf_idxs),2) == 0
     % Even length(surf_idxs), but sgolayfilt filter must be odd length
-    surf = sgolayfilt(records.surface(surf_idxs),3,length(surf_idxs)-1);
+    surf = sgolayfilt(records.surface(surf_idxs),min(3,length(surf_idxs)-2),length(surf_idxs)-1);
   else
-    surf = sgolayfilt(records.surface(surf_idxs),3,length(surf_idxs));
+    surf = sgolayfilt(records.surface(surf_idxs),min(3,length(surf_idxs)-1),length(surf_idxs));
   end
 else
   surf = sgolayfilt(records.surface(surf_idxs),3,frame_length);

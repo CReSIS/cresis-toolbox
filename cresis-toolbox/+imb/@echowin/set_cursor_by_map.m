@@ -9,7 +9,8 @@ notify_en = strcmp(type,'mapwin_notify');
 
 if ~obj.busy_mode
   physical_constants;
-  [x,y,z] = geodetic2ecef(lat/180*pi,lon/180*pi,0,WGS84.ellipsoid);
+  [x,y,z] = ct_lla2ecef(lat/180*pi,lon/180*pi,0);
+  %[x,y,z] = geodetic2ecef(lat/180*pi,lon/180*pi,0,WGS84.ellipsoid);
   [~,rline] = min((obj.eg.image_ecef(1,:)-x).^2 + (obj.eg.image_ecef(2,:)-y).^2 + (obj.eg.image_ecef(3,:)-z).^2);
   
   % CONVERT range/elev to y
@@ -17,7 +18,8 @@ if ~obj.busy_mode
   surf_range = obj.eg.image_surf_twtt(rline)*c/2;
   slowness_air = 2/c;
   if map_caused_call
-    [x,y,z] = geodetic2ecef(lat/180*pi,lon/180*pi,obj.eg.image_elev(rline),WGS84.ellipsoid);
+    [x,y,z] = ct_lla2ecef(lat/180*pi,lon/180*pi,obj.eg.image_elev(rline));
+    %[x,y,z] = geodetic2ecef(lat/180*pi,lon/180*pi,obj.eg.image_elev(rline),WGS84.ellipsoid);
     range = sqrt((obj.eg.image_ecef(1,rline)-x).^2 + (obj.eg.image_ecef(2,rline)-y).^2 + (obj.eg.image_ecef(3,rline)-z).^2);
     if yaxis_choice == 1 % TWTT
       y = range*slowness_air*1e6;

@@ -17,7 +17,8 @@ params = read_param_xls(ct_filename_param('accum_param_2018_Antarctica_TObas.xls
 % params = ct_set_params(params,'cmd.generic',1,'cmd.notes','do not process');
 % params = ct_set_params(params,'cmd.generic',1,'day_seg','20180929_05');
 
-param_override.ct_file_lock = 1;
+% param_override.records.frames.mode = 2;
+% param_override.ct_file_lock = 1;
 
 %% Automated Section
 % =====================================================================
@@ -37,11 +38,12 @@ for param_idx = 1:length(params)
     continue;
   end
   % Create frames
-  if param.records.frames.mode == 0
+  test_param = merge_structs(param,param_override);
+  if test_param.records.frames.mode == 0
     fprintf('param.records.frames.mode == 0. Skipping.\n');
-  elseif param.records.frames.mode == 1
+  elseif test_param.records.frames.mode == 1
     frames_create(param,param_override);
-  elseif param.records.frames.mode >= 2
-    autogenerate_frames(param,param_override);
+  elseif test_param.records.frames.mode >= 2
+    frames_autogenerate(param,param_override);
   end
 end

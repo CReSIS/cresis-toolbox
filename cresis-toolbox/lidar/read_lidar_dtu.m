@@ -7,7 +7,7 @@ function [lidar] = read_lidar_dtu(fns, param)
 %
 % lidar = struct of position and LIDAR data, each N x 1 vectors
 %   where N is the number of records in the file(s). The fields are:
-%  .gps_time = GPS time in dec.hour(UTC)
+%  .gps_time = GPS time in decimal hours (UTC)
 %  .lat = latitude (deg)
 %  .lon = longitude (deg)
 %  .surface = WGS-84 surface elevation (m)

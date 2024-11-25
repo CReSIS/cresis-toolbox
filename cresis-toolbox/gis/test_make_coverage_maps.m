@@ -23,7 +23,7 @@ function test_make_coverage_maps(params, user_variables)
 %     .ext: string
 %       '.m': MATLAB FIG-file and MATLAB code that opens figure 
 %       '.jpg': JPEG image
-%       '.fig': MATLAB® FIG-file
+%       '.fig': MATLAB FIG-file
 %     '.axis_limits': vector
 %       - a vector of axis limits for the geotiff
 %     '.along_track_sampling': integer
@@ -85,7 +85,7 @@ if strcmp(user_variables.data_source,'gps') || strcmp(user_variables.data_source
     end
     
     %Plotting if not 'do not process'
-    if isempty(regexpi(parameter.cmd.notes,'do not process'))
+    if ct_generic_en(parameter) && isempty(regexpi(parameter.cmd.notes,'do not process'))
       yyyymmdd_list{end+1} = parameter.yyyymmdd; %Adding segment to the list of segments already covered
       
       %Load lat, lon depending on data source
@@ -103,10 +103,10 @@ if strcmp(user_variables.data_source,'gps') || strcmp(user_variables.data_source
           warning('No frames file: %s\n', frames_fn);
           return;
         end
-        gps = load(records_fn,'gps_time','lat','lon');
+        gps = records_load(parameter,'gps_time','lat','lon');
         
         % Load frames file
-        load(frames_fn);
+        frames = frames_load(parameter);
         
         if isempty(parameter.cmd.frms)
           parameter.cmd.frms = 1:length(frames.frame_idxs);
@@ -450,7 +450,7 @@ elseif strcmp(user_variables.data_source,'layer')
 
 %           image_fn_name = sprintf('aggregate_greenland_master_coverage_map_%s', date);
           
-          image_fn_name = sprintf('modified201617test_%s', date);  
+          image_fn_name = sprintf('coverage_map%s', date);
           image_fn = fullfile(user_variables.out_dir,image_fn_name);
           savefig(figure(1), image_fn, 'compact');
 

@@ -105,7 +105,7 @@ set(obj.left_panel.ascopeLB,'uicontextmenu',obj.left_panel.ascopeCM);
 % =========================================================================
 obj.left_panel.xaxisPM = uicontrol('Parent',obj.left_panel.handle);
 set(obj.left_panel.xaxisPM,'Style','PopupMenu');
-set(obj.left_panel.xaxisPM,'String',{'Twtt','Depth'});
+set(obj.left_panel.xaxisPM,'String',{'Twtt','Depth Air','Depth Ice'});
 set(obj.left_panel.xaxisPM,'Value',1);
 set(obj.left_panel.xaxisPM,'Callback',@obj.xaxisPM_callback);
 set(obj.left_panel.xaxisPM,'TooltipString','Set the x-axis units');

@@ -91,13 +91,13 @@ addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
 % Any double click: Nothing
 % Ctrl + double click: Zoom reset
 
-obj.tool.list{end+1} = imb.picktool_quality;
+obj.tool.list{end+1} = imb.picktool_viterbi;
 addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
-% Left click: Nothing
-% Left click and drag: Sets all points contains in draw to the currently
-%   selected quality level
+% Left click: Enters a manual point based on parameters
+%   Find max in range (specify range line/bin extent to search)
+% Left click and drag: Runs tomo.viterbi algorithm on selected data.
 % Right click: Set cursor point
-% Right click and drag: Nothing
+% Right click and drag: Delete all points in range
 % Scroll: Zooms in/out
 % Ctrl + any click: Select layer
 % Ctrl + any click and drag: Zoom
@@ -120,6 +120,45 @@ addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
 % Any double click: Nothing
 % Ctrl + double click: Zoom reset
 
+obj.tool.list{end+1} = imb.picktool_copy([],obj);
+addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
+% Left click and drag: Copy source layers to the selected layers
+%   Deletes all previous points in range
+% Right click: Set cursor point
+% Right click and drag: Nothing
+% Scroll: Zooms in/out
+% Ctrl + any click: Select layer
+% Ctrl + any click and drag: Zoom
+% Any double click: Nothing
+% Ctrl + double click: Zoom reset
+
+obj.tool.list{end+1} = imb.picktool_quality;
+addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
+% Left click: Nothing
+% Left click and drag: Sets all points contains in draw to the currently
+%   selected quality level
+% Right click: Set cursor point
+% Right click and drag: Nothing
+% Scroll: Zooms in/out
+% Ctrl + any click: Select layer
+% Ctrl + any click and drag: Zoom
+% Any double click: Nothing
+% Ctrl + double click: Zoom reset
+
+obj.tool.list{end+1} = imb.picktool_stat;
+addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
+% Left click: Nothing
+% Left click and drag: Sets all points contains in draw to the currently
+%   selected quality level
+% Right click: Set cursor point
+% Right click and drag: Nothing
+% Scroll: Zooms in/out
+% Ctrl + any click: Select layer
+% Ctrl + any click and drag: Zoom
+% Any double click: Nothing
+% Ctrl + double click: Zoom reset
+
+
 obj.tool.list{end+1} = imb.picktool_browse;
 addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
 % Left click: Open A-scope window
@@ -132,30 +171,6 @@ addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
 % Any double click: Nothing
 % Ctrl + double click: Zoom reset
 
-obj.tool.list{end+1} = imb.picktool_convert([],obj);
-addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
-% Left click and drag: Converts selected layers to the specified layer
-%   Deletes all previous points in range
-% Right click: Set cursor point
-% Right click and drag: Nothing
-% Scroll: Zooms in/out
-% Ctrl + any click: Select layer
-% Ctrl + any click and drag: Zoom
-% Any double click: Nothing
-% Ctrl + double click: Zoom reset
-
-obj.tool.list{end+1} = imb.picktool_viterbi;
-addlistener(obj.tool.list{end},'hide_param',@obj.toolparam_close_callback);
-% Left click: Enters a manual point based on parameters
-%   Find max in range (specify range line/bin extent to search)
-% Left click and drag: Runs tomo.viterbi algorithm on selected data.
-% Right click: Set cursor point
-% Right click and drag: Delete all points in range
-% Scroll: Zooms in/out
-% Ctrl + any click: Select layer
-% Ctrl + any click and drag: Zoom
-% Any double click: Nothing
-% Ctrl + double click: Zoom reset
 
 % obj.tool.list{end+1} = imb.picktool_landmark;
 % Left click: Create landmark point
@@ -353,6 +368,7 @@ obj.left_panel.layerCM = uicontextmenu('Parent',obj.h_fig);
 % Define the context menu items and install their callbacks
 obj.left_panel.layerCM_visible = uimenu(obj.left_panel.layerCM, 'Label', '&Visible', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_hide = uimenu(obj.left_panel.layerCM, 'Label', '&Hide', 'Callback', @obj.layerCM_callback);
+obj.left_panel.layerCM_set_surf = uimenu(obj.left_panel.layerCM, 'Label', 'Set surface layer', 'Callback', @obj.layerCM_callback);
 uimenu(obj.left_panel.layerCM, 'Label', '---', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_new = uimenu(obj.left_panel.layerCM, 'Label', '&New layer', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_copy = uimenu(obj.left_panel.layerCM, 'Label', '&Copy layer', 'Callback', @obj.layerCM_callback);
@@ -364,6 +380,9 @@ obj.left_panel.layerCM_up = uimenu(obj.left_panel.layerCM, 'Label', '&Up', 'Call
 obj.left_panel.layerCM_down = uimenu(obj.left_panel.layerCM, 'Label', '&Down', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_top = uimenu(obj.left_panel.layerCM, 'Label', '&Top', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_bottom = uimenu(obj.left_panel.layerCM, 'Label', '&Bottom', 'Callback', @obj.layerCM_callback);
+obj.left_panel.layerCM_detrend = uimenu(obj.left_panel.layerCM, 'Label', 'Detrend', 'Callback', @obj.layerCM_callback,'Checked','off');
+obj.left_panel.layerCM_multiple = uimenu(obj.left_panel.layerCM, 'Label', 'Surface Multiple Suppression', 'Callback', @obj.layerCM_callback,'Checked','off');
+obj.left_panel.layerCM_properties = uimenu(obj.left_panel.layerCM, 'Label', 'Set properties', 'Callback', @obj.layerCM_callback);
 uimenu(obj.left_panel.layerCM, 'Label', '---', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_merge = uimenu(obj.left_panel.layerCM, 'Label', '&Merge layers', 'Callback', @obj.layerCM_callback);
 obj.left_panel.layerCM_delete = uimenu(obj.left_panel.layerCM, 'Label', 'Delete layer', 'Callback', @obj.layerCM_callback);
@@ -478,7 +497,7 @@ else
 end
 set(obj.right_panel.status_panel.statusText,'HorizontalAlignment','left');
 set(obj.right_panel.status_panel.statusText,'String','');
-set(obj.right_panel.status_panel.statusText,'TooltipString','Right click to copy status bar text');
+set(obj.right_panel.status_panel.statusText,'TooltipString','Right click or ctrl-C to copy status bar text. Status bar text shows time and location at cursor; shows layer depth if a layer is selected.');
 
 % mouse coordinate info display
 obj.right_panel.status_panel.mouseCoordText = uicontrol('parent',obj.right_panel.status_panel.handle);
@@ -491,7 +510,7 @@ else
 end
 set(obj.right_panel.status_panel.mouseCoordText,'HorizontalAlignment','left');
 set(obj.right_panel.status_panel.mouseCoordText,'String','');
-set(obj.right_panel.status_panel.mouseCoordText,'TooltipString','Latitude deg, Longitude deg (X, Y, ColorData)');
+set(obj.right_panel.status_panel.mouseCoordText,'TooltipString','Frame Latitude (deg, N) Longitude (deg, W) |X-coordinate|Y-coordinate|Z-coordinate/intensity.');
 
 %----echogram context menu
 obj.right_panel.echoCM= uicontextmenu('parent',obj.h_fig);
@@ -511,7 +530,7 @@ obj.right_panel.status_panel.table.width_margin(row,col)  = 0;
 obj.right_panel.status_panel.table.height_margin(row,col) = 0;
 row = 1; col = 2;
 obj.right_panel.status_panel.table.handles{row,col}       = obj.right_panel.status_panel.mouseCoordText;
-obj.right_panel.status_panel.table.width(row,col)         = 200;
+obj.right_panel.status_panel.table.width(row,col)         = 250;
 obj.right_panel.status_panel.table.height(row,col)        = inf;
 obj.right_panel.status_panel.table.width_margin(row,col)  = 0;
 obj.right_panel.status_panel.table.height_margin(row,col) = 0;

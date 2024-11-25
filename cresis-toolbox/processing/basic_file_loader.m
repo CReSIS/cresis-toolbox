@@ -9,29 +9,33 @@ function [data,fn,settings,default,gps,hdr,pc_param,settings_enc] = basic_file_l
 % param,defaults from default_radar_params_SEASON_NAME_RADAR_NAME
 %
 % OPTIONAL INPUTS: (any missing inputs will be prompted for so none required)
-% param.file_search_mode: string which may be one of the following:
+% param.config.file_search_mode: string which may be one of the following:
 %   'default','default+s','default+1','specific','last_file','segment','map'
-% param.base_dir_search: cell array of base directories to search for files
+% param.config.base_dir_search: cell array of base directories to search for files
 %   in
-% param.img: wf-adc array, Nx2 matrix where first column is the waveform,
+% param.config.img: wf-adc array, Nx2 matrix where first column is the waveform,
 %   second column is the adc, and each of the N rows specifies a channel to
 %   load
-% param.recs: 1x2 vector where first entry is the first record to load
+% param.config.recs: 1x2 vector where first entry is the first record to load
 %   from the file (zero indexed) and the second entry is how many records
 %   to load (inf loads all records)
 %
 % Author: John Paden
 
-if ~isfield(param,'file_search_mode')
-  param.file_search_mode = '';
+if ~isfield(param,'config')
+  param.config = [];
 end
 
-if ~isfield(param,'base_dir_search')
-  param.base_dir_search = {''};
+if ~isfield(param.config,'file_search_mode') || isempty(param.config.file_search_mode)
+  param.config.file_search_mode = '';
 end
 
-if ~isfield(param,'multiselect')
-  param.multiselect = false;
+if ~isfield(param.config,'base_dir_search') || isempty(param.config.base_dir_search)
+  param.config.base_dir_search = {''};
+end
+
+if ~isfield(param.config,'multiselect') || isempty(param.config.multiselect)
+  param.config.multiselect = false;
 end
 
 [output_dir,radar_type,radar_name] = ct_output_dir(param.radar_name);
@@ -44,8 +48,8 @@ g_basic_file_loader_fn = char(g_basic_file_loader_fn); % Force type to be string
 default = defaults{1};
 
 global g_basic_file_loader_search;
-if isempty(param.file_search_mode) ...
-    || all(~strcmpi(param.file_search_mode,{'default','default+s','default+1','specific','last_file','segment','map'}))
+if isempty(param.config.file_search_mode) ...
+    || all(~strcmpi(param.config.file_search_mode,{'default','default+s','default+1','specific','last_file','segment','map'}))
   fprintf('\nSelect file search mode:\n');
   fprintf(' 1: default (loads whatever was last loaded)');
   if strcmpi(g_basic_file_loader_search,'default')
@@ -77,55 +81,55 @@ if isempty(param.file_search_mode) ...
     file_search_mode = input('Selection (1-5): ');
     try
       if isempty(file_search_mode) && ~isempty(g_basic_file_loader_search)
-        param.file_search_mode = g_basic_file_loader_search;
+        param.config.file_search_mode = g_basic_file_loader_search;
         done = true;
       elseif file_search_mode==1
-        param.file_search_mode = 'default';
+        param.config.file_search_mode = 'default';
         done = true;
       elseif file_search_mode==2
-        param.file_search_mode = 'specific';
+        param.config.file_search_mode = 'specific';
         done = true;
       elseif file_search_mode==3
-        param.file_search_mode = 'last_file';
+        param.config.file_search_mode = 'last_file';
         done = true;
       elseif file_search_mode==4
-        param.file_search_mode = 'segment';
+        param.config.file_search_mode = 'segment';
         done = true;
       elseif file_search_mode==5
-        param.file_search_mode = 'map';
+        param.config.file_search_mode = 'map';
         done = true;
       end
     end
   end
 end
-if any(strcmpi(param.file_search_mode,{'specific','last_file','segment','map'}))
-  g_basic_file_loader_search = param.file_search_mode;
+if any(strcmpi(param.config.file_search_mode,{'specific','last_file','segment','map'}))
+  g_basic_file_loader_search = param.config.file_search_mode;
 end
 
 %% Determine which file to load
-if ~strncmpi(param.file_search_mode,'default',length('default'))
-  good_mask = logical(zeros(size(param.base_dir_search)));
-  for base_dir_idx = 1:length(param.base_dir_search)
-    base_dir = param.base_dir_search{base_dir_idx};
+if ~strncmpi(param.config.file_search_mode,'default',length('default'))
+  good_mask = logical(zeros(size(param.config.base_dir_search)));
+  for base_dir_idx = 1:length(param.config.base_dir_search)
+    base_dir = param.config.base_dir_search{base_dir_idx};
     if exist(base_dir,'dir')
       good_mask(base_dir_idx) = true;
     end
   end
-  param.base_dir_search = param.base_dir_search(good_mask);
+  param.config.base_dir_search = param.config.base_dir_search(good_mask);
   
   global g_basic_file_loader_base_dir;
   base_dir = [];
   while isempty(base_dir)
     default_base_dir_idx = [];
     % If no default exists, then set default to first in list
-    if isempty(g_basic_file_loader_base_dir) && ~isempty(param.base_dir_search)
-      g_basic_file_loader_base_dir = param.base_dir_search{1};
+    if isempty(g_basic_file_loader_base_dir) && ~isempty(param.config.base_dir_search)
+      g_basic_file_loader_base_dir = param.config.base_dir_search{1};
     end
     % Print options to user
     fprintf('\n');
-    for base_dir_idx = 1:length(param.base_dir_search)
-      fprintf(' %d: %s', base_dir_idx, param.base_dir_search{base_dir_idx});
-      if strcmp(param.base_dir_search{base_dir_idx},g_basic_file_loader_base_dir)
+    for base_dir_idx = 1:length(param.config.base_dir_search)
+      fprintf(' %d: %s', base_dir_idx, param.config.base_dir_search{base_dir_idx});
+      if strcmp(param.config.base_dir_search{base_dir_idx},g_basic_file_loader_base_dir)
         fprintf(' *');
         default_base_dir_idx = base_dir_idx;
       end
@@ -139,7 +143,7 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
     fprintf('\n');
     % Get input from user
     try
-      if ~isempty(param.base_dir_search)
+      if ~isempty(param.config.base_dir_search)
         base_dir_idx = input(sprintf('Choose base directory [%d]: ',default_base_dir_idx));
       else
         % Automatically choose custom if no base directories exist
@@ -148,9 +152,9 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
       if isempty(base_dir_idx)
         base_dir_idx = default_base_dir_idx;
       end
-      if base_dir_idx <= length(param.base_dir_search)
-        base_dir = param.base_dir_search{base_dir_idx};
-      elseif base_dir_idx == length(param.base_dir_search)+1
+      if base_dir_idx <= length(param.config.base_dir_search)
+        base_dir = param.config.base_dir_search{base_dir_idx};
+      elseif base_dir_idx == length(param.config.base_dir_search)+1
         % Custom selected
         while ~exist(base_dir,'dir')
           base_dir = input('Enter custom directory path: ','s');
@@ -163,15 +167,14 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
   end
   g_basic_file_loader_base_dir = base_dir;
   
-  if strcmpi(param.file_search_mode,'last_file')
+  if strcmpi(param.config.file_search_mode,'last_file')
     global g_basic_file_loader_selection;
-    board_folder_name = defaults{1}.board_folder_name;
-    adc = defaults{1}.records.file.adcs(1);
-    board = adc_to_board(param.radar_name,adc);
-    board_folder_name = regexprep(board_folder_name,'%02d',sprintf('%02.0f',adc));
-    board_folder_name = regexprep(board_folder_name,'%d',sprintf('%.0f',adc));
-    board_folder_name = regexprep(board_folder_name,'%b',sprintf('%.0f',board));
-    fns = get_filenames(fullfile(base_dir,board_folder_name),'','','.bin',struct('recursive',true));
+
+    adc = param.config.img(1,2);
+    [board,board_idx,~] = wf_adc_to_board(param,param.config.img(1,:));
+    board_folder_name = param.records.file.board_folder_name;
+    board_folder_name = regexprep(board_folder_name,'%b',param.records.file.boards{board_idx});
+    fns = get_filenames(fullfile(base_dir,board_folder_name),param.records.file.prefix,'','.bin',struct('recursive',true));
     if isempty(fns)
       error('No data files in: %s\n', base_dir);
     end
@@ -201,15 +204,12 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
     end
     g_basic_file_loader_selection = fn_idx;
     
-  elseif strcmpi(param.file_search_mode,'specific')
-    board_folder_name = defaults{1}.board_folder_name;
-    adc = defaults{1}.records.file.adcs(1);
-    board = adc_to_board(param.radar_name,adc);
-    board_folder_name = regexprep(board_folder_name,'%02d',sprintf('%02.0f',adc));
-    board_folder_name = regexprep(board_folder_name,'%d',sprintf('%.0f',adc));
-    board_folder_name = regexprep(board_folder_name,'%b',sprintf('%.0f',board));
-    adc_dir = fullfile(base_dir,board_folder_name);
-    
+  elseif strcmpi(param.config.file_search_mode,'specific')
+    adc = param.config.img(1,2);
+    [board,board_idx,~] = wf_adc_to_board(param,param.config.img(1,:));
+    board_folder_name = param.records.file.board_folder_name;
+    board_folder_name = regexprep(board_folder_name,'%b',param.records.file.boards{board_idx});
+    data_fns = get_filenames(fullfile(base_dir,board_folder_name),param.records.file.prefix,'','.bin');
     fn = '';
     fprintf('\n');
     while ~exist(fn,'file')
@@ -220,14 +220,14 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
           [~,fn] = fileparts(g_basic_file_loader_fn);
         end
         
-        fn = get_filename(adc_dir,'',fn,'',struct('recursive',true));
+        fn = get_filename(fullfile(base_dir,board_folder_name),'',fn,'',struct('recursive',true));
         g_basic_file_loader_fns = {fn};
       end
     end
     
-  elseif strcmpi(param.file_search_mode,'segment')
+  elseif strcmpi(param.config.file_search_mode,'segment')
     
-    if any(defaults{1}.records.file.version == [9 10 103 412])
+    if any(param.records.file.version == [9 10 103 412])
       % Arena based systems
       system_xml_fns = get_filenames(fullfile(base_dir),'','','system.xml',struct('recursive',true));
       clear settings;
@@ -240,25 +240,25 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
     else
       % NI based systems
       % Prepare inputs
-      xml_version = defaults{1}.xml_version;
+      xml_version = param.config.cresis.config_version;
       cresis_xml_mapping;
       [settings,settings_enc] = read_ni_xml_directory(base_dir,xml_file_prefix,false);
     end
     
     % Get the files that match the first wf-adc pair requested
-    if any(defaults{1}.records.file.version == [9 10 103 412])
+    if any(param.records.file.version == [9 10 103 412])
       % Arena based systems
-      wf = param.img(1,1);
-      adc = param.img(1,2);
+      wf = param.config.img(1,1);
+      adc = param.config.img(1,2);
       found = false;
-      for board_idx = 1:length(defaults{1}.records.arena.data_map)
-        for profile_idx = 1:size(defaults{1}.records.arena.data_map{board_idx},1)
-          if defaults{1}.records.arena.data_map{board_idx}(profile_idx,3) == wf ...
-              && defaults{1}.records.arena.data_map{board_idx}(profile_idx,4) == adc
+      for board_idx = 1:length(param.records.arena.data_map)
+        for profile_idx = 1:size(param.records.arena.data_map{board_idx},1)
+          if param.records.arena.data_map{board_idx}(profile_idx,3) == wf ...
+              && param.records.arena.data_map{board_idx}(profile_idx,4) == adc
             board_idx = board_idx;
-            board = defaults{1}.records.file.boards(board_idx);
-            mode_latch = defaults{1}.records.arena.data_map{board_idx}(profile_idx,1);
-            subchannel = defaults{1}.records.arena.data_map{board_idx}(profile_idx,2);
+            board = param.records.file.boards(board_idx);
+            mode_latch = param.records.arena.data_map{board_idx}(profile_idx,1);
+            subchannel = param.records.arena.data_map{board_idx}(profile_idx,2);
             found = true;
             break;
           end
@@ -268,11 +268,12 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
         end
       end
       if ~found
-        error('wf-adc pair (%d,%d) was not found in defaults{1}.records.arena.data_map. Update default_radar_params_*.m or param.img.', wf, adc);
+        error('wf-adc pair (%d,%d) was not found in param.records.arena.data_map. Update default_radar_params_*.m or param.config.img.', wf, adc);
       end
       % Get raw data files associated with this directory
-      board_folder_name = defaults{1}.records.file.board_folder_name;
-      board_folder_name = regexprep(board_folder_name,'%b',sprintf('%.0f',board));
+      [board,board_idx,~] = wf_adc_to_board(param,param.config.img(1,:));
+      board_folder_name = param.records.file.board_folder_name;
+      board_folder_name = regexprep(board_folder_name,'%b',param.records.file.boards{board_idx});
       fn_datenums = [];
       
       data_fns = get_filenames(fullfile(base_dir,board_folder_name),'','','.dat',struct('recursive',true,'regexp','[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'));
@@ -289,13 +290,11 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
       
     else
       % NI based systems
-      board_folder_name = defaults{1}.board_folder_name;
-      adc = defaults{1}.records.file.adcs(1);
-      board = adc_to_board(param.radar_name,adc);
-      board_folder_name = regexprep(board_folder_name,'%02d',sprintf('%02.0f',adc));
-      board_folder_name = regexprep(board_folder_name,'%d',sprintf('%.0f',adc));
-      board_folder_name = regexprep(board_folder_name,'%b',sprintf('%.0f',board));
-      data_fns = get_filenames(fullfile(base_dir,board_folder_name),defaults{1}.data_file_prefix,'','.bin');
+      adc = param.config.img(1,2);
+      [board,board_idx,~] = wf_adc_to_board(param,param.config.img(1,:));
+      board_folder_name = param.records.file.board_folder_name;
+      board_folder_name = regexprep(board_folder_name,'%b',param.records.file.boards{board_idx});
+      data_fns = get_filenames(fullfile(base_dir,board_folder_name),param.records.file.prefix,'','.bin');
     % Get the date information out of the filename
       fn_datenums = [];
       for data_fn_idx = 1:length(data_fns)
@@ -307,7 +306,7 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
     % Print out settings for each segment (XML file)
     fprintf('\nData segments:\n');
     for set_idx = 1:length(settings)
-      if any(defaults{1}.records.file.version == [9 10 103 412])
+      if any(param.records.file.version == [9 10 103 412])
         fprintf(' %d: %s (%d seq, %d files)\n', set_idx, ...
           settings(set_idx).psc_config_name, length(settings(set_idx).psc.mode), length(settings(set_idx).fns{board_idx}));
         
@@ -347,7 +346,7 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
       end
     end
     
-    if any(defaults{1}.records.file.version == [9 10 103 412])
+    if any(param.records.file.version == [9 10 103 412])
       data_fns = settings(set_idx).fns{board_idx};
     else
       if set_idx < length(settings)
@@ -383,13 +382,13 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
       end
     end
     
-  elseif strcmpi(param.file_search_mode,'map')
+  elseif strcmpi(param.config.file_search_mode,'map')
     basic_file_loader_map;
   end
   g_basic_file_loader_fn = fn;
 
   % Load sequential files if multiselect is turned on
-  if param.multiselect && any(strcmpi(param.file_search_mode,{'last_file','specific'}))
+  if param.config.multiselect && any(strcmpi(param.config.file_search_mode,{'last_file','specific'}))
     global g_num_files;
     if isempty(g_num_files)
       g_num_files = 1;
@@ -410,9 +409,9 @@ if ~strncmpi(param.file_search_mode,'default',length('default'))
   end
   
 else
-  if strcmp(param.file_search_mode,'default')
+  if strcmp(param.config.file_search_mode,'default')
     fn = g_basic_file_loader_fn;
-  elseif strcmp(param.file_search_mode,'default+s')
+  elseif strcmp(param.config.file_search_mode,'default+s')
     % Get the next file in g_basic_file_loader_fns
     if any(strcmpi(radar_name,{'mcords3','mcords5'}))
       file_idx = find(strcmp(g_basic_file_loader_fn, g_basic_file_loader_fns));
@@ -426,7 +425,7 @@ else
       error('Not supported for %s',param.radar_name);
     end
     
-  elseif strcmp(param.file_search_mode,'default+1')
+  elseif strcmp(param.config.file_search_mode,'default+1')
     % Get the next file number after the last loaded file
     [fn_dir,fn_name,fn_ext] = fileparts(g_basic_file_loader_fn);
     cur_file_idx = str2double(fn_name(end-3:end));
@@ -441,7 +440,7 @@ tstart = tic;
 % Load the data (disable if you have already loaded)
 clear data;
 clear num_rec;
-if any(defaults{1}.records.file.version == [9 10 103 412])
+if any(param.records.file.version == [9 10 103 412])
   error('Not supported yet.');
   
 elseif strcmpi(radar_name,'mcords')
@@ -468,15 +467,14 @@ elseif strcmpi(radar_name,'mcords')
 %   basic_remove_mcords_digital_errors;
 elseif any(strcmpi(radar_name,{'mcords2','mcords3'}))
   
-  if ~isfield(param,'img')
+  if ~isfield(param.config,'img')
     fprintf('Enter wf-adc pair matrix. The wf-adc pair matrix is an Nx2 matrix\n');
     fprintf('where the first column is the waveform, the second column is the adc,\n');
     fprintf('and each row represents a channel to be loaded.\n');
-    fprintf('Valid ADCs: '); fprintf('%d ', default.records.file.adcs); fprintf('\n');
-    param.img = [];
-    while size(param.img,1) < 1 || size(param.img,2) ~= 2
+    param.config.img = [];
+    while size(param.config.img,1) < 1 || size(param.config.img,2) ~= 2
       try
-        param.img = input('Wf-adc pairs: ');
+        param.config.img = input('Wf-adc pairs: ');
       end
     end
   end
@@ -489,7 +487,7 @@ elseif any(strcmpi(radar_name,{'mcords2','mcords3'}))
   % Map ADCs to board numbers
   fn_start = fn; % Store this first file away since fn gets overwritten below
   for board = 0:3
-    if any(board == floor((param.img(:,2)-1)/4))
+    if any(board == floor((param.config.img(:,2)-1)/4))
       get_adcs = board*4 + (1:4);
       
       [fn_dir,fn_name] = fileparts(fn_start);
@@ -506,12 +504,12 @@ elseif any(strcmpi(radar_name,{'mcords2','mcords3'}))
       end
       for get_adc_idx = 1:length(get_adcs)
         adc = get_adcs(get_adc_idx);
-        wf_adc_idx_matches = find(param.img(:,2) == adc);
+        wf_adc_idx_matches = find(param.config.img(:,2) == adc);
         if isempty(wf_adc_idx_matches)
           continue;
         end
         for wf_adc_idx = wf_adc_idx_matches(:).'
-          wf = param.img(wf_adc_idx,1);
+          wf = param.config.img(wf_adc_idx,1);
           fprintf('  Loading wf %d, adc %d\n', wf, adc);
           if ~exist('num_rec','var')
             % Since each file may have slightly different numbers of
@@ -543,6 +541,7 @@ elseif any(strcmpi(radar_name,{'mcords2','mcords3'}))
   settings_enc = settings_enc(settings_idx);
 
   default = default_radar_params_settings_match(defaults,settings);
+  default = merge_structs(param,default);
   
   %% Format settings into pc_param
   if isfield(settings,'DDC_Ctrl')
@@ -577,7 +576,7 @@ elseif any(strcmpi(radar_name,{'mcords2','mcords3'}))
   dt = 1/hdr.fs;
   Nt = size(data,1);
   clear pc_param;
-  pc_param.img = param.img;
+  pc_param.img = param.config.img;
   pc_param.DDC_mode = DDC_mode;
   pc_param.DDC_freq = DDC_freq;
   pc_param.f0 = f0;
@@ -652,20 +651,19 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
   file_idx = 1;
   epri_intersect = [];
   
-  if ~isfield(param,'img')
+  if ~isfield(param.config,'img')
     fprintf('Enter wf-adc pair matrix. The wf-adc pair matrix is an Nx2 matrix\n');
     fprintf('where the first column is the waveform, the second column is the adc,\n');
     fprintf('and each row represents a channel to be loaded.\n');
-    fprintf('Valid ADCs: '); fprintf('%d ', default.records.file.adcs); fprintf('\n');
-    param.img = [];
-    while size(param.img,1) < 1 || size(param.img,2) ~= 2
+    param.config.img = [];
+    while size(param.config.img,1) < 1 || size(param.config.img,2) ~= 2
       try
-        param.img = input('Wf-adc pairs: ');
+        param.config.img = input('Wf-adc pairs: ');
       end
     end
   end
 
-  if ~isfield(param,'recs')
+  if ~isfield(param.config,'recs')
     start_rec = [];
     while length(start_rec) ~= 1
       try
@@ -684,11 +682,11 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
         end
       end
     end
-    param.recs = [start_rec num_rec];
+    param.config.recs = [start_rec num_rec];
   end
   
   % adcs: a list of the adcs that we are loading
-  adcs = unique(param.img(:,2));
+  adcs = unique(param.config.img(:,2));
   
   fn_start = fn; % Store this first file away since fn gets overwritten below
   for adc = reshape(adcs,[1 length(adcs)])
@@ -705,10 +703,12 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
     end
     fprintf('Loading file %s\n', fn);
     % Load the data file
+    load_param = param.config.header_load_param;
+    load_param.recs = param.config.recs;
     if strcmp(radar_name,'mcords4')
-      [hdr,data_tmp] = basic_load_mcords4(fn,struct('clk',default.radar.fs/4,'recs',param.recs));
+      [hdr,data_tmp] = basic_load_mcords4(fn,load_param);
     else
-      [hdr,data_tmp] = basic_load_mcords5(fn,struct('clk',default.radar.fs,'recs',param.recs,'presum_bug_fixed',1));
+      [hdr,data_tmp] = basic_load_mcords5(fn,load_param);
     end
     % Remove extra records to help reduce total memory usage
 %     if isfield(param,'rlines') && ~isempty(param.rlines)
@@ -719,13 +719,13 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
 %       hdr.epri = hdr.epri(param.rlines);
 %     end
     % Map each of the read waveforms needed into the correct output
-    for wf_adc_idx = 1:size(param.img,1)
-      % wf,adc: pair of values for this entry in param.img
-      wf = param.img(wf_adc_idx,1);
+    for wf_adc_idx = 1:size(param.config.img,1)
+      % wf,adc: pair of values for this entry in param.config.img
+      wf = param.config.img(wf_adc_idx,1);
       if wf > length(data_tmp)
         error('Requested waveform (%d) is larger than the number of waveforms in the file (%d in the file).', wf, length(data_tmp));
       end
-      if adc == abs(param.img(wf_adc_idx,2));
+      if adc == abs(param.config.img(wf_adc_idx,2));
         % This pair needs to be loaded, insert into output array... handle
         % mismatched EPRIs using intersect function. Throw away any records
         % that do not have matching EPRI in all channels.
@@ -777,7 +777,8 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
   settings_enc = settings_enc(settings_idx);
 
   default = default_radar_params_settings_match(defaults,settings);
-  
+  default = merge_structs(param,default);
+
   %% Format settings into pc_param
   DDC_freq = double(settings.DDC_Ctrl.NCO_freq)*1e6;
   DDC_mode = double(settings.DDC_Ctrl.DDC_sel.Val);
@@ -799,8 +800,17 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
     hdr.BW_noise = 175e6;
   end
   atten = double(settings.DDS_Setup.Waveforms(wf).Attenuator_1(1) + settings.DDS_Setup.Waveforms(wf).Attenuator_2(1));
-  hdr.rx_gain = default.radar.rx_gain - atten;
-  t0 = hdr.wfs(wf).t0 + default.radar.Tadc_adjust;
+  hdr.rx_gain = param.config.cresis.rx_gain_dB - atten;
+
+  if isfield(default.radar.wfs,'Tadc_adjust')
+    if length(default.radar.wfs) >= wf
+      t0 = hdr.wfs(wf).t0 + default.radar.wfs(wf).Tadc_adjust;
+    else
+      t0 = hdr.wfs(wf).t0 + default.radar.wfs(1).Tadc_adjust;
+    end
+  else
+    t0 = hdr.wfs(wf).t0 + default.radar.Tadc_adjust;
+  end
   tukey = settings.DDS_Setup.RAM_Taper;
 
   for wf = 1:length(settings.DDS_Setup.Waveforms)
@@ -812,7 +822,7 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
   dt = 1/hdr.fs;
   Nt = size(data,1);
   clear pc_param;
-  pc_param.img = param.img;
+  pc_param.img = param.config.img;
   pc_param.DDC_mode = DDC_mode;
   pc_param.DDC_freq = DDC_freq;
   pc_param.f0 = f0;
@@ -826,7 +836,7 @@ elseif any(strcmpi(radar_name,{'mcords4','mcords5'}))
   
   finfo = fname_info_mcords2(fn);
   [year,month,day] = datevec(finfo.datenum);
-  hdr.radar_time = utc_to_gps(datenum_to_epoch(datenum(year,month,day,0,0,hdr.utc_time_sod))) + default.vectors.gps.time_offset;
+  hdr.radar_time = utc_to_gps(datenum_to_epoch(datenum(year,month,day,0,0,hdr.utc_time_sod))) + default.records.gps.time_offset;
   
   %% Read GPS files in this directory
   param.day_seg = sprintf('%04d%02d%02d_01',year,month,day);

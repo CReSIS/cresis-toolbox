@@ -131,7 +131,8 @@ if any(param.records.file.version == [9 10 103 412])
     offsets = 0:diff_epri(board_idx);
     for offset_idx = 1:length(offsets)
       offset = offsets(offset_idx);
-      offset_scores{board_idx}(offset_idx) = sum(mod((epri_pri_idxs - offset)/diff_epri(board_idx),1) ~= 0);
+      GUARD = 4;
+      offset_scores{board_idx}(offset_idx) = sum(abs(mod((epri_pri_idxs - offset)/diff_epri(board_idx),1)) > GUARD);
       if offset_scores{board_idx}(offset_idx) < min_score
         min_score = offset_scores{board_idx}(offset_idx);
         best_offset = offset;
@@ -148,7 +149,7 @@ if any(param.records.file.version == [9 10 103 412])
     if min_score > 0
       warning('%d of %d records show slipped EPRI values.', min_score, length(epri_pri_idxs));
       if length(good_offsets{board_idx}) > 1
-        warning('An ADC link error probably occured since PRI-numbers do not fall a regular interval. Special generation of the EPRI vector is now enabled.')
+        warning('An ADC link error probably occured or incorrect pulse sequence radar settings were used since PRI-numbers do not follow a regular interval. Special generation of the EPRI vector is now enabled.')
         special_epri_generation = true;
       end
     end
@@ -201,7 +202,24 @@ if any(param.records.file.version == [9 10 103 412])
   records.raw.profile_cntr_latch = nan(size(epri));
   records.raw.rel_time_cntr_latch = nan(size(epri));
   for board_idx = 1:length(boards)
-    [~,out_idxs,in_idxs] = intersect(epri,board_hdrs{board_idx}.profile_cntr_latch);
+    if GUARD == 0
+      [~,out_idxs,in_idxs] = intersect(epri,board_hdrs{board_idx}.profile_cntr_latch);
+    else
+      out_idxs = nan(size(epri));
+      in_idxs = nan(size(epri));
+      out_idx = 0;
+      for idx = 1:length(epri)
+        [offset,min_idx] = min(abs(epri(idx) - board_hdrs{board_idx}.profile_cntr_latch));
+        if offset < GUARD
+          out_idx = out_idx + 1;
+          out_idxs(out_idx) = idx;
+          in_idxs(out_idx) = min_idx;
+        end
+      end
+      out_idxs = out_idxs(1:out_idx);
+      in_idxs = in_idxs(1:out_idx);
+    end
+    
     fprintf('Board %d is missing %d of %d records.\n', board_idx, length(epri)-length(out_idxs), length(epri));
     
     % offset: Missing records filled in with -2^31
@@ -278,6 +296,9 @@ elseif any(param.records.file.version == [413 414])
   %% Align/UTUA RDS: Nothing required
   %% Align/BAS RDS: Nothing required
   
+elseif any(param.records.file.version == [415])
+  %% Align/UTIG RDS MARFA/HICARS: Nothing required
+  
 else
   %% Align/CReSIS: Create output EPRI vector
   min_epri = inf;
@@ -337,7 +358,7 @@ else
   records.raw.seconds = nan(size(epri));
   records.raw.fraction = nan(size(epri));
   if param.records.file.version == 8
-    records.settings.nyquist_zone = nan(size(epri));
+    records.settings.nyquist_zone_sig = nan(size(epri));
     records.settings.waveform_ID = nan(size(epri));
   end
   for board_idx = 1:length(boards)
@@ -358,11 +379,18 @@ else
     % Time stamps are assumed to be the same from each board so each board
     % just writes all of its time stamps to the output records fields.
     records.raw.epri(out_idxs) = board_hdrs{board_idx}.epri(in_idxs);
-    records.raw.seconds(out_idxs) = board_hdrs{board_idx}.seconds(in_idxs) ...
-      + max(param.records.gps.time_offset) - param.records.gps.time_offset(board_idx);
+    if board_idx > 1 && length(param.records.gps.time_offset) == 1
+      % Old parameter spreadsheet format only contained a single entry for
+      % all boards in param.records.gps.time_offset
+      records.raw.seconds(out_idxs) = board_hdrs{board_idx}.seconds(in_idxs) ...
+        + max(param.records.gps.time_offset) - param.records.gps.time_offset;
+    else
+      records.raw.seconds(out_idxs) = board_hdrs{board_idx}.seconds(in_idxs) ...
+        + max(param.records.gps.time_offset) - param.records.gps.time_offset(board_idx);
+    end
     records.raw.fraction(out_idxs) = board_hdrs{board_idx}.fraction(in_idxs);
     if param.records.file.version == 8
-      records.settings.nyquist_zone(out_idxs) = board_hdrs{board_idx}.nyquist_zone(in_idxs);
+      records.settings.nyquist_zone_sig(out_idxs) = board_hdrs{board_idx}.nyquist_zone(in_idxs);
       records.settings.waveform_ID(out_idxs) = board_hdrs{board_idx}.waveform_ID(in_idxs);
     end
   end
@@ -411,7 +439,14 @@ elseif any(param.records.file.version == [413 414])
   radar_time = board_hdrs{board_idx}.gps_time;
   comp_time = [];
   
-elseif any(param.records.file.version == [1 2 3 4 5 6 7 8 11 101 403 407 408])
+elseif any(param.records.file.version == [415])
+  %% Radar time: UTIG RDS
+  % Nothing to be done
+  board_idx = 1;
+  radar_time = board_hdrs{board_idx}.radar_time;
+  comp_time = board_hdrs{board_idx}.comp_time;
+  
+elseif any(param.records.file.version == [1 2 3 4 5 6 7 8 11 101 403 407 408 420])
   %% Radar time: CReSIS
  
   if 0
@@ -496,8 +531,6 @@ end
 
 %% Correlate GPS with radar data
 % ===================================================================
-fprintf('Loading GPS data (%s)\n', datestr(now));
-
 if param.records.gps.en
   records = records_create_sync_gps(param,records,radar_time,comp_time);
   
@@ -533,7 +566,6 @@ end
 %  .heading
 %  .gps_time
 %  .gps_source
-records.surface = NaN*zeros(size(records.lat));
 records.relative_filename = [];
 records.relative_rec_num = [];
 records.offset = [];
@@ -546,6 +578,7 @@ for board_idx = 1:length(board_hdrs)
   end
   records.offset(board_idx,:) = board_hdrs{board_idx}.offset;
 end
+records.bit_mask = zeros(size(records.offset),'uint8');
 records.radar_name = param.radar_name;
 if param.ct_file_lock
   records.file_version = '1L';
@@ -566,10 +599,3 @@ records.param_records = param;
 fprintf('Saving records file %s (%s)\n',records_fn,datestr(now));
 ct_file_lock_check(records_fn,3);
 ct_save(records_fn,'-v7.3','-struct','records');
-
-%% Create record aux files for faster loading times
-% =====================================================================
-
-fprintf('Creating auxiliary records files %s (%s)\n',records_fn,datestr(now));
-records_aux_files_create(records_fn);
-

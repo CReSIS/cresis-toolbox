@@ -19,14 +19,15 @@ function success = qlook_combine_task(param)
 % =====================================================================
 
 frames = frames_load(param);
-
 % Load records file
-records_fn = ct_filename_support(param,'','records');
-records = load(records_fn);
+records = records_load(param);
 
 % Quick look radar echogram output directory
 out_dir = ct_filename_out(param, param.qlook.out_path);
 tmp_out_dir = ct_filename_out(param, param.qlook.out_path, 'qlook_tmp');
+
+% Radiometric correction (dB)
+radiometric_corr_dB = param.qlook.radiometric_corr_dB;
 
 %% Loop through all the frames: combine and surface track
 % =====================================================================
@@ -126,7 +127,7 @@ for frm_idx = 1:length(param.cmd.frms);
       time_vector_changed = false;
       if block_idx == 1
         Time = tmp.Time;
-      elseif any(size(Time) ~= size(tmp.Time)) || any(Time ~= tmp.Time)
+      elseif ~isequal(Time,tmp.Time)
         % Determine the new time axis
         %   Note that even though time axis is aligned with multiples of
         %   dt, there will be rounding errors which need to be dealt with
@@ -210,7 +211,7 @@ for frm_idx = 1:length(param.cmd.frms);
     % Truncate deramp data to nonnegative time if this is going to be the
     % final combined file
     if (length(param.qlook.imgs) == 1 || (img == 1 && isempty(param.qlook.img_comb))) ...
-        && Time(1) < 0 && strcmpi(radar_type,'deramp')
+        && ~isempty(Time) && Time(1) < 0 && strcmpi(radar_type,'deramp')
       good_bins = Time>=0;
       Time = Time(good_bins);
       Data = Data(good_bins,:);
@@ -243,13 +244,17 @@ for frm_idx = 1:length(param.cmd.frms);
       file_version = '1';
     end
     file_type = 'qlook';
-    Data = single(Data);
+    if isnan(radiometric_corr_dB)
+      Data = single(Data);
+    else
+      Data = single(Data * 10^(radiometric_corr_dB/10));
+    end
     if isempty(custom)
-      save('-v7.3',out_fn,'Time','Latitude','Longitude', ...
+      ct_save(out_fn,'Time','Latitude','Longitude', 'radiometric_corr_dB', ...
         'Elevation','Roll','Pitch','Heading','GPS_time','Data','Surface', ...
         'param_qlook','param_records','file_version','file_type');
     else
-      save('-v7.3',out_fn,'Time','Latitude','Longitude', ...
+      ct_save(out_fn,'Time','Latitude','Longitude', 'radiometric_corr_dB', ...
         'Elevation','Roll','Pitch','Heading','GPS_time','Data','Surface', ...
         'param_qlook','param_records','file_version','file_type','custom');
     end
@@ -265,9 +270,14 @@ for frm_idx = 1:length(param.cmd.frms);
     [Data_Surface, Time_Surface] = img_combine(img_combine_param, 'qlook', surf_layer);
     
     surf_param = param;
-    surf_param.cmd.frms = frm;
-    surf_param.layer_tracker.echogram_source = struct('Data',Data_Surface,'Time',Time_Surface,'GPS_time',GPS_time,'Latitude',Latitude,'Longitude',Longitude,'Elevation',Elevation);
-    Surface = layer_tracker(surf_param,[]);
+    surf_param.layer_tracker.frms = frm;
+    surf_param.layer_tracker.echogram_source = struct('Data',Data_Surface,'Time',Time_Surface,'GPS_time',GPS_time,'Latitude',Latitude,'Longitude',Longitude,'Elevation',Elevation,'Roll',Roll);
+    if length(Time_Surface) < 2
+      % This frame has all bad records, so surface tracking cannot be completed.
+      Surface = nan(size(GPS_time));
+    else
+      Surface = layer_tracker_task(surf_param);
+    end
   end
   
   %% Save combined image output
@@ -294,7 +304,7 @@ for frm_idx = 1:length(param.cmd.frms);
       % No images were combined, no img_comb_trim needs to be done,
       % therefore the data will remain unchanged and we can just update the
       % Surface variable and mark the file_version complete.
-      save(out_fn,'-append','Surface','file_version');
+      ct_save(out_fn,'-append','Surface','file_version');
     end
     
   else
@@ -305,15 +315,16 @@ for frm_idx = 1:length(param.cmd.frms);
     surf_layer.gps_time = GPS_time;
     surf_layer.twtt = Surface;
     [Data, Time] = img_combine(img_combine_param, 'qlook', surf_layer);
+    file_type = 'qlook';
     
     if isempty(custom)
-      save('-v7.3',out_fn,'Time','Latitude','Longitude', ...
+      ct_save(out_fn,'Time','Latitude','Longitude', 'radiometric_corr_dB', ...
         'Elevation','Roll','Pitch','Heading','GPS_time','Data','Surface', ...
-        'param_qlook','param_records','file_version');
+        'param_qlook','param_records','file_version','file_type');
     else
-      save('-v7.3',out_fn,'Time','Latitude','Longitude', ...
+      ct_save(out_fn,'Time','Latitude','Longitude', 'radiometric_corr_dB', ...
         'Elevation','Roll','Pitch','Heading','GPS_time','Data','Surface', ...
-        'param_qlook','param_records','file_version','custom');
+        'param_qlook','param_records','file_version','file_type','custom');
     end
   end
   
@@ -374,12 +385,11 @@ if param.qlook.surf.en
     copy_param.layer_source.source = 'echogram';
     copy_param.layer_source.echogram_source = param.qlook.out_path;
     copy_param.layer_source.existence_check = false;
+    copy_param.layer_source.existence_warning = false;
     copy_param.layer_source.echogram_source_img = echogram_source_img;
     
     copy_param.layer_dest = param.qlook.surf_layer;
-    if strcmpi(param.qlook.surf_layer.source,'layerdata')
-      copy_param.layer_dest.echogram_source = param.qlook.out_path;
-    end
+    copy_param.layer_dest.group_name = 'standard';
     copy_param.layer_dest.existence_check = false;
     copy_param.layer_dest.echogram_source_img = echogram_source_img;
     

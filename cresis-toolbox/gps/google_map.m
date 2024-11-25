@@ -1,16 +1,70 @@
 classdef google_map
   % google_map class
   %
+  % -----------------------------------------------------------------------
+  % Google API Key
+  %
+  % A key is required to access Google's API. Without a key, map requests
+  % cannot be completed.
+  %
+  % This class uses Google's "Maps Static API. Simple, embeddable map image
+  % with minimal code."
+  %
+  % To obtain a google API key:
+  %
+  % 1. https://developers.google.com/maps/ and login with a Google account.
+  %
+  % 2. Click "Get Started"
+  %
+  % 3. Answer all of the questions, but you will need to provide Google
+  % with a valid payment method (e.g. credit card).
+  %
+  % 4. At the end copy the "API Key". It should look something like this:
+  % AIzaSyCNexiP6WcIda8ZEa2MnwznWrGotDoLu0w
+  % If you need to find your key in the future, it should be under the
+  % "Credentials" tab.
+  %
+  % 5. If you keep your API key private, then you can manually ensure that
+  % you never go over the limit of free requests. Right now the limit is
+  % 100,000 requests per month. This was calculated based on current
+  % pricing. Google charges $2 per 1000 requests and also does not charge
+  % you unless there is $200 of usage in a month.
+  %
+  % 6. If you may not be able to keep your API key private or are using the
+  % API key in automated scripts that could potentially exceed 100000
+  % requests in a month, then you can restrict the API key so that you
+  % never are charged in this way:
+  %
+  %   1. Go to "Credentials" tab
+  %
+  %   2. Select the specific API key
+  %
+  %   3. Set "API restrictions" to "Restrict key" to "Maps Static API"
+  %
+  %   4. Go to "Quotas" tab
+  %
+  %   5. Select the "Maps Static API"
+  %
+  %   6. For every category set "... requests ... per day" to 3000. By
+  %   setting to 3225, you will ensure that you can never exceed 100000
+  %   requests in a month. NOTE: THIS IS NOT VERIFIED TO WORK AS INTENDED.
+  %
+  % -----------------------------------------------------------------------
   % World coordinates description:
-  %  x ranges from 0 to 256 and corresponds linearly to -180 to +180
-  %   longitude
-  %  y ranges from 0 to 256 and corresponds to -85.051128779806632 to +85.051128779806632
+  %
+  % x ranges from 0 to 256 and corresponds linearly to -180 to +180
+  % longitude
+  %
+  % y ranges from 0 to 256 and corresponds to -85.051128779806632 to
+  % +85.051128779806632
+  %
+  % https://developers.google.com/maps/documentation/javascript/coordinates#world-coordinates
   %
   % Authors: Rohan Choudhari, John Paden
   
   %% public properties
   properties
-    key = 'AIzaSyCNexiP6WcIda8ZEa2MnwznWrGotDoLu0w';
+    key;
     tile_size = 256;
     w = 1280;
     h = 1280;
@@ -24,8 +78,11 @@ classdef google_map
   
   methods
     %% google_map constructor
-    function obj = google_map(data)
-      obj.wms_obj = WebMapServer('http://maps.googleapis.com/maps/api');
+    % key: key is a string containing the user's Google API key (see info
+    % above about obtaining a key)
+    function obj = google_map(key)
+      obj.wms_obj = WebMapServer('https://maps.googleapis.com/maps/api');
+      obj.key = key;
     end
     
     %% google_map destructor
@@ -116,7 +173,7 @@ classdef google_map
       % Request PNG map (PNG is the default format)
       % - Only the first six digits of precision for lon and lat are used
       %   by Google
-      url = sprintf('http://maps.googleapis.com/maps/api/staticmap?center=%0.6f,%0.6f&zoom=%d&scale=%d&size=%dx%d&maptype=satellite&key=%s', ...
+      url = sprintf('https://maps.googleapis.com/maps/api/staticmap?center=%0.6f,%0.6f&zoom=%d&scale=%d&size=%dx%d&maptype=satellite&key=%s', ...
         c_lat, c_lon, zoom, obj.scale, obj.w, obj.h, obj.key);
       A = obj.wms_obj.getMap(url);
     end
@@ -151,6 +208,7 @@ classdef google_map
         wc_x(idx) = 256*(0.5 + lon(idx)/360);
         wc_y(idx) = 256*(0.5 - log((1 + siny)/(1 - siny))/(4*pi));
       end
+      wc_x = mod(wc_x,256);
     end
     
     %% world_to_latlon

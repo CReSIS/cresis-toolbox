@@ -1,6 +1,6 @@
 % script run_records_create
 %
-% Script for running run_records_create (usually just used for debugging).
+% Script for running records_create.
 %
 % Authors: John Paden
 %

@@ -1,7 +1,9 @@
 function S_out = merge_structs(S_in,S_over,truncate_flag)
 % S_out = merge_structs(S_in,S_over,truncate_flag)
 %
-% Merges two structures. S_over takes precedence.
+% Merges two structures. S_over takes precedence. Note that structure
+% arrays that exist in S_in and S_over will take on the size defined in
+% S_over.
 %
 % S_in: input struct
 % S_over: struct which will override any fields in S_in
@@ -11,7 +13,38 @@ function S_out = merge_structs(S_in,S_over,truncate_flag)
 %
 % S_out = merged structure
 %
-% Example: See bottom of file
+% Example:
+%
+% S_in.A = 1;
+% S_in.B = 2;
+% S_in.C(1).D = 1;
+% S_in.C(1).D2 = 4.2;
+% S_in.C(2).D = 2;
+% S_in.C(3).D = 3;
+% S_over.A = 5;
+% S_over.C(2).D = 22;
+% S_over.C(2).E = 5.2;
+% S_over.F = 7;
+% S_out = merge_structs(S_in,S_over)
+%
+% S_out:
+%   struct with fields:
+%     A: 5
+%     B: 2
+%     C: [1×2 struct] % field C is only 1x2 because S_over.C is only 1x2
+%     F: 7
+%
+% S_out.C(1):
+%   struct with fields:
+%      D: []
+%     D2: 4.200000000000000
+%      E: []
+%
+% S_out.C(2):
+%   struct with fields:
+%      D: 22
+%     D2: []
+%      E: 5.200000000000000
 %
 % Authors: Huan Zhao, John Paden
 
@@ -71,23 +104,3 @@ for idx = 1:numel(S_over)
     end
   end
 end
-
-return ;
-
-% ==================================================================
-% ==================================================================
-% Examples
-% ==================================================================
-% ==================================================================
-
-S_in.A = 1;
-S_in.B = 2;
-S_in.C(1).D = 4;
-S_in.C(1).D2 = 4.2;
-S_in.C(2).D = 3;
-S_over.A = 5;
-S_over.C.D = 42;
-S_over.C.E = 6;
-S_over.F = 7;
-S_out = merge_structs(S_in,S_over)
-

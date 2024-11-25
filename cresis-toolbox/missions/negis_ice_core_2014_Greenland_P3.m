@@ -330,7 +330,7 @@ depth_time(depth_axis <= 0) = depth_axis(depth_axis <= 0) / (c/2);
 if length(param.er_depth) > 1
   TWtime = genPropProfileFromPerm(param.er_depth,param.er_ice, param.er_freq);
   profile_idxs = depth_axis > 0 & depth_axis < param.er_depth(end);
-  depth_time(profile_idxs) = interp1(param.er_depth, [0; TWtime], depth_axis(profile_idxs));
+  depth_time(profile_idxs) = interp1(param.er_depth, TWtime, depth_axis(profile_idxs));
 end
 depth_time = depth_time';
 depth_time = [0;depth_time]; %ensure vectors are the same length

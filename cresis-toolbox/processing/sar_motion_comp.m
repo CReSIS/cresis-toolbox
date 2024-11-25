@@ -1,5 +1,5 @@
-function [drange,dx] = sar_motion_comp(fcs,gps,ref,along_track,output_along_track)
-% [drange,dx] = sar_motion_comp(fcs,gps,ref,along_track,output_along_track)
+function [drange,dx,dy] = sar_motion_comp(fcs,gps,ref,along_track,output_along_track)
+% [drange,dx,dy] = sar_motion_comp(fcs,gps,ref,along_track,output_along_track)
 %
 % Returns drange and mean(dx) that provides motion compensation for Doppler
 % domain SAR processors for the positions in the gps structure relative
@@ -69,23 +69,24 @@ end
 %% For each output range line position, find the closest range lines to it
 % The polynomial fitting for a particular output will only update drange
 % and dx values for input range lines closest to it.
-start_input = zeros(size(output_along_track));
-stop_input = zeros(size(output_along_track));
-cur_input = 1;
-for rline = 1:length(output_along_track)-1
-  break_threshold = 0.5*(output_along_track(rline)+output_along_track(rline+1));
-  start_input(rline) = cur_input;
-  stop_input(rline) = find(along_track<=break_threshold,1,'last');
-  cur_input = stop_input(rline)+1;
-end
-start_input(end) = cur_input;
-stop_input(end) = length(along_track);
+% start_input = zeros(size(output_along_track));
+% stop_input = zeros(size(output_along_track));
+% cur_input = 1;
+% for rline = 1:length(output_along_track)-1
+%   break_threshold = 0.5*(output_along_track(rline)+output_along_track(rline+1));
+%   start_input(rline) = cur_input;
+%   stop_input(rline) = find(along_track<=break_threshold,1,'last');
+%   cur_input = stop_input(rline)+1;
+% end
+% start_input(end) = cur_input;
+% stop_input(end) = length(along_track);
 
 %% Perform fitting to input data and determine the offset in
 % drange and dx to that fitting (fitting is usually a polynomial fit of
 % some kind).
 drange = zeros(size(along_track));
 dx = zeros(size(along_track));
+dy = zeros(size(along_track));
 dx_out = output_along_track(2)-output_along_track(1);
 for rline = 1:length(output_along_track)
   rlines_fit = find(along_track >= output_along_track(rline)-fcs.Lsar/2 ...
@@ -94,51 +95,57 @@ for rline = 1:length(output_along_track)
     continue;
   end
   if rline == 1
-    rlines_in = [1:rlines_fit(1)-1 rlines_fit];
+    rlines_in = find(along_track < 0.5*(output_along_track(rline)+output_along_track(rline+1)) );
   elseif rline == length(output_along_track)
-    rlines_in = [rlines_fit rlines_fit(end)+1:length(along_track)];
+    rlines_in = find(along_track >= 0.5*(output_along_track(rline-1)+output_along_track(rline)) );
   else
-    rlines_in = rlines_fit;
+    rlines_in = find(along_track >= 0.5*(output_along_track(rline-1)+output_along_track(rline)) ...
+      & along_track < 0.5*(output_along_track(rline)+output_along_track(rline+1)) );
   end
-  
-  % Determine the closest range lines for this output range line
-  closest_rlines = start_input(rline):stop_input(rline);
-  if isempty(closest_rlines)
+  if isempty(rlines_in)
     continue;
   end
   
-  fit_ecef = [];
-  if fcs.type == 4 || fcs.type == 5
-    %% Compensation to savitsky golay
-    fit_ecef = sv_ecef(:,closest_rlines);
-  elseif fcs.type == 3
-    %% Compensation to line fit to reference (param.type == 3)
-    fit_ecef(1,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(1,:),1),closest_rlines);
-    fit_ecef(2,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(2,:),1),closest_rlines);
-    fit_ecef(3,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(3,:),1),closest_rlines);
-  elseif fcs.type == 2
-    %% Compensation to piece-wise line fit to reference (param.type == 2)
-    fit_ecef(1,:) = polyval(polyfit(rlines_fit,ref_ecef(1,rlines_fit),1),closest_rlines);
-    fit_ecef(2,:) = polyval(polyfit(rlines_fit,ref_ecef(2,rlines_fit),1),closest_rlines);
-    fit_ecef(3,:) = polyval(polyfit(rlines_fit,ref_ecef(3,rlines_fit),1),closest_rlines);
-  elseif fcs.type == 1
-    %% Compensation to reference (param.type == 1)
-    fit_ecef = ref_ecef(:,closest_rlines);
-  else
-    error('Motion compensation type must be 1, 2, or 3');
-  end
+  % Determine the closest range lines for this output range line
+%   closest_rlines = start_input(rline):stop_input(rline);
+%   if isempty(closest_rlines)
+%     continue;
+%   end
+  
+%   fit_ecef = [];
+%   if fcs.type == 4 || fcs.type == 5
+%     %% Compensation to savitsky golay
+%     fit_ecef = sv_ecef(:,closest_rlines);
+%   elseif fcs.type == 3
+%     %% Compensation to line fit to reference (fcs.type == 3)
+%     fit_ecef(1,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(1,:),1),closest_rlines);
+%     fit_ecef(2,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(2,:),1),closest_rlines);
+%     fit_ecef(3,:) = polyval(polyfit(1:size(ref_ecef,2),ref_ecef(3,:),1),closest_rlines);
+%   elseif fcs.type == 2
+%     %% Compensation to piece-wise line fit to reference (fcs.type == 2)
+%     fit_ecef(1,:) = polyval(polyfit(rlines_fit,ref_ecef(1,rlines_fit),1),closest_rlines);
+%     fit_ecef(2,:) = polyval(polyfit(rlines_fit,ref_ecef(2,rlines_fit),1),closest_rlines);
+%     fit_ecef(3,:) = polyval(polyfit(rlines_fit,ref_ecef(3,rlines_fit),1),closest_rlines);
+%   elseif fcs.type == 1
+%     %% Compensation to reference (fcs.type == 1)
+%     fit_ecef = ref_ecef(:,closest_rlines);
+%   else
+%     error('Motion compensation type must be 1, 2, or 3');
+%   end
   
   % The following operation computes the linear transformation matrix:
   %   fcs_T = [fcs.x(:,out_rline) fcs.y(:,out_rline) fcs.z(:,out_rline)];
   % Uses the "A\B" (help slash) nomenclature to inverse it:
   %   fcs_Tinv = inv(fcs_T);
-  gps_fcs = [fcs.x(:,rline) fcs.y(:,rline) fcs.z(:,rline)] \ (ecef(:,closest_rlines) - repmat(fcs.origin(:,rline),[1 length(closest_rlines)]));
-  ref_fcs = [fcs.x(:,rline) fcs.y(:,rline) fcs.z(:,rline)] \ (fit_ecef - repmat(fcs.origin(:,rline),[1 length(closest_rlines)]));
+  gps_fcs = [fcs.x(:,rline) fcs.y(:,rline) fcs.z(:,rline)] \ (ecef(:,rlines_in) - repmat(fcs.origin(:,rline),[1 length(rlines_in)]));
+  ref_fcs = [fcs.x(:,rline) fcs.y(:,rline) fcs.z(:,rline)] \ (ref_ecef(:,rlines_in) - repmat(fcs.origin(:,rline),[1 length(rlines_in)]));
   diff_fcs = gps_fcs - ref_fcs;
   
   %% Calculate drange and dx for each input and SAR output
-  drange(closest_rlines) = dot(repmat(fcs.squint,[1 size(gps_fcs,2)]),diff_fcs);
-  dx(closest_rlines) = dot(repmat([1 0 0].',[1 size(gps_fcs,2)]),diff_fcs);
+  drange(rlines_in) = dot(repmat(fcs.squint,[1 size(gps_fcs,2)]),diff_fcs);
+  dx(rlines_in) = dot(repmat([1 0 0].',[1 size(gps_fcs,2)]),diff_fcs);
+  dx(rlines_in) = diff_fcs(1,:);
+  dy(rlines_in) = gps_fcs(2,:);
 end
 
 if fcs.type == 5

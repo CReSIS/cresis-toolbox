@@ -190,7 +190,7 @@ set(1,'PaperPosition',fig_paper_position);
 set(1,'UserData',season_names);
 
 %% Save Matlab figure
-image_master_fn = fullfile(out_dir,sprintf('%s_All_Seasonssssss.fig',location));
+image_master_fn = fullfile(out_dir,sprintf('%s_All_Seasons.fig',location));
 saveas(1,image_master_fn);
 
 %% Save JPG figure

@@ -6,21 +6,42 @@ function layerCM_callback(obj,source,event)
 % uicontrol(obj.right_panel.status_panel.statusText);
 
 if source == obj.left_panel.layerCM_visible || source == obj.left_panel.layerCM_hide
+  %% visible
+  %% hide
   val = get(obj.left_panel.layerLB,'Value');
   
   obj.eg.layers.visible_layers(val) = source == obj.left_panel.layerCM_visible;
   
-  obj.layerLB_str();
+  obj.layerLB_str(true);
   
   % Update plot based on selection
   obj.set_visibility();
+  
+elseif source == obj.left_panel.layerCM_set_surf
+  %% set_surf
+  val = get(obj.left_panel.layerLB,'Value');
+  if ~isempty(val)
+    obj.eg.layers.surf_id = obj.eg.layers.lyr_id(val(1));
+    % good_mask: logical vector with 1 where the twtt of the surface is a number and 0
+    % when NaN.
+    surf_idx = find(obj.eg.layers.lyr_id==obj.eg.layers.surf_id);
+    good_mask = ~isnan(obj.eg.layers.y{surf_idx});
+    if sum(good_mask) > 2
+      obj.eg.surf_twtt = interp1(obj.eg.layers.x(good_mask),obj.eg.layers.y{surf_idx}(good_mask),obj.eg.gps_time);
+      obj.eg.surf_twtt = interp_finite(obj.eg.surf_twtt,0);
+    end
+    obj.yaxisPM_callback();
+  end
+  
 elseif source == obj.left_panel.layerCM_new || source == obj.left_panel.layerCM_copy || source == obj.left_panel.layerCM_insert
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% new
+  %% copy
+  %% insert
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers. The new layer will be inserted
     % before the first of the currently selected layers or at the bottom
     % of the listbox.
     val = get(obj.left_panel.layerLB,'Value');
-    val = val(val>2);
     % Ensure that there is at least one layer selected if copying
     if source == obj.left_panel.layerCM_new || ~isempty(val)
       if isempty(val)
@@ -140,11 +161,16 @@ elseif source == obj.left_panel.layerCM_new || source == obj.left_panel.layerCM_
         else
           
           % Get id for new layer
-          new_lyr_id = max(max(obj.undo_stack.user_data.layer_organizer.lyr_id),max(obj.eg.layers.lyr_id)) + 1;
+          new_lyr_id = max([obj.undo_stack.user_data.layer_organizer.lyr_id obj.eg.layers.lyr_id]) + 1;
+          if isempty(new_lyr_id)
+            new_lyr_id = 1;
+          end
           id = new_lyr_id;
           
           fprintf('Add layer %s:%s age %g desc "%s"\n', group_name, name, age, desc);
-          if val > length(obj.eg.layers.lyr_id)
+          if isempty(obj.eg.layers.lyr_order)
+            order = 1;
+          elseif val > length(obj.eg.layers.lyr_id)
             order = obj.eg.layers.lyr_order(end) + 1;
           else
             order = obj.eg.layers.lyr_order(val);
@@ -226,13 +252,15 @@ elseif source == obj.left_panel.layerCM_new || source == obj.left_panel.layerCM_
         end
       end
     end
+  else
+    error('Create new layer in OPS via the prefs window.');
   end
   
 elseif source == obj.left_panel.layerCM_edit
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% edit
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     vals = get(obj.left_panel.layerLB,'Value');
-    vals = vals(vals>2);
     if length(vals) == 1
       val = vals(1);
       prompt = {'Layer Age:','Layer Age Source:','Layer Age Source Age:','Layer Age Source Type:','Description:','Layer Group Name:','Layer Name:'};
@@ -319,9 +347,10 @@ elseif source == obj.left_panel.layerCM_edit
   end
   
 elseif source == obj.left_panel.layerCM_sequence
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% sequence
+  if strcmpi(obj.eg.layers.source,'layerdata')
     vals = get(obj.left_panel.layerLB,'Value');
-    vals = vals(vals>2);
+    vals = vals(vals>1);
     
     prompt = {'Basename (BASENAME_001):','Zero padding length ("003" is 3):','Start count at:'};
     old_base_name = obj.eg.layers.lyr_name{vals(1)};
@@ -374,9 +403,10 @@ elseif source == obj.left_panel.layerCM_sequence
   end
   
 elseif source == obj.left_panel.layerCM_order
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% order
+  if strcmpi(obj.eg.layers.source,'layerdata')
     vals = get(obj.left_panel.layerLB,'Value');
-    vals = vals(vals>2);
+    vals = vals(vals>1);
     done = false;
     order_unsorted = obj.eg.layers.lyr_order;
     name_unsorted = obj.eg.layers.lyr_name;
@@ -451,10 +481,11 @@ elseif source == obj.left_panel.layerCM_order
   end
   
 elseif source == obj.left_panel.layerCM_up
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% up
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     val = get(obj.left_panel.layerLB,'Value');
-    val = val(val>3);
+    val = val(val>1);
     if ~isempty(val)
       val = val(1);
       age = obj.eg.layers.lyr_age(val);
@@ -490,10 +521,11 @@ elseif source == obj.left_panel.layerCM_up
   end
   
 elseif source == obj.left_panel.layerCM_down
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% down
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     val = get(obj.left_panel.layerLB,'Value');
-    val = val(val>2 & val<length(obj.eg.layers.lyr_name));
+    val = val(val<length(obj.eg.layers.lyr_name));
     if ~isempty(val)
       val = val(1);
       age = obj.eg.layers.lyr_age(val);
@@ -529,10 +561,11 @@ elseif source == obj.left_panel.layerCM_down
   end
   
 elseif source == obj.left_panel.layerCM_top
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% top
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     val = get(obj.left_panel.layerLB,'Value');
-    val = val(val>3);
+    val = val(val>2);
     if ~isempty(val)
       val = val(1);
       age = obj.eg.layers.lyr_age(val);
@@ -542,7 +575,7 @@ elseif source == obj.left_panel.layerCM_top
       name = obj.eg.layers.lyr_name{val};
       order = obj.eg.layers.lyr_order(val);
       
-      new_val = 3;
+      new_val = 2;
       new_order = obj.eg.layers.lyr_order(new_val);
       
       fprintf('Move layer top %s:%s\n', group_name, name);
@@ -573,10 +606,10 @@ elseif source == obj.left_panel.layerCM_top
   end
   
 elseif source == obj.left_panel.layerCM_bottom
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% bottom
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     val = get(obj.left_panel.layerLB,'Value');
-    val = val(val>2);
     if ~isempty(val)
       val = val(1);
       age = obj.eg.layers.lyr_age(val);
@@ -617,21 +650,25 @@ elseif source == obj.left_panel.layerCM_bottom
   end
   
 elseif source == obj.left_panel.layerCM_merge
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% merge
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     vals = get(obj.left_panel.layerLB,'Value');
-    vals = vals(vals>2);
+    vals = vals(vals>1);
     if length(vals) < 2
-        return;
+      fprintf('Merge layers requires that two layers are selected.');
+      return;
     end
-      
-    cancel_operation = obj.undo_stack_modified_check();
+    
+    cancel_operation = obj.undo_stack_modified_check(true);
     
     if cancel_operation
       return
     end
     
     % Copy points from all layers (except the first) to the first layer
+    % This operates on the source because all frames have to be merged and
+    % not just the frames that are loaded.
     y = nan(length(vals),length(obj.undo_stack.user_data.frame));
     quality = ones(length(vals),length(obj.undo_stack.user_data.frame));
     type = 2*ones(length(vals),length(obj.undo_stack.user_data.frame));
@@ -648,13 +685,13 @@ elseif source == obj.left_panel.layerCM_merge
           type(val_idx,point_ids) = obj.undo_stack.user_data.layer_info(frm).type(lay_idx,:);
         else
           % Layer does not exist in this file, set to defaults
-          quality(val_idx,point_ids) = ones(size(obj.undo_stack.user_data.layer_info(frm).GPS_time));
-          y(val_idx,point_ids) = nan(size(obj.undo_stack.user_data.layer_info(frm).GPS_time));
-          type(val_idx,point_ids) = 2*ones(size(obj.undo_stack.user_data.layer_info(frm).GPS_time));
+          quality(val_idx,point_ids) = ones(size(obj.undo_stack.user_data.layer_info(frm).gps_time));
+          y(val_idx,point_ids) = nan(size(obj.undo_stack.user_data.layer_info(frm).gps_time));
+          type(val_idx,point_ids) = 2*ones(size(obj.undo_stack.user_data.layer_info(frm).gps_time));
         end
       end
     end
-
+    
     % Merge the layers and determine a mask of where changes will be made
     merged_y = nan(size(obj.undo_stack.user_data.frame));
     merged_quality = ones(size(obj.undo_stack.user_data.frame));
@@ -669,13 +706,16 @@ elseif source == obj.left_panel.layerCM_merge
     
     h_fig = figure; clf(h_fig);
     h_axes = axes('parent',h_fig);
-    h_plot = plot(y(1,:).','b.','parent',h_axes,'LineWidth',2);
     hold(h_axes,'on');
-    h_plot(end+(1:length(vals)-1)) = plot(y(2:end,:).','r^','parent',h_axes,'LineWidth',2);
-    h_plot(end+1) = plot(find(mask),merged_y(mask),'go','parent',h_axes,'LineWidth',2);
-    legend(h_plot([1 2 end]),'Original','Merging layers','Merged');
-
-    prompt = questdlg(sprintf('Are you sure you want to merge the %d selected layers? See plot showing the merge operation. All layers will be deleted except for layer %d.', ...
+    h_plot = plot(y(1,:).'*1e6,'b.','parent',h_axes,'LineWidth',2);
+    xlabel('GPS time index');
+    ylabel('Two-way propagation (\mus)');
+    set(h_axes,'YDir',obj.eg.y_order);
+    h_plot(end+(1:length(vals)-1)) = plot(y(2:end,:).'*1e6,'r^','parent',h_axes,'LineWidth',2);
+    h_plot(end+1) = plot(find(mask),merged_y(mask)*1e6,'go','parent',h_axes,'LineWidth',2);
+    legend(h_plot([1 2 end]),sprintf('Master Layer %d',vals(1)),'Merged Layers','Merged Result');
+    
+    prompt = questdlg(sprintf('Are you sure you want to merge the %d selected layers? See plot showing the merge operation. All selected layers will be deleted except for layer %d.', ...
       length(vals), vals(1)), ...
       'Merge Layers','Yes','Cancel','Cancel');
     if ~strcmpi(prompt,'Yes')
@@ -706,7 +746,7 @@ elseif source == obj.left_panel.layerCM_merge
       name = obj.eg.layers.lyr_name{val};
       order = obj.eg.layers.lyr_order(val);
       fprintf('Delete layer %s:%s\n', group_name, name);
-
+      
       % Delete all the points in the layer
       nan_mask = ~isnan(y(val_idx,:));
       cmds(end+1).undo_cmd = 'insert';
@@ -733,10 +773,10 @@ elseif source == obj.left_panel.layerCM_merge
   end
   
 elseif source == obj.left_panel.layerCM_delete
-  if strcmpi(obj.eg.layers.source,'layerData')
+  %% delete
+  if strcmpi(obj.eg.layers.source,'layerdata')
     % Get the currently selected layers.
     vals = get(obj.left_panel.layerLB,'Value');
-    vals = vals(vals>2);
     if length(vals) > 1
       
       prompt = questdlg(sprintf('Are you sure you want to delete the %d selected layers?', ...
@@ -798,4 +838,96 @@ elseif source == obj.left_panel.layerCM_delete
     
   end
   
+elseif source == obj.left_panel.layerCM_detrend
+  %% detrend
+  
+  state = get(obj.left_panel.layerCM_detrend,'Checked');
+  if strcmp(state,'off')
+    set(obj.left_panel.layerCM_detrend,'Checked','on')
+  else
+    set(obj.left_panel.layerCM_detrend,'Checked','off')
+  end
+  
+  % Replot image
+  cur_axis = axis(obj.h_axes);
+  
+  % Convert x_min, x_max to GPS time
+  xlims = interp1(obj.eg.image_xaxis,obj.eg.image_gps_time,cur_axis(1:2),'linear','extrap');
+  
+  % Update echogram with new settings
+  obj.plot_echogram(obj.eg.image_gps_time(1),obj.eg.image_gps_time(end),-inf,inf);
+  
+  % Draw data with new axis
+  obj.redraw(xlims(1),xlims(2),cur_axis(3),cur_axis(4),struct('clipped',3));
+  
+elseif source == obj.left_panel.layerCM_multiple
+  %% multiple suppression
+  state = get(obj.left_panel.layerCM_multiple,'Checked');
+  if strcmp(state,'off')
+    set(obj.left_panel.layerCM_multiple,'Checked','on')
+  else
+    set(obj.left_panel.layerCM_multiple,'Checked','off')
+  end
+  
+  % Replot image
+  cur_axis = axis(obj.h_axes);
+  
+  % Convert x_min, x_max to GPS time
+  xlims = interp1(obj.eg.image_xaxis,obj.eg.image_gps_time,cur_axis(1:2),'linear','extrap');
+  
+  % Update echogram with new settings
+  obj.plot_echogram(obj.eg.image_gps_time(1),obj.eg.image_gps_time(end),-inf,inf);
+  
+  % Draw data with new axis
+  obj.redraw(xlims(1),xlims(2),cur_axis(3),cur_axis(4),struct('clipped',3));
+  
+elseif source == obj.left_panel.layerCM_properties
+  %% properties
+  obj.eg.detrend.top = 1;
+  obj.eg.detrend.bottom = 2;
+  obj.eg.detrend.order = 7;
+  def = {sprintf('%d',obj.eg.detrend.top),sprintf('%d',obj.eg.detrend.bottom),sprintf('%d',obj.eg.detrend.order)};
+  
+  prompt = {'Detrend top layer','Detrend bottom layer','Detrend polynomial order'};
+  answer = inputdlg(prompt,'Detrend properties',1,def);
+  
+  if length(answer) == 3 && ~isempty(answer{3})
+    % detrend top
+    try
+      obj.eg.detrend.top = eval(answer{1});
+    catch
+      obj.eg.detrend.top = 1;
+    end
+    if isempty(obj.eg.detrend.top)
+      obj.eg.detrend.top = 1;
+    end
+    
+    % detrend bottom
+    try
+      obj.eg.detrend.bottom = eval(answer{2});
+    catch
+      obj.eg.detrend.bottom = 2;
+    end
+    if isempty(obj.eg.detrend.bottom)
+      obj.eg.detrend.bottom = 2;
+    end
+    
+    % detrend order
+    try
+      obj.eg.detrend.order = eval(answer{3});
+    catch
+      obj.eg.detrend.order = 7;
+    end
+    if isempty(obj.eg.detrend.order)
+      obj.eg.detrend.order = 7;
+    end
+    
+    detrend_state = get(obj.left_panel.layerCM_detrend,'Checked');
+    mult_state = get(obj.left_panel.layerCM_multiple,'Checked');
+    if strcmp(detrend_state,'on') || strcmp(mult_state,'on')
+      % Replot image
+      obj.plot_echogram(obj.eg.image_gps_time(1),obj.eg.image_gps_time(end),-inf,inf);
+    end
+    
+  end
 end

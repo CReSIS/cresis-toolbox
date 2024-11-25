@@ -19,9 +19,7 @@ if run_example == 1
   param = read_param_xls(ct_filename_param('rds_param_2018_Antarctica_Ground.xls'),'20181014_02');
   
   % Determine which records you want to load:
-  frames_fn = '';
-  frames_fn = ct_filename_support(param,frames_fn,'frames');
-  load(frames_fn);
+  frames = frames_load(param);
   frm = 1;
   param.load_data.recs = frames.frame_idxs(frm) + 0 + [0 0];
   
@@ -30,7 +28,7 @@ if run_example == 1
   param.load_data.imgs                  = {[2 5]};
   param.load_data.pulse_comp            = false;
   param.load_data.raw_data              = false;
-  param.load_data.ft_wind               = @hanning;
+  %param.load_data.ft_wind               = @hanning;
   param.load_data.combine_rx            = false;
   
   % Load data
@@ -84,9 +82,7 @@ elseif run_example == 2
   param = read_param_xls(ct_filename_param('rds_param_2016_Greenland_Polar6.xls'),'20160413_04');
   
   % Determine which records you want to load:
-  frames_fn = '';
-  frames_fn = ct_filename_support(param,frames_fn,'frames');
-  load(frames_fn);
+  frames = frames_load(param);
   frm = 1;
   param.load_data.recs = frames.frame_idxs(frm) - 1 + [10000 10250];
   
@@ -105,7 +101,7 @@ elseif run_example == 2
   
   %% Load data
   [hdr,data] = load_data(param);
-
+  
   %% Print out DC values and create DC adjust files
   if 0
     adc_mean = [];
@@ -135,7 +131,7 @@ elseif run_example == 2
       end
     end
   end
-
+  
   %% Plot data
   img = 1;
   wf_adc_idx = 1;
@@ -175,9 +171,7 @@ elseif run_example == 3
   param = read_param_xls(param_fn,'20100324_01');
   
   % Determine which records you want to load:
-  frames_fn = '';
-  frames_fn = ct_filename_support(param,frames_fn,'frames');
-  load(frames_fn);
+  frames = frames_load(param);
   frm = 10;
   param.load_data.recs = frames.frame_idxs(frm) - 1 + [4001 8000];
   
@@ -239,9 +233,7 @@ elseif run_example == 4
   param = read_param_xls(param_fn,'20110317_01');
   
   % Determine which records you want to load:
-  frames_fn = '';
-  frames_fn = ct_filename_support(param,frames_fn,'frames');
-  load(frames_fn);
+  frames = frames_load(param);
   frm = 2;
   param.load_data.recs = frames.frame_idxs(frm) - 1 + [5000 17000];
   
@@ -457,9 +449,7 @@ elseif run_example == 5
       fprintf('Processing segment %s (%i of %i)\n', param.day_seg, idx, length(params));
       
       % Determine which records you want to load:
-      frames_fn = '';
-      frames_fn = ct_filename_support(param,frames_fn,'frames');
-      load(frames_fn); % GET NUMBER OF FRAMES HERE (look at variable named "frames")
+      frames = frames_load(param);
       
       if isempty(param.cmd.frms)
         frms = 1:length(frames.frame_idxs);
@@ -521,5 +511,184 @@ elseif run_example == 5
       end
     end
   end
+
+elseif run_example == 6
+  % =======================================================================
+  % Setup loading parameters for example 6
+  %  - Examines BW_window (coherent ave of elev compensated raw data)
+  % =======================================================================
+  try hm; end
+  try user_window_style = get(0,'DefaultFigureWindowStyle');
+    set(0,'DefaultFigureWindowStyle','docked'); end
   
+  switch 3 % Check multiple specular surfaces
+    case 1
+      param = read_param_xls(ct_filename_param('snow_param_2017_Greenland_P3.xls'),'20170407_02'); % 2-18
+      param.load_data.recs = 9124619+ [500 900]; % [-1000 +1000] frm = 486;
+      pick_index = 13263; % used to remove phase variation
+    case 2
+      param = read_param_xls(ct_filename_param('snow_param_2017_Greenland_P3.xls'),'20170323_02'); % 2-8
+      frames = load(ct_filename_support(param,'','frames'));
+      frm = 363;
+      param.load_data.recs = frames.frame_idxs(frm) + [2600 3100]; % [1200 3400]
+      pick_index = 9200; % used to remove phase variation
+    case 3
+      param = read_param_xls(ct_filename_param('snow_param_2017_Greenland_P3.xls'),'20170410_01'); 
+      % 2-8 rx saturated? operator switched from 2-18 to 2-8 for this segment
+      frames = load(ct_filename_support(param,'','frames'));
+      frm = 3;
+      param.load_data.recs = frames.frame_idxs(frm) + [10300 11200];
+      pick_index = 10363; % used to remove phase variation
+  end
+  
+  % param to load raw data
+  param = ct_set_params(param,'radar.wfs(1).deconv.en',false);
+  param.radar.wfs(1).coh_noise_method = 'analysis';
+  param.radar.wfs(1).coh_noise_arg.fn = 'analysis';
+  param.load_data.imgs                  = {[1 1]};
+  param.load_data.pulse_comp            = false;
+  param.load_data.raw_data              = true;
+  param.load_data.ft_wind               = @hanning;
+  param.load_data.combine_rx            = false;
+  
+  % Load data
+  [hdr,data] = load_data(param);
+  % hdr.surface = sgolayfilt(hdr.surface, 2, 201); % smoothen surface in some cases
+  img = 1;
+  wf_adc_idx = 1;
+  wf = param.load_data.imgs{img}(wf_adc_idx,1);
+  adc = param.load_data.imgs{img}(wf_adc_idx,2);
+  data{img} = bsxfun(@minus,data{img},mean(data{1},2)); % DC removal
+  
+  % radar params
+  c = physical_constants('c');
+  f0 = param.radar.wfs(1).f0;
+  f1 = param.radar.wfs(1).f1;
+  Tpd = param.radar.wfs(1).Tpd;
+  chirp_rate = (f1-f0) / Tpd;
+  t_ref = param.radar.wfs(1).t_ref;
+  fs = param.radar.fs;
+  IF_nz = [0:3];
+  IF_cutoffs = [0 : 0.5 : 2]' * fs; % Hz
+  range_gates = IF_cutoffs / chirp_rate *c/2; % meter
+  td = hdr.surface; % twtt (radar, surface)
+  R = td *c/2;
+  nz = max(IF_nz(any(bsxfun(@ge,R,range_gates) ,2))); % assuming only one nz
+  f_beat = chirp_rate*(td-t_ref);
+  f_beat = abs(f_beat-round(f_beat/fs)*fs); % real apparent frequency
+  time = hdr.time{1};
+  elev = hdr.records{1}.elev; % aircraft position rel to WGS-84
+  elev_td = elev *2/c; % twtt (radar, WGS-84)
+  time2freq_xaxis = ( (time + t_ref) *chirp_rate + f0 )/1e9; % freq in GHz
+  
+  % Baseband the data
+  data_f{img} = fft(data{img});
+  try 
+    data_f{img}(round(end/2+1:end),:) = 0;
+  catch
+    fprintf('data_f error\n');
+    Nt = size(data_f{img},1);
+    data_f{img}(round(Nt/2+1:Nt),:) = 0;
+  end
+  data{img} = ifft(data_f{img});
+  
+  % Pre-compensation PLOTS
+  for compressing_this = 1
+    
+    fig_id = 10; fig_h = figure(fig_id); clf(fig_id);
+    aa(1) = subplot(1,2,1);
+    imagesc([],hdr.time{img}/1e-6, lp(abs(data{img}(:,:,wf_adc_idx)).^2/2/50)+30);
+    grid on; colorbar; ylabel('Fast-time, us'); xlabel('rlines');
+    title('Pre-compensation Time-space domain (dBm signal)');
+    
+    fig_id = 20; fig_h = figure(fig_id); clf(fig_id);
+    bb(1) = subplot(1,2,1);
+    plot_data = lp(data_f{img});
+    [~,max_idxs] = max(plot_data(2:end/2,:));
+    max_idxs = max_idxs+1; % add 1 if max from 2nd rbin
+    imagesc([],hdr.freq{img}/1e6,plot_data); hold on; clear plot_data data_f;
+    plot(f_beat/1e6,'.-');
+    plot(hdr.freq{img}(max_idxs)/1e6,'.-');
+    grid on; ylabel('Freq, MHz'); xlabel('rlines'); zoom on;
+    colorbar;legend('fb','max');
+    title('Pre-compensation lp( FT(data) )');
+    
+    fig_id = 30; fig_h = figure(fig_id); clf(fig_id);
+    cc(1) = subplot(1,2,1);
+    imagesc([],hdr.time{img}/1e-6,angle(data{img})); hold on;
+    grid on; ylabel('Fast-time, us'); xlabel('rlines'); zoom on;
+    colorbar;
+    title('Pre-compensation angle(data)');
+    
+    fig_id = 123; fig_h = figure(fig_id); clf(fig_id); hold on;
+    mean_data = mean(data{img},2);
+    dd(1) = subplot(2,2,1);
+    plot(time2freq_xaxis, real(mean_data)); grid on; title('Pre-compensation mean');
+    xlabel('Freq, in GHz'); ylabel('Voltage, V');
+    dd(2) = subplot(2,2,3);
+    plot(time2freq_xaxis, lp(mean_data)); grid on; title('Pre-compensation lp(mean)');
+    xlabel('Freq, in GHz'); ylabel('Magnitude, dB');
+    linkaxes(dd,'x'); zoom on;
+    clear mean_data;
+    
+  end
+  
+  % Compensation
+  ttt = (td(1)+elev_td-elev_td(1)) - td(1); %first order
+  ttt2 = -(td(1)+elev_td-elev_td(1)).^2 + td(1)^2; % second order
+  phase_comp = +2*pi*chirp_rate*time*(ttt) + 2*pi*f0*(ttt) + pi*chirp_rate*(ttt2);
+  data{img} = data{img} .* exp(-1i* (-1)^nz *( phase_comp ));
+  if 1 % enable for additional phase correction, uses row specified by pick_index  
+    data{img} = fir_dec(data{img}, ones(1,11),1);
+    filt_phase = angle(data{img});
+    pick_phase = filt_phase(pick_index,:);
+    data{img} = bsxfun(@times,data{img}, exp(-1i*pick_phase));
+  end
+  data_f{img} = fft(data{img});
+  
+  clear phase_comp;
+  
+  % Post-compensation PLOTS
+  for compressing_this = 1
+    
+    fig_id = 10; fig_h = figure(fig_id); %clf(fig_id);
+    aa(2) = subplot(1,2,2);
+    imagesc([],hdr.time{img}/1e-6, lp(abs(data{img}(:,:,wf_adc_idx)).^2/2/50)+30);
+    grid on; colorbar; ylabel('Fast-time, us'); xlabel('rlines');
+    title('Post-compensation Time-space domain (dBm signal)');
+    
+    fig_id = 20; fig_h = figure(fig_id); %clf(fig_id);
+    bb(2) = subplot(1,2,2);
+    plot_data = lp(data_f{img});
+    [~,max_idxs] = max(plot_data(2:end/2,:));
+    max_idxs = max_idxs+1; % add 1 if max from 2nd rbin
+    imagesc([],hdr.freq{img}/1e6,plot_data); hold on; clear plot_data data_f;
+    plot(f_beat/1e6,'.-');
+    plot(hdr.freq{img}(max_idxs)/1e6,'.-');
+    grid on; ylabel('Freq, MHz'); xlabel('rlines'); zoom on;
+    colorbar;legend('fb','max');
+    title('Post-compensation lp( FT(data) )');
+    
+    fig_id = 30; fig_h = figure(fig_id); %clf(fig_id);
+    cc(2) = subplot(1,2,2);
+    imagesc([],hdr.time{img}/1e-6,angle(data{img})); hold on;
+    grid on; ylabel('Fast-time, us'); xlabel('rlines'); zoom on;
+    colorbar;
+    title('Post-compensation angle(data)');
+    
+    fig_id = 123; fig_h = figure(fig_id); % clf(fig_id); hold on;
+    mean_data = mean(data{img},2);
+    dd(3) = subplot(2,2,2);
+    plot(time2freq_xaxis, real(mean_data)); grid on; title('Post-compensation mean');
+    xlabel('Freq, in GHz'); ylabel('Voltage, V');
+    dd(4) = subplot(2,2,4);
+    plot(time2freq_xaxis, lp(mean_data)); grid on; title('Post-compensation lp(mean)');
+    xlabel('Freq, in GHz'); ylabel('Magnitude, dB');
+    linkaxes(dd,'x'); zoom on;
+    clear mean_data;
+    
+  end
+  
+  try linkaxes([aa]); linkaxes([bb]); linkaxes([cc]); end
+  try set(0,'DefaultFigureWindowStyle',user_window_style); end
 end

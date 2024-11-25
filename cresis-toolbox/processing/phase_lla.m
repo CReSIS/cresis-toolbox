@@ -90,20 +90,13 @@ function [phase_lat, phase_lon, phase_elev] = phase_lla(lever, roll, pitch, head
 
 
 
-% WGS84 ellipsoid parameters
-semimajor       = 6378137.0;
-e2              = 0.00669437999013;
-ellipsoid       = [semimajor, sqrt(e2)];
 
-
+physical_constants; % Load WGS84.spheroid
 
 % Convert inertials and geodetic lat & lon from degress to radians.
 phi0            = roll;
 theta0          = pitch;
 ci0             = heading;
-
-lat0            = deg2rad(lat);
-lon0            = deg2rad(lon);
 
 % Preallocate memory for phase_lat, phase_lon, phase_elev vectors.
 phase_lat       = zeros(1,length(elev));
@@ -128,17 +121,13 @@ for ind         = 1:length(elev)
     PhaseENU    = [PhaseEND(2), PhaseEND(1), -1*PhaseEND(3)];
   
     % Calculate Phase Center in terms of ECEF coordinate system.
-    [PhaseECEF_x, PhaseECEF_y, PhaseECEF_z]  = lv2ecef(PhaseENU(1), PhaseENU(2), PhaseENU(3), lat0(ind), lon0(ind), elev(ind), ellipsoid);
+    [PhaseECEF_x, PhaseECEF_y, PhaseECEF_z] ...
+      = enu2ecef(PhaseENU(1), PhaseENU(2), PhaseENU(3), lat(ind), lon(ind), elev(ind), WGS84.spheroid);
     
     % Calculate Phase Center in terms of geodetic latitude(radians), 
     % geodetic longitude (radians) and elevation (height above the
     % ellipsoid in meters).
-    [lat_rad lon_rad phase_elev(ind)] = ecef2geodetic(PhaseECEF_x, PhaseECEF_y, PhaseECEF_z, ellipsoid);
-    
-    % Convert Phase Center geodetic latitude and longitude from degrees to 
-    % radians.
-    phase_lat(ind) = rad2deg(lat_rad);
-    phase_lon(ind) = rad2deg(lon_rad);
+    [phase_lat(ind) phase_lon(ind) phase_elev(ind)] = ecef2geodetic(WGS84.spheroid, PhaseECEF_x, PhaseECEF_y, PhaseECEF_z);
 end
     
 return;

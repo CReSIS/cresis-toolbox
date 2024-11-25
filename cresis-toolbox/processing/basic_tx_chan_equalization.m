@@ -21,54 +21,54 @@ physical_constants;
 tstart = tic;
 
 % .plot_en = flag to enable plots
-param.plot_en = true;
+param.basic_tx_chan_equalization.plot_en = true;
 
 % .caxis = Color axis limits (leave empty first time since this causes it to use the
 % defaults).
-param.caxis = [];
-%param.caxis = [50 120];
+param.basic_tx_chan_equalization.caxis = [];
+%param.basic_tx_chan_equalization.caxis = [50 120];
 
 % .ylim = Leave empty the first time (it just uses the default limits then)
-param.ylim = [];
-%param.ylim = [1 500];
+param.basic_tx_chan_equalization.ylim = [];
+%param.basic_tx_chan_equalization.ylim = [1 500];
 
 % .xlim = Leave empty the first time (it just uses the default limits then)
 %   These limits are in range lines post presumming
-param.xlim = [];
-%param.xlim = [200 450];
+param.basic_tx_chan_equalization.xlim = [];
+%param.basic_tx_chan_equalization.xlim = [200 450];
 
 % .rlines = 1x2 vector specifying range lines to process (to select all
 %   range lines to the end, set second element to inf). These are range
 %   lines post presumming
-param.rlines = [1 inf];
+param.basic_tx_chan_equalization.rlines = [1 inf];
 
 % .snr_threshold = SNR threshold in dB (range lines exceeding this
 %   SNR for every transmit waveform are included in the estimate,
 %   if even just one waveform does not meet the threshold the
 %   range line is not used)
-param.snr_threshold = 10;
+param.basic_tx_chan_equalization.snr_threshold = 10;
 
-% param.presums = Integer containing number of presums (coherent
+% param.config.presums = Integer containing number of presums (coherent
 %   averaging or stacking) to do
-param.presums = 10;
+param.config.presums = 10;
 
 % param.noise_bins_offsets = 1x2 vector specifying bins relative to peak
 %   to use in estimating the noise power (usually some range before the
 %   peak is used):
-%   param.noise_rbins = min(surf_bin)+param.noise_rbins_rel(1) : min(surf_bin)+param.noise_rbins_rel(2);
-param.noise_rbins_rel = [-20 -10];
+%   param.noise_rbins = min(surf_bin)+param.basic_tx_chan_equal.noise_rbins_rel(1) : min(surf_bin)+param.basic_tx_chan_equal.noise_rbins_rel(2);
+param.basic_tx_chan_equal.noise_rbins_rel = [-20 -10];
 
-% param.ref_bins = 1x2 vector specifying bins relative to peak to use in
+% param.basic_tx_chan_equal.ref_bins = 1x2 vector specifying bins relative to peak to use in
 %   correlation
-param.ref_bins = [-2 2];
-% param.search_bins = 1x2 vector specifying max search range to use when
+param.basic_tx_chan_equal.ref_bins = [-2 2];
+% param.basic_tx_chan_equal.search_bins = 1x2 vector specifying max search range to use when
 %   looking for the best correlation (this is to ensure that each output
 %   correlation value has full support... i.e. no roll off effect)
-param.search_bins = [-15 15];
-% param.Mt = amount to oversample the correlation
-param.Mt = 100;
+param.basic_tx_chan_equal.search_bins = [-15 15];
+% param.basic_tx_chan_equal.Mt = amount to oversample the correlation
+param.basic_tx_chan_equal.Mt = 100;
 
-param.img = defaults{1}.txequal.img;
+param.config.img = param.config.txequal.img;
 
 %% Get the mode to run
 global g_basic_tx_chan_equalization_mode;
@@ -123,7 +123,7 @@ else
   update_phase = false; % AFTER UPDATING DELAY, ENABLE AMP/PHASE UPDATE and DISABLE DELAY
 end
 
-param.recs = [0 inf];
+param.config.recs = [0 inf];
 [data,fn,settings,default,gps,hdr,pc_param,settings_enc] = basic_file_loader(param,defaults);
 global g_basic_file_loader_fns;
 fns = g_basic_file_loader_fns;
@@ -136,55 +136,55 @@ for file_idx = 1:length(fns)
   if file_idx == 1
     fn = fns{1};
   else
-    param.file_search_mode = 'default+s';
+    param.config.file_search_mode = 'default+s';
     [data,fn,settings,default,gps,hdr,pc_param,settings_enc] = basic_file_loader(param,defaults);
   end
-  if size(data,2) < param.presums
+  if size(data,2) < param.config.presums
     error('Not enough data in file to process. Choose a different file.');
   end
   
-  param.ref_wf_adc = default.txequal.ref_wf_adc;
+  ref_wf_adc = param.config.txequal.ref_wf_adc;
   [fn_dir fn_name] = fileparts(fn);
   
   %% Convert from quantization to voltage @ ADC
-  wf = abs(param.img(1,1));
+  wf = abs(param.config.img(1,1));
   data = data ...
-    * default.radar.adc_full_scale/2^default.radar.adc_bits ...
+    * default.radar.Vpp_scale/2^default.radar.adc_bits ...
     * 2^hdr.wfs(abs(wf)).bit_shifts / hdr.wfs(wf).presums;
   
   %% Additional software presums
   for wf_adc = 1:size(data,3)
-    data(:,1:floor(size(data,2)/param.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.presums);
+    data(:,1:floor(size(data,2)/param.config.presums),wf_adc) = fir_dec(data(:,:,wf_adc),param.config.presums);
   end
-  data = data(:,1:floor(size(data,2)/param.presums),:);
-  hdr.radar_time = fir_dec(hdr.radar_time,param.presums);
-  hdr.gps_time = fir_dec(hdr.gps_time,param.presums);
-  hdr.lat = fir_dec(hdr.lat,param.presums);
-  hdr.lon = fir_dec(hdr.lon,param.presums);
-  hdr.elev = fir_dec(hdr.elev,param.presums);
-  hdr.roll = fir_dec(hdr.roll,param.presums);
-  hdr.pitch = fir_dec(hdr.pitch,param.presums);
-  hdr.heading = fir_dec(hdr.heading,param.presums);
+  data = data(:,1:floor(size(data,2)/param.config.presums),:);
+  hdr.radar_time = fir_dec(hdr.radar_time,param.config.presums);
+  hdr.gps_time = fir_dec(hdr.gps_time,param.config.presums);
+  hdr.lat = fir_dec(hdr.lat,param.config.presums);
+  hdr.lon = fir_dec(hdr.lon,param.config.presums);
+  hdr.elev = fir_dec(hdr.elev,param.config.presums);
+  hdr.roll = fir_dec(hdr.roll,param.config.presums);
+  hdr.pitch = fir_dec(hdr.pitch,param.config.presums);
+  hdr.heading = fir_dec(hdr.heading,param.config.presums);
   
   %% Pulse compression
-  [pc_signal,pc_time] = pulse_compress(data,pc_param);
+  [pc_signal,pc_time,pc_freq] = pulse_compress(data,pc_param);
 
   %% Track surface
-  ml_data = lp(fir_dec(abs(pc_signal(:,:,param.ref_wf_adc)).^2,ones(1,5)/5,1));
-  good_time_bins = find(pc_time > pc_param.Tpd*default.basic_surf_track_Tpd_factor & pc_time > default.basic_surf_track_min_time);
+  ml_data = lp(fir_dec(abs(pc_signal(:,:,ref_wf_adc)).^2,ones(1,5)/5,1));
+  good_time_bins = find(pc_time > pc_param.Tpd*param.config.basic_surf_track_Tpd_factor & pc_time > param.config.basic_surf_track_min_time);
   [max_value,surf_bin] = max(ml_data(good_time_bins,:));
   surf_bin = surf_bin + good_time_bins(1)-1;
   
   param.noise_rlines = 1:size(ml_data,2);
-  param.noise_rbins = min(surf_bin)+param.noise_rbins_rel(1) : min(surf_bin)+param.noise_rbins_rel(2);
+  param.noise_rbins = min(surf_bin)+param.basic_tx_chan_equal.noise_rbins_rel(1) : min(surf_bin)+param.basic_tx_chan_equal.noise_rbins_rel(2);
   param.noise_rbins = param.noise_rbins(param.noise_rbins >= 1);
   
-  param.rlines = 1:size(ml_data,2);
+  param.basic_tx_chan_equalization.rlines = 1:size(ml_data,2);
   param.rbins= min(surf_bin)-30 : max(surf_bin)+30;
   
   if (all(surf_bin==surf_bin(1)) || isempty(param.noise_rbins)) ...
-      && default.basic_surf_track_Tpd_factor > -inf
-    warning('DEBUG: Check surface tracker since surface is at the same range bin for every range line (this is normal for lab tests but not flight test). May need to adjust param.rbins and param.rlines to ensure maximum signal in the window is the nadir surface return. Ensure param.noise_bins and param.noise_rlines enclose a region with appropriate values for the background noise. Run dbcont after setting these parameters correctly.');
+      && param.config.basic_surf_track_Tpd_factor > -inf
+    warning('DEBUG: Check surface tracker since surface is at the same range bin for every range line (this is normal for lab tests but not flight test). May need to adjust param.rbins and param.basic_tx_chan_equalization.rlines to ensure maximum signal in the window is the nadir surface return. Ensure param.noise_bins and param.noise_rlines enclose a region with appropriate values for the background noise. Run dbcont after setting these parameters correctly.');
     fprintf('\n');
     figure;
     imagesc(ml_data);
@@ -200,18 +200,17 @@ for file_idx = 1:length(fns)
   for chan = 1:size(tmp,3)
     data{chan} = tmp(:,:,chan);
   end
-  param.wf_mapping = default.txequal.wf_mapping;
+  param.wf_mapping = param.config.txequal.wf_mapping;
   param.bad_chan_mask = param.wf_mapping == 0;
-  param.ref_chan = param.ref_wf_adc;
-  Hwindow_desired = default.txequal.Hwindow_desired;
-  max_DDS_amp = default.txequal.max_DDS_amp;
-  time_delay_desired = default.txequal.time_delay_desired;
-  phase_desired = default.txequal.phase_desired;
+  Hwindow_desired = param.config.txequal.Hwindow_desired;
+  max_DDS_amp = param.config.txequal.max_DDS_amp;
+  time_delay_desired = param.config.txequal.time_delay_desired;
+  phase_desired = param.config.txequal.phase_desired;
   time{1} = pc_time;
   rbins = param.rbins;
-  rlines = param.rlines;
+  rlines = param.basic_tx_chan_equalization.rlines;
   
-  xml_version = default.xml_version;
+  xml_version = param.config.cresis.config_version;
   cresis_xml_mapping;
   
   % .DDS_start_mag = current DDS waveform attenuation in dB or DDS counts
@@ -232,11 +231,29 @@ for file_idx = 1:length(fns)
   %   THIS OFTEN NEEDS TO BE SET
   param.DDS_start_phase_units = 'deg';
   
-  out_xml_fn_dir = param.out_xml_fn_dir;
-  
+  out_xml_fn_dir = param.basic_tx_chan_equal.out_xml_fn_dir;
+
+  %% Hack to apply time delay, amplitude and phase.
+  % =======================================================================
+  if 0
+    t_delay_hack = zeros(size(data));
+    phase_hack = zeros(size(data));
+    amp_hack = ones(size(data));
+
+    % Usually enter the difference between the Original and Mean here:
+%     t_delay_hack = ([-4.19	-5.07	-3.85	-3.43	-5.39	-4.53	-5.31	-4.64]-[-7.35	-5.57	-2.39	-3.43	0.97	-0.75	-5.91	-4.64])*1e-9;
+%     phase_hack = (-[-2.6	0.0	41.5	39.4	8.2	-50.4	-51.2	-46.2]+[-138.4	145.2	-33.0	0.0	-163.3	-82.7	111.3	-85.6])/180*pi;
+%     amp_hack = [1426	3350	2957	3952	4000	3548	2615	273]./[443	894	1502	1751	1605	4000	902	462];
+
+    for chan = 1:length(data)
+      data{chan} = (amp_hack(chan) .* exp(1i*phase_hack(chan))) ...
+        * ifft(fft(data{chan}) .* exp(-1i*2*pi*pc_freq*t_delay_hack(chan)));
+    end
+  end
+
   %% Echogram plots
   % =======================================================================
-  if param.plot_en
+  if param.basic_tx_chan_equalization.plot_en
     for chan = 1:length(data)
       if param.wf_mapping(chan) ~= 0
         figure(chan); clf; set(gcf,'WindowStyle','docked','NumberTitle','off','Name',sprintf('E %d',chan));
@@ -248,14 +265,14 @@ for file_idx = 1:length(fns)
         grid on;
         h = colorbar;
         set(get(h,'YLabel'),'String','Relative power (dB)');
-        if ~isempty(param.caxis)
-          caxis(param.caxis);
+        if ~isempty(param.basic_tx_chan_equalization.caxis)
+          caxis(param.basic_tx_chan_equalization.caxis);
         end
-        if ~isempty(param.ylim)
-          ylim(param.ylim);
+        if ~isempty(param.basic_tx_chan_equalization.ylim)
+          ylim(param.basic_tx_chan_equalization.ylim);
         end
-        if ~isempty(param.xlim)
-          xlim(param.xlim);
+        if ~isempty(param.basic_tx_chan_equalization.xlim)
+          xlim(param.basic_tx_chan_equalization.xlim);
         end
       end
     end
@@ -265,12 +282,12 @@ for file_idx = 1:length(fns)
   %% Surface tracker
   % =======================================================================
   % Incoherent along-track filtering
-  surf_data = filter2(ones(1,6),abs(data{param.ref_chan}.^2));
+  surf_data = filter2(ones(1,6),abs(data{ref_wf_adc}.^2));
   % Simple max search to find surface
   [surf_vals surf_bins] = max(surf_data(rbins,rlines));
   surf_bins = rbins(1)-1 + surf_bins;
   
-  if param.plot_en
+  if param.basic_tx_chan_equalization.plot_en
     for chan = 1:length(data)
       if param.wf_mapping(chan) ~= 0
         figure(chan);
@@ -283,13 +300,13 @@ for file_idx = 1:length(fns)
     
   %% Noise power estimate and SNR threshold
   % =======================================================================
-  noise_power = mean(mean(abs(data{abs(param.wf_mapping(param.ref_chan))}(param.noise_rbins,rlines)).^2));
+  noise_power = mean(mean(abs(data{abs(param.wf_mapping(ref_wf_adc))}(param.noise_rbins,rlines)).^2));
 
   %% Extract delay (using oversampled cross correlation), phase and amplitude
   % differences between channels
   % =======================================================================
-  ref_bins = param.ref_bins(1):param.ref_bins(2);
-  search_bins = param.search_bins(1)+param.ref_bins(1) : param.search_bins(2)+param.ref_bins(2);
+  ref_bins = param.basic_tx_chan_equal.ref_bins(1):param.basic_tx_chan_equal.ref_bins(2);
+  search_bins = param.basic_tx_chan_equal.search_bins(1)+param.basic_tx_chan_equal.ref_bins(1) : param.basic_tx_chan_equal.search_bins(2)+param.basic_tx_chan_equal.ref_bins(2);
   zero_padding_offset = length(search_bins) - length(ref_bins);
   Hcorr_wind = hanning(length(ref_bins));
   clear tx_phases tx_powers peak_val peak_offset;
@@ -308,16 +325,16 @@ for file_idx = 1:length(fns)
         % Gets the time offset relative to the reference channel (a postive
         % offset means that the channel leads the reference channel)
         [corr_out,lags] = xcorr(data{chan}(surf_bins(rline_idx)+search_bins,rline), ...
-          data{param.ref_chan}(surf_bins(rline_idx)+ref_bins,rline) .* Hcorr_wind);
-        corr_int = interpft(corr_out,param.Mt*length(corr_out));
+          data{ref_wf_adc}(surf_bins(rline_idx)+ref_bins,rline) .* Hcorr_wind);
+        corr_int = interpft(corr_out,param.basic_tx_chan_equal.Mt*length(corr_out));
         [peak_val(chan,rline_idx) peak_offset(chan,rline_idx)] = max(corr_int);
-        peak_offset(chan,rline_idx) = (peak_offset(chan,rline_idx)-1)/param.Mt+1 ...
+        peak_offset(chan,rline_idx) = (peak_offset(chan,rline_idx)-1)/param.basic_tx_chan_equal.Mt+1 ...
           + ref_bins(1) + search_bins(1) - 1 - zero_padding_offset;
       end
     end
   end
   tx_snr = tx_powers ./ noise_power;
-  good_meas = lp(tx_snr) > param.snr_threshold;
+  good_meas = lp(tx_snr) > param.basic_tx_chan_equalization.snr_threshold;
   good_rlines = zeros(size(rlines));
   good_rlines(sum(good_meas(~param.bad_chan_mask,:)) == sum(~param.bad_chan_mask)) = 1;
   good_rlines = logical(good_rlines);
@@ -338,7 +355,7 @@ for file_idx = 1:length(fns)
       wf = abs(param.wf_mapping(chan));
       ref_time = peak_offset_time(chan,:);
       
-      if chan == param.ref_chan
+      if chan == ref_wf_adc
         median_mask = ones(size(good_rlines));
         ref_time_mean(chan) = 0;
       else
@@ -352,18 +369,18 @@ for file_idx = 1:length(fns)
       
       fprintf('TX %d: %4.2f ns (%4.2f ns)\n', chan, 1e9*ref_time_mean(chan), ...
         1e9*std(ref_time(good_rlines & median_mask)));
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         figure(120+chan); clf; set(gcf,'WindowStyle','docked','NumberTitle','off','Name',sprintf('Time %d',chan));
         plot(ref_time);
         xlabel('Range line');
         ylabel('Relative time (sec)');
       end
       ref_time(~(good_rlines & median_mask)) = NaN;
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         hold on;
         plot(ref_time,'ro');
         hold off;
-        title(sprintf('Relative Time (%d to ref %d)', chan, param.ref_chan));
+        title(sprintf('Relative Time (%d to ref %d)', chan, ref_wf_adc));
         ylim([min(min(ref_time),-1e-11) max(1e-11,max(ref_time))]);
       end
     end
@@ -389,9 +406,9 @@ for file_idx = 1:length(fns)
   for chan = 1:length(param.wf_mapping)
     if param.wf_mapping(chan) ~= 0
       wf = abs(param.wf_mapping(chan));
-      ref_power = tx_powers(chan,:)./tx_powers(param.ref_chan,:);
+      ref_power = tx_powers(chan,:)./tx_powers(ref_wf_adc,:);
       
-      if chan == param.ref_chan  || update_mode == 4
+      if chan == ref_wf_adc  || update_mode == 4
         median_mask = ones(size(good_rlines));
         delta_power(chan) = 0;
       else
@@ -405,18 +422,18 @@ for file_idx = 1:length(fns)
       
       fprintf('TX %d: %4.2f dB (%4.2f dB), desired %4.2f\n', chan, delta_power(chan), ...
         lp(std(ref_power(good_rlines & median_mask))), 20*log10(Hwindow_desired(chan)));
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         figure(10+chan); clf; set(gcf,'WindowStyle','docked','NumberTitle','off','Name',sprintf('Pow %d',chan));
         plot(lp(ref_power,1));
         xlabel('Range line');
         ylabel('Relative power (dB)');
       end
       ref_power(~(good_rlines & median_mask)) = NaN;
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         hold on;
         plot(lp(ref_power,1),'ro');
         hold off;
-        title(sprintf('Relative Power (%d to ref %d)', chan, param.ref_chan));
+        title(sprintf('Relative Power (%d to ref %d)', chan, ref_wf_adc));
       end
     end
   end
@@ -443,13 +460,13 @@ for file_idx = 1:length(fns)
   for chan = 1:length(param.wf_mapping)
     if param.wf_mapping(chan) ~= 0
       wf = abs(param.wf_mapping(chan));
-      ref_phase = tx_phases(chan,:).*conj(tx_phases(param.ref_chan,:));
+      ref_phase = tx_phases(chan,:).*conj(tx_phases(ref_wf_adc,:));
       ref_values_real = real(ref_phase);
       ref_values_imag = imag(ref_phase);
       
       median_mask = ones(size(good_rlines));
       ref_phase_mean(chan) = mean(ref_phase);
-%       if chan == param.ref_chan
+%       if chan == ref_wf_adc
 %         median_mask = ones(size(good_rlines));
 %         ref_phase_mean(chan) = 1;
 %       else
@@ -472,7 +489,7 @@ for file_idx = 1:length(fns)
       fprintf('WF %d: relative phase: %1.3f radians, %3.1f deg\n', chan, ...
         angle(ref_phase_mean(chan)), angle(ref_phase_mean(chan))*180/pi);
       
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         figure(20+chan); clf; set(gcf,'WindowStyle','docked','NumberTitle','off','Name',sprintf('Ang %d',chan));
         plot(angle(ref_phase)*180/pi);
         xlabel('Range line');
@@ -480,11 +497,11 @@ for file_idx = 1:length(fns)
         ylim([-180 180]);
       end
       ref_phase(~(good_rlines & median_mask)) = NaN;
-      if param.plot_en
+      if param.basic_tx_chan_equalization.plot_en
         hold on;
         plot(angle(ref_phase)*180/pi,'ro');
         hold off;
-        title(sprintf('Relative Phase (%d to ref %d)', chan, param.ref_chan));
+        title(sprintf('Relative Phase (%d to ref %d)', chan, ref_wf_adc));
       end
     else
       ref_phase_mean(chan) = 1;
@@ -518,9 +535,9 @@ for file_idx = 1:length(fns)
 end
 if update_mode == 1
   mean_error = mean(results.DDS_time_error,1);
-  if default.txequal.remove_linear_phase_en
+  if param.config.txequal.remove_linear_phase_en
     mean_error = detrend(mean_error);
-    mean_error = mean_error - mean_error(param.ref_chan);
+    mean_error = mean_error - mean_error(ref_wf_adc);
     fprintf('%*s',fn_length,'Mean Error (slope removed)');
   else
     fprintf('%*s',fn_length,'Mean Error');
@@ -531,7 +548,7 @@ if update_mode == 1
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.time_validation(wf)
+    if abs(mean_error(wf)) <= param.config.txequal.time_validation(wf)
       fprintf('\tPASS');
     else
       fprintf('\tFAIL');
@@ -540,10 +557,10 @@ if update_mode == 1
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.time_validation(wf)
+    if abs(mean_error(wf)) <= param.config.txequal.time_validation(wf)
       fprintf('\t');
     else
-      fprintf('\t%.1f>%.1f', abs(mean_error(wf))*1e9, default.txequal.time_validation(wf)*1e9);
+      fprintf('\t%.1f>%.1f', abs(mean_error(wf))*1e9, param.config.txequal.time_validation(wf)*1e9);
     end
   end
   fprintf('\n');
@@ -597,7 +614,7 @@ if update_mode == 1
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.amp_validation(wf);
+    if abs(mean_error(wf)) <= param.config.txequal.amp_validation(wf);
       fprintf('\tPASS');
     else
       fprintf('\tFAIL');
@@ -606,10 +623,10 @@ if update_mode == 1
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.amp_validation(wf);
+    if abs(mean_error(wf)) <= param.config.txequal.amp_validation(wf);
       fprintf('\t');
     else
-      fprintf('\t%.0f>%.0f', abs(mean_error(wf)), default.txequal.amp_validation(wf));
+      fprintf('\t%.0f>%.0f', abs(mean_error(wf)), param.config.txequal.amp_validation(wf));
     end
   end
   fprintf('\n');
@@ -667,7 +684,7 @@ for file_idx = 1:length(fns)
 end
 if update_mode == 1
   mean_error = mean(results.DDS_phase_error,1);
-  if default.txequal.remove_linear_phase_en
+  if param.config.txequal.remove_linear_phase_en
     [~,tmp] = max(fft(mean_error,100*length(mean_error))); tmp = tmp - 1;
     mean_error = mean_error .* exp(-1i*2*pi*tmp/100*(0:length(mean_error)-1)/length(mean_error));
     fprintf('%*s',fn_length,'Mean Error (slope removed)');
@@ -675,14 +692,14 @@ if update_mode == 1
     fprintf('%*s',fn_length,'Mean Error');
   end
   mean_error = 180/pi*angle(mean_error);
-  mean_error = mean_error - mean_error(param.ref_chan);
+  mean_error = mean_error - mean_error(ref_wf_adc);
   for wf = 1:size(mean_error,2)
     fprintf('\t%.1f', mean_error(wf));
   end
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.phase_validation(wf);
+    if abs(mean_error(wf)) <= param.config.txequal.phase_validation(wf);
       fprintf('\tPASS');
     else
       fprintf('\tFAIL');
@@ -691,10 +708,10 @@ if update_mode == 1
   fprintf('\n');
   fprintf('%s',' '*ones(1,fn_length));
   for wf = 1:size(mean_error,2)
-    if abs(mean_error(wf)) <= default.txequal.phase_validation(wf);
+    if abs(mean_error(wf)) <= param.config.txequal.phase_validation(wf);
       fprintf('\t');
     else
-      fprintf('\t%.0f>%.0f', abs(mean_error(wf)), default.txequal.phase_validation(wf));
+      fprintf('\t%.0f>%.0f', abs(mean_error(wf)), param.config.txequal.phase_validation(wf));
     end
   end
   fprintf('\n');
@@ -713,14 +730,14 @@ else
   end
   fprintf('\n');
   fprintf('Mean');
-  final_DDS_phase = angle(mean(exp(j*results.DDS_phase),1))*180/pi;
+  final_DDS_phase = angle(mean(exp(j*(results.DDS_phase-results.DDS_phase(ref_wf_adc))),1))*180/pi;
   for wf = 1:size(results.DDS_time,2)
     fprintf('\t%.1f', final_DDS_phase(:,wf));
   end
   fprintf('\n');
   fprintf('Median');
   for wf = 1:size(results.DDS_time,2)
-    fprintf('\t%.1f', final_DDS_phase(wf) + angle(mean(exp(j*results.DDS_phase(:,wf)) .* exp(-j*final_DDS_phase(wf)/180*pi),1))*180/pi);
+    fprintf('\t%.1f', final_DDS_phase(wf) + angle(mean(exp(j*(results.DDS_phase(:,wf)-results.DDS_phase(ref_wf_adc))) .* exp(-j*final_DDS_phase(wf)/180*pi),1))*180/pi);
   end
   fprintf('\n');
   fprintf('Stdev');
@@ -733,7 +750,7 @@ else
     fprintf('Delay Compensated Mean');
     final_DDS_phase_comp = final_DDS_phase + 360*(final_DDS_time/1e9 ...
       - param.DDS_start_time)*(pc_param.f0+pc_param.f1)/2;
-    final_DDS_phase_comp = 180/pi*angle(exp(j*(final_DDS_phase_comp - final_DDS_phase_comp(param.ref_chan))/180*pi));
+    final_DDS_phase_comp = 180/pi*angle(exp(j*(final_DDS_phase_comp - final_DDS_phase_comp(ref_wf_adc))/180*pi));
     final_DDS_phase_comp(logical(param.bad_chan_mask)) = 0;
     for wf = 1:size(results.DDS_time,2)
       fprintf('\t%.1f', final_DDS_phase_comp(:,wf));
@@ -817,7 +834,7 @@ if update_mode ~= 1
     % Tx 1 is bit 0, tx 2 is bit 1, tx 3 is bit 2, ...
     tx_mask = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).TXZ20Mask;
     tx_mask = fliplr(dec2bin(tx_mask,8))-'0';
-    tx_mask = tx_mask | default.txequal.wf_mapping==0;
+    tx_mask = tx_mask | param.config.txequal.wf_mapping==0;
     tx_mask = bin2dec(char(fliplr(tx_mask+'0')));
     settings_enc.sys.DDSZ5FSetup.Waveforms(wf).TXZ20Mask = uint8(tx_mask);
   end
@@ -837,16 +854,17 @@ if update_mode ~= 1
   %% Write RSS Arena XML config file
   if isfield(default,'arena') && ~strcmpi(param.season_name,'2017_Antarctica_Basler')
     % Create arena parameter structure
-    arena = struct('version','1');
-    arena.awg = default.arena.awg;
-    arena.dacs = default.arena.dacs;
-    arena.dacs_sampFreq = default.arena.dacs_sampFreq;
-    arena.dacs_internal_delay = default.arena.dacs_internal_delay;
-    arena.dacs_start_delay = default.arena.dacs_start_delay;
-    arena.zeropimods = default.arena.zeropimods;
-    arena.TTL_time = default.arena.TTL_time;
-    arena.TTL_names = default.arena.TTL_names;
-    arena.TTL_states = default.arena.TTL_states;
+    arena = default.arena;
+%     arena = struct('version','1');
+%     arena.awg = default.arena.awg;
+%     arena.dacs = default.arena.dacs;
+%     arena.dacs_sampFreq = default.arena.dacs_sampFreq;
+%     arena.dacs_internal_delay = default.arena.dacs_internal_delay;
+%     arena.dacs_start_delay = default.arena.dacs_start_delay;
+%     arena.zeropimods = default.arena.zeropimods;
+%     arena.TTL_time = default.arena.TTL_time;
+%     arena.TTL_names = default.arena.TTL_names;
+%     arena.TTL_states = default.arena.TTL_states;
     % Ensure non-negative delays
     min_delay = inf;
     for wf = 1:length(settings_enc.sys.DDSZ5FSetup.Waveforms)
@@ -860,11 +878,14 @@ if update_mode ~= 1
       arena.wfs(wf).name = '';
       arena.wfs(wf).tukey = settings_enc.sys.DDSZ5FSetup.RAMZ20Taper;
       arena.wfs(wf).enabled = fliplr(~logical(dec2bin(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).TXZ20Mask(1),8)-'0'));
-      arena.wfs(wf).scale = double(settings_enc.sys.DDSZ5FSetup.RamZ20Amplitude) .* default.arena.max_tx ./ default.txequal.max_DDS_amp;
-      arena.wfs(wf).fc = (settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq ...
-        + settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq)/2;
-      arena.wfs(wf).BW = abs(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq ...
-        - settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq);
+      %arena.wfs(wf).scale = double(settings_enc.sys.DDSZ5FSetup.RamZ20Amplitude) .* param.config.max_tx ./ param.config.txequal.max_DDS_amp;
+      arena.wfs(wf).scale = double(settings_enc.sys.DDSZ5FSetup.RamZ20Amplitude) .* arena.max_tx ./ max_DDS_amp;
+      arena.wfs(wf).f0 = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq;
+      arena.wfs(wf).f1 = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq;
+%       arena.wfs(wf).fc = (settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq ...
+%         + settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq)/2;
+%       arena.wfs(wf).BW = abs(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq ...
+%         - settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq);
       arena.wfs(wf).delay = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).Delay - min_delay;
       arena.wfs(wf).phase = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).PhaseZ20Offset;
       arena.wfs(wf).Tpd = double(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).LenZ20Mult) ...
@@ -873,24 +894,49 @@ if update_mode ~= 1
     end
     
     % Create XML document
-    xml_doc = write_arena_xml([],'init',arena);
-    xml_doc = write_arena_xml(xml_doc,'ctu_0013',arena);
-    xml_doc = write_arena_xml(xml_doc,'dac-ad9129_0014',arena);
-    xml_doc = write_arena_xml(xml_doc,'dac-ad9129_0014_waveform',arena);
-    xml_doc = write_arena_xml(xml_doc,'psc_0001',arena);
-    xml_doc = write_arena_xml(xml_doc,'subsystems',arena);
-    
-    out_str = xmlwrite(xml_doc);
+    xml_param = param;
+    xml_param.wfs = arena.wfs;
+    xml_param.prf = 1/arena.PRI;
+    xml_param.arena = arena;
+    xml_param.arena.adc = [];
+    xml_param.board_map = {};
+
+    [~,xml_param.arena.psc_name] = ct_fileparts(out_xml_fn);
+    xml_param.arena.fn = fullfile(param.basic_tx_chan_equal.arena_base_dir,[xml_param.arena.psc_name '.xml']);
+
+    [doc,xml_param] = write_arena_xml([],xml_param);
+
+    % Create XML document
+    out_str = xmlwrite(doc);
     out_str = ['<!DOCTYPE systemXML>' out_str(find(out_str==10,1):end)];
-    [~,rss_fn_name] = ct_fileparts(out_xml_fn);
-    rss_fn = fullfile(param.rss_base_dir,[rss_fn_name '.xml']);
-    fprintf('\nWriting %s\n', rss_fn);
-    if ~exist(param.rss_base_dir,'dir')
-      mkdir(param.rss_base_dir);
+    arena_fn_dir = fileparts(xml_param.arena.fn);
+    if ~exist(arena_fn_dir,'dir')
+      mkdir(arena_fn_dir);
     end
-    fid = fopen(rss_fn,'w');
+    fprintf('  Writing Arena XML: %s\n', xml_param.arena.fn);
+    fid = fopen(xml_param.arena.fn,'w');
     fwrite(fid,out_str,'char');
     fclose(fid);
+    
+%     [doc,param] = write_arena_xml(doc,param);
+%     xml_doc = write_arena_xml([],'init',arena);
+%     xml_doc = write_arena_xml(xml_doc,'ctu_0013',arena);
+%     xml_doc = write_arena_xml(xml_doc,'dac-ad9129_0014',arena);
+%     xml_doc = write_arena_xml(xml_doc,'dac-ad9129_0014_waveform',arena);
+%     xml_doc = write_arena_xml(xml_doc,'psc_0001',arena);
+%     xml_doc = write_arena_xml(xml_doc,'subsystems',arena);
+%     
+%     out_str = xmlwrite(xml_doc);
+%     out_str = ['<!DOCTYPE systemXML>' out_str(find(out_str==10,1):end)];
+%     [~,rss_fn_name] = ct_fileparts(out_xml_fn);
+%     rss_fn = fullfile(param.rss_base_dir,[rss_fn_name '.xml']);
+%     fprintf('\nWriting %s\n', rss_fn);
+%     if ~exist(param.rss_base_dir,'dir')
+%       mkdir(param.rss_base_dir);
+%     end
+%     fid = fopen(rss_fn,'w');
+%     fwrite(fid,out_str,'char');
+%     fclose(fid);
   end
   
 end

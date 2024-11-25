@@ -1,7 +1,7 @@
 function cmds = left_click(obj,param)
 
 %% Get search range from tool param window
-rbin_range_str = get(obj.panel.max_rbin_rng_tbox,'String');
+rbin_range_str = get(obj.panel.manual_rangeTB,'String');
 try
   % Assumes the value entered is a matlab expression that can be evaluated
   search_range = eval(sprintf('[%s]', rbin_range_str));

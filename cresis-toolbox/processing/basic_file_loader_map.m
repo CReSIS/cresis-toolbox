@@ -1,14 +1,12 @@
 %% Read GPS files in this directory
 
-adc = defaults{1}.records.file.adcs(1);
-board = adc_to_board(param.radar_name,adc);
-adc_folder_name = defaults{1}.adc_folder_name;
-adc_folder_name = regexprep(adc_folder_name,'%02d',sprintf('%02.0f',adc));
-adc_folder_name = regexprep(adc_folder_name,'%d',sprintf('%.0f',adc));
-adc_folder_name = regexprep(adc_folder_name,'%b',sprintf('%.0f',board));
-data_fns = get_filenames(fullfile(base_dir,adc_folder_name),defaults{1}.data_file_prefix,'','.bin');
+adc = param.img(1,2);
+[board,board_idx,profile] = wf_adc_to_board(param,param.img(1,:));
+board_folder_name = param.records.file.board_folder_name;
+board_folder_name = regexprep(board_folder_name,'%b',param.records.file.boards{board_idx});
+data_fns = get_filenames(fullfile(base_dir,board_folder_name),param.records.file.prefix,'','.bin');
 if isempty(data_fns)
-  error('No data files exist in %s\n', fullfile(base_dir,adc_folder_name));
+  error('No data files exist in %s\n', fullfile(base_dir,board_folder_name));
 end
 finfo = fname_info_mcords2(data_fns{1});
   
@@ -115,11 +113,11 @@ for set_idx = 1:length(settings)
   hdr_gps_time = [];
   for match_idx = settings(set_idx).match_idxs(1:end-1)
     try
-      hdr = defaults{1}.header_load_func(data_fns{match_idx},defaults{1}.header_load_params);
+      hdr = param.config.header_load_func(data_fns{match_idx},param.config.header_load_param);
     end
     finfo = fname_info_mcords2(data_fns{match_idx});
     [year,month,day] = datevec(finfo.datenum);
-    hdr_gps_time(end+1) = utc_to_gps(datenum_to_epoch(datenum(year,month,day,0,0,hdr.utc_time_sod))) + defaults{1}.vectors.gps.time_offset;
+    hdr_gps_time(end+1) = utc_to_gps(datenum_to_epoch(datenum(year,month,day,0,0,hdr.utc_time_sod))) + param.records.gps.time_offset;
   end
   hdr_gps_time = utc_to_gps(hdr_gps_time);
   
@@ -138,11 +136,19 @@ end
 fig_number = h_geotiff.h_fig.Number;
 fn = '';
 while isempty(fn)
-  fprintf('\nPress enter when done selecting files in figure %d\n\n', fig_number);
+  fprintf('\nPress any key in the command window (not the figure window!) when done selecting files in figure %d\n\n', fig_number);
   pause;
-  g_basic_file_loader_fns = h_geotiff.get_selection();
-  if ~isempty(g_basic_file_loader_fns)
-    fn = g_basic_file_loader_fns{1};
+  [~,g_basic_file_loader_fns] = h_geotiff.get_selection();
+  % Check each segment (settings) to see if any files are selected
+  for set_idx = 1:length(g_basic_file_loader_fns)
+    if ~isempty(g_basic_file_loader_fns{set_idx})
+      % If any segment has a file selected, then only return files from
+      % that segment. We do not allow files from multiple segments
+      % (settings files) to be selected.
+      g_basic_file_loader_fns = g_basic_file_loader_fns{set_idx};
+      fn = g_basic_file_loader_fns{1};
+      break;
+    end
   end
 end
 

@@ -10,7 +10,20 @@ function read_param_xls_print(param_fn, generic_ws, params, fid)
 %
 % Author: John Paden
 %
-% See also: read_param_xls
+% See also: ct_set_params, master, read_param_xls
+%
+% See also for spreadsheet cell loading:
+%  read_param_xls_boolean.m, read_param_xls_general.m,
+%  read_param_xls_text.m
+%  
+% See also for worksheet loading:
+%  read_param_xls_generic.m, read_param_xls_radar.m: 
+%
+% See also for printing out spreadsheet to stdout:
+%  read_param_xls_print.m, read_param_xls_print_headers.m
+%
+% See also for printing matlab values:
+%  mat2str_generic.m
 
 if ~exist('fid','var')
   fid = 1; % stdout by default
@@ -22,7 +35,7 @@ warning('off','MATLAB:xlsread:Mode');
 
 % Get the headers from the parameter spreadsheet
 try
-  [headers] = read_param_xls_headers(param_fn, generic_ws);
+  [headers] = read_param_xls_print_headers(param_fn, generic_ws);
 catch ME
   warning('Could not read worksheet: %s', ME.getReport);
   return;

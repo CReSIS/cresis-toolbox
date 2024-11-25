@@ -1,5 +1,5 @@
-function m = mean_without_outliers(x, num_stddev, percent, dim)
-% m = mean_without_outliers(x, num_stddev, percent, dim)
+function [m,mask] = mean_without_outliers(x, num_stddev, percent, dim)
+% [m,mask] = mean_without_outliers(x, num_stddev, percent, dim)
 %
 % Finds the mean of x without outliers. Similar to Matlab's trimmean
 %
@@ -30,7 +30,7 @@ function m = mean_without_outliers(x, num_stddev, percent, dim)
 % m = mean_without_outliers(x, 1, 0.2, 2)
 % 
 % x = [-20 1 1 1 1 2 2 2 1000 3 3 3;-20 1 1 1 1 2 2 2 1000 3 3 3].';
-% m = mean_without_outliers(x, 1, 0.2)
+% [m,mask] = mean_without_outliers(x, 1, 0.2)
 %
 % Author: John Paden
 
@@ -68,19 +68,22 @@ if percent ~= 0
   median_x = nanmedian(x,1);
   dist_median = abs(bsxfun(@minus,x,median_x)).^2;
   [~,dist_idxs] = sort(dist_median,1);
-  x = x(dist_idxs);
-  x(end-round(percent*size(x,1))+1 : end, :) = NaN;
+  for remaining_idxs = 1:numel(x)/size(x,1)
+    x(dist_idxs(:,remaining_idxs) > round((1-percent)*size(x,1)),remaining_idxs) = NaN;
+  end
 end
 
 % Remove standard deviation outliers
 median_x = nanmedian(x,1);
 x_zeromean = abs(bsxfun(@minus,x,median_x)).^2;
-var_x = mean(x_zeromean,1);
+var_x = nanmean(x_zeromean,1);
 
 x(bsxfun(@gt, x_zeromean, num_stddev^2 * var_x)) = NaN;
 
 m = nanmean(x,1);
+mask = ~isnan(x);
 
 % Permute matrix back to original form
 m = permute(m, permute_idxs);
+mask = permute(mask, permute_idxs);
 

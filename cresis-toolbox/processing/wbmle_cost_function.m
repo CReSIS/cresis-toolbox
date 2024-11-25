@@ -43,7 +43,7 @@ if param.proj_mtx_update
   % Setup steering vectors for the fixed
   theta_eval = [param.theta_fixed(:).',theta];
   theta_eval = theta_eval(:).';   % make theta have the right dimensions
-  k     = 4*pi*param.fc/c;
+  k     = 4*pi*param.fc*param.sv_dielectric/c;
   ky    = k*sin(theta_eval).';
   kz    = k*cos(theta_eval).';
   SVs   = (1/sqrt(length(param.y_pc)))*exp(1i*(param.y_pc*ky - param.z_pc*kz));
@@ -57,7 +57,7 @@ if param.proj_mtx_update
 else
   DCM = param.Rxx;
   Nk = param.nb_filter_banks;
-  k = 4*pi*(param.fc + param.fs*[0:floor((Nk-1)/2), -floor(Nk/2):-1]/Nk)/c;
+  k = 4*pi*(param.fc + param.fs*[0:floor((Nk-1)/2), -floor(Nk/2):-1]/Nk)/c*param.sv_dielectric;
   
   L = 0;
   for k_idx = 1:Nk

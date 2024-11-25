@@ -38,8 +38,8 @@ frames = frames_load(param);
 tmp_param = param;
 tmp_param.cmd.frms = max(1,param.load.frm-1) : min(length(frames.frame_idxs),param.load.frm+1);
 
-if strcmpi(param.array.surf_layer.source, 'surfData')
-  surf_dir = ct_filename_out(param,'','surfData_sar');
+if strcmpi(param.array.surf_layer.source, 'surf_sar')
+  surf_dir = ct_filename_out(param,'','surf_sar');
   fn_name = sprintf('Data_%s_%03.0f.mat',param.day_seg,param.load.frm);
   fn = fullfile(surf_dir,fn_name);
   surf_layer = tomo.surfdata(fn,param);
@@ -183,7 +183,7 @@ for img = 1:length(param.array.imgs)
               if dTsys ~= 0
                 % Positive dTsys means Tsys > Tsys_old and we should reduce the
                 % time delay to all targets by dTsys.
-                sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name)),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)));
+                sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name),[],1),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)),[],1);
               end
               
               % Concatenate data (resample in fast-time if needed since
@@ -257,6 +257,7 @@ for img = 1:length(param.array.imgs)
               .* exp(1i*( ...
               param.radar.wfs(wf).chan_equal_deg(param.radar.wfs(wf).rx_paths(adc)) ...
               - sar_data.param_sar.radar.wfs(wf).chan_equal_deg(param.radar.wfs(wf).rx_paths(adc)) )/180*pi);
+            
           end
           
           % Correct any changes in Tsys
@@ -266,7 +267,7 @@ for img = 1:length(param.array.imgs)
           if dTsys ~= 0
             % Positive dTsys means Tsys > Tsys_old and we should reduce the
             % time delay to all targets by dTsys.
-            sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name)),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)));
+            sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name),[],1),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)),[],1);
           end
           
           % Concatenate data (handle situation of time axis of previous
@@ -276,10 +277,8 @@ for img = 1:length(param.array.imgs)
           % Load next chunk data
           % ===============================================================
           
-          % If on the first chunk of the frame, then look at the previous
-          % frame. Special cases (like frm == 1 and empty
-          % param.load.prev_frm_num_chunks are handled by letting the file
-          % search fail).
+          % If on the last chunk of the frame, then look at the next
+          % frame. Special case when frm > number-of-frames checked.
           if param.load.chunk_idx == param.load.num_chunks
             load_frm = param.load.frm+1;
             load_chunk_idx = 1;
@@ -298,7 +297,7 @@ for img = 1:length(param.array.imgs)
               sprintf('wf_%02.0f_adc_%02.0f_chk_%03.0f', wf, adc, load_chunk_idx),'','.mat');
           end
           
-          if ~next_chunk_failed_flag && ~isempty(sar_type_fn)
+          if ~next_chunk_failed_flag && ~isempty(sar_type_fn) && load_frm <= length(frames.frame_idxs)
             % If file exists, then load it
             sar_data = load(sar_type_fn{1});
             
@@ -333,7 +332,7 @@ for img = 1:length(param.array.imgs)
               if dTsys ~= 0
                 % Positive dTsys means Tsys > Tsys_old and we should reduce the
                 % time delay to all targets by dTsys.
-                sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name)),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)));
+                sar_data.(data_field_name) = ifft(bsxfun(@times,fft(sar_data.(data_field_name),[],1),exp(1i*2*pi*sar_data.wfs(wf).freq*dTsys)),[],1);
               end
               
               % Concatenate data (resample in fast-time if needed since
@@ -360,11 +359,11 @@ for img = 1:length(param.array.imgs)
   
   if prev_chunk_failed_flag
     % Remove prev chunk data
+    lat = lat(num_prev_chunk_rlines+1:end);
+    lon = lon(num_prev_chunk_rlines+1:end);
+    elev = elev(num_prev_chunk_rlines+1:end);
     for ml_idx = 1:length(ml_list)
       data{ml_idx} = data{ml_idx}(:,num_prev_chunk_rlines+1:end,:,:,:);
-      lat = lat(num_prev_chunk_rlines+1:end);
-      lon = lon(num_prev_chunk_rlines+1:end);
-      elev = elev(num_prev_chunk_rlines+1:end);
       for wf_adc = 1:size(wf_adc_list,1)
         fcs{ml_idx}{wf_adc}.origin = fcs{ml_idx}{wf_adc}.origin(:,num_prev_chunk_rlines+1:end);
         fcs{ml_idx}{wf_adc}.x = fcs{ml_idx}{wf_adc}.x(:,num_prev_chunk_rlines+1:end);
@@ -384,11 +383,11 @@ for img = 1:length(param.array.imgs)
   
   if next_chunk_failed_flag
     % Remove next chunk data
+    lat = lat(1:end-num_next_chunk_rlines);
+    lon = lon(1:end-num_next_chunk_rlines);
+    elev = elev(1:end-num_next_chunk_rlines);
     for ml_idx = 1:length(ml_list)
       data{ml_idx} = data{ml_idx}(:,1:end-num_next_chunk_rlines,:,:,:);
-      lat = lat(1:end-num_next_chunk_rlines);
-      lon = lon(1:end-num_next_chunk_rlines);
-      elev = elev(1:end-num_next_chunk_rlines);
       for wf_adc = 1:size(wf_adc_list,1)
         fcs{ml_idx}{wf_adc}.origin = fcs{ml_idx}{wf_adc}.origin(:,1:end-num_next_chunk_rlines);
         fcs{ml_idx}{wf_adc}.x = fcs{ml_idx}{wf_adc}.x(:,1:end-num_next_chunk_rlines);
@@ -408,10 +407,10 @@ for img = 1:length(param.array.imgs)
   
   %% Process: Fast-time oversampling
   % =======================================================================
-  if isfield(param.array,'ft_over_sample') && ~isempty(param.array.ft_over_sample)
+  if param.array.ft_over_sample ~= 1
     % param.array.ft_over_sample should be a positive integer
     for ml_idx = 1:length(data)
-      data{ml_idx} = interpft(data{ml_idx},size(data{ml_idx},1) * param.array.ft_over_sample);
+      data{ml_idx} = interpft_memeff(data{ml_idx},size(data{ml_idx},1) * param.array.ft_over_sample);
     end
     for wf = 1:length(sar_data.wfs)
       sar_data.wfs(wf).fs = sar_data.wfs(wf).fs * param.array.ft_over_sample;
@@ -422,11 +421,12 @@ for img = 1:length(param.array.imgs)
       sar_data.wfs(wf).freq = sar_data.wfs(wf).fc ...
         + sar_data.wfs(wf).df * ifftshift( -floor(sar_data.wfs(wf).Nt/2) : floor((sar_data.wfs(wf).Nt-1)/2) ).';
     end
+    Time = sar_data.wfs(wf_base).time;
   end
   
   param.array_proc.chan_equal = chan_equal;
   param.array_proc.fcs = fcs;
-  
+ 
   %% Process: WBDCM Setup
   % =======================================================================
   % Setup fields for wideband space-time doa estimator passed to
@@ -484,7 +484,7 @@ for img = 1:length(param.array.imgs)
     Hwin = sar_data.param_sar.csarp.ft_wind(length(sar_data.wfs(wf).time));
     % Convert to time-domain and over-sample by Mt
     %  - Take real to remove rounding errors that result in imag part
-    Hwin = interpft(real(ifft(ifftshift(Hwin).^2)), Mt*length(Hwin));
+    Hwin = interpft_memeff(real(ifft(ifftshift(Hwin).^2)), Mt*length(Hwin));
     % Store the impulse response and corresponding time axis for
     % passing to array_proc
     %  - Ensure we grab enough samples of the impulse response so that
@@ -518,18 +518,18 @@ for img = 1:length(param.array.imgs)
       param.array_proc.surface = surf_layer.twtt*ones(size(param.array_proc.lines));
     else
       
-      if strcmpi(param.array.surf_layer.source, 'surfData')
+      if strcmpi(param.array.surf_layer.source, 'surf_sar')
         % If surf_layer source is surfData (twtt from DEM), just grab values
         % for the chunk
-        surf_index = surf_layer.get_index('top twtt');
-        icemask_index = surf_layer.get_index('ice_mask');
-        theta_frm     = repmat(surf_layer.theta,1,numel(surf_layer.gps_time));
+        surf_index = surf_layer.get_index({'top twtt'});
+        icemask_index = surf_layer.get_index({'ice_mask'});
+        theta_frm     = repmat(surf_layer.x(:,1),1,numel(surf_layer.gps_time));
         gps_frm       = repmat(surf_layer.gps_time,numel(surf_layer.theta),1);
-        theta_chunk   = repmat(surf_layer.theta,1,numel(fcs{1}{1}.gps_time));
+        theta_chunk   = repmat(surf_layer.x(:,1),1,numel(fcs{1}{1}.gps_time));
         gps_chunk     = repmat(fcs{1}{1}.gps_time,numel(surf_layer.theta),1);
         param.array_proc.surface = interp_finite(interp2(gps_frm, theta_frm,surf_layer.surf(surf_index).y,gps_chunk,theta_chunk));
         param.array_proc.ice_mask = ...
-        interp_finite(interp2(gps_frm,theta_frm,surf_layer.surf(icemask_index).y,gps_chunk,theta_chunk,'nearest'));
+          interp_finite(interp2(gps_frm,theta_frm,surf_layer.surf(icemask_index).y,gps_chunk,theta_chunk,'nearest'));
         param.array_proc.surface_theta = surf_layer.theta;
       else
         % source = 'layerData'
@@ -622,19 +622,19 @@ for img = 1:length(param.array.imgs)
     elseif length(surf_layer.gps_time) == 1;
       % Handle special case 2: gps time is length 1, repeat twtt over rlines
       param.array_proc.surface = surf_layer.twtt*ones(size(rlines));
-    elseif strcmpi(param.array.surf_layer.source,'surfData')
+    elseif strcmpi(param.array.surf_layer.source,'surf_sar')
       % If surf_layer source is surfData (twtt from DEM), just grab values
       % for the chunk
-      surf_index = surf_layer.get_index('top twtt');
-      icemask_index = surf_layer.get_index('ice_mask');
-      theta_frm     = repmat(surf_layer.theta,1,numel(surf_layer.gps_time));
-      gps_frm       = repmat(surf_layer.gps_time,numel(surf_layer.theta),1);
-      theta_chunk   = repmat(surf_layer.theta,1,numel(fcs{1}{1}.gps_time));
-      gps_chunk     = repmat(fcs{1}{1}.gps_time,numel(surf_layer.theta),1);
-      param.array_proc.surface = interp_finite(interp2(gps_frm, theta_frm,surf_layer.surf(surf_index).y,gps_chunk,theta_chunk));
+      surf_index = surf_layer.get_index({'top twtt'});
+      icemask_index = surf_layer.get_index({'ice mask'});
+      param.array_proc.surface_theta = surf_layer.surf(surf_index).x(:,1);
+      theta_frm     = repmat(param.array_proc.surface_theta,1,numel(surf_layer.gps_time));
+      gps_frm       = repmat(surf_layer.gps_time,length(param.array_proc.surface_theta),1);
+      theta_chunk   = repmat(param.array_proc.surface_theta,1,numel(fcs{1}{1}.gps_time));
+      gps_chunk     = repmat(fcs{1}{1}.gps_time,length(param.array_proc.surface_theta),1);
+      param.array_proc.surface = interp_finite(interp2(gps_frm, theta_frm,surf_layer.surf(surf_index).y,gps_chunk,theta_chunk),nan);
       param.array_proc.ice_mask = ...
-      interp_finite(interp2(gps_frm,theta_frm,surf_layer.surf(icemask_index).y,gps_chunk,theta_chunk,'nearest'));
-      param.array_proc.surface_theta = surf_layer.theta;
+        interp_finite(interp2(gps_frm,theta_frm,surf_layer.surf(icemask_index).y,gps_chunk,theta_chunk,'nearest'),nan);
     else
       % Path for layer
       param.array_proc.surface = interp_finite(interp1(surf_layer.gps_time, ...
@@ -644,6 +644,82 @@ for img = 1:length(param.array.imgs)
     
     %     end
     
+    % Load Look Up Table
+    if strcmpi(param.array.sv_model,'lookup_table')
+      % To be updated.  Currently LUT is stored by day_seg.  Intent is to have
+      % one LUT for the season in the analysis folder.  Once estimate_sv_lut
+      % has been updated, delete first conditional and only use the statement
+      % after the else below.
+      
+      % lut_fn is either passed in as a fullfile by the user or built from
+      % the default paths in the input checking of array proc.  
+      % If the user doesn't specify the fullfile, they must specify 
+      % at a minimum the following:
+      % param.array.lut_type: choices are either 'training' or 'process'
+      % param.array.lut_dayseg:  if user specifies the process lut type,
+      %                           lut_dayseg can be blank.
+      % param.array.lut_path: defaults to the CSARP_array_manifold folder
+      % param.array.sv_model: 'lookup_table'
+      % param.array.lut_method: choices are 'evd' for principal
+      % eigenvector, 'mmse' for a weiner filter type, and 'ave' for
+      % coherent averaged steering vector.
+      lut_fn = param.array.lut_fn;
+      
+      load(lut_fn,'sv','doa','param_array_manifold');
+      
+      if isfield(param.array,'lut_method') & ~isempty(param.array.lut_method)
+        if length(sv) > 1
+          sv_idx = find(strcmpi({sv.method},param.array.lut_method)==true);
+          sv = sv(sv_idx).manifold;
+        end
+      end
+      
+      % Check dimensionality
+      Nsv = length(doa);
+      N1 = size(sv,1);
+      if N1 < Nsv
+        sv = transpose(sv);
+      end
+      
+      lut_sv = nan(length(doa),size(param.array.imgs{img}{1}(:,1),1));
+      
+      wf = param.array.imgs{img}{1}(1,1);
+      for wf_adc = 1:size(param.array.imgs{img}{1}(:,1),1)
+        wf = param.array.imgs{img}{1}(wf_adc,1);
+        adc = param.array.imgs{img}{1}(wf_adc,2);
+        rx = param.radar.wfs(wf).rx_paths(adc);
+        rx_lut_index = find(param_array_manifold.rx_list == rx);
+        if ~isempty(rx_lut_index)
+          lut_sv(:,wf_adc) = sv(:,rx_lut_index);
+        end
+      end
+      param.array_proc.lut.sv = lut_sv;
+      param.array_proc.lut.doa = doa;
+      clear sv doa
+      
+%       if strcmpi(param.array.lut_type,'process')
+%         lut_dir = ct_fileparts(ct_filename_out(param,param.array.lut_path));
+%       
+%       % Does not support subband luts
+%       if regexp(param.array.sv_lut_path,'analysis')
+%         lut_fn = fullfile(ct_filename_out(param,param.array.sv_lut_path,[],1),'lut.mat');
+%       elseif isfield(param.array, 'lut_day_seg') && ~isempty(param.array.lut_day_seg)
+%         lut_dir = fullfile(ct_filename_out(param,param.array.sv_lut_path,[],1),param.array.lut_day_seg);
+%         lut_fn = fullfile(lut_dir, sprintf('lut_%s.mat',param.array.lut_day_seg));
+%       else
+%         lut_dir = ct_filename_out(param,param.array.sv_lut_path);
+%         lut_fn = fullfile(lut_dir, sprintf('lut_%s.mat',param.day_seg));
+%       end
+      %       if strcmpi(param.array.sv_lut_path,'estimate_sv_lut')
+      %         lut_dir = ct_filename_out(param,param.array.sv_lut_path);
+      %         lut_fn = fullfile(lut_dir, sprintf('lut_%s.mat',param.day_seg));
+      %       else
+      %         lut_fn = fullfile(ct_filename_out(param,param.array.sv_lut_path,[],1),'lut.mat');
+      %       end
+ 
+    else
+      param.array_proc.lut = [];
+    end
     % Array Processing Function Call
     [param,dout] = array_proc(param,data);
   end
@@ -692,17 +768,18 @@ for img = 1:length(param.array.imgs)
   else
     file_version = '1';
   end
+  file_type = 'array_tmp';
   if ~param.array.tomo_en
     % Do not save tomographic 3D-image
     ct_save('-v7.3',array_fn,'Data','Latitude','Longitude','Elevation','GPS_time', ...
       'Surface','Bottom','Time','param_array','param_records', ...
-      'param_sar', 'Roll', 'Pitch', 'Heading', 'file_version');
+      'param_sar', 'Roll', 'Pitch', 'Heading', 'file_type', 'file_version');
   else
     % Save tomographic 3D-image
     Tomo = dout.tomo;
     ct_save('-v7.3',array_fn,'Tomo','Data','Latitude','Longitude','Elevation','GPS_time', ...
       'Surface','Bottom','Time','param_array','param_records', ...
-      'param_sar', 'Roll', 'Pitch', 'Heading', 'file_version');
+      'param_sar', 'Roll', 'Pitch', 'Heading', 'file_type', 'file_version');
   end
   
 end

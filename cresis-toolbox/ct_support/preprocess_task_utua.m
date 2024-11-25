@@ -289,7 +289,7 @@ for set_idx = 1:length(settings)
       day_wrap_offset{board_idx} = day_wrap_offset{board_idx}(mask);
     end
   end
-  [segs,stats] = create_segments(counters,file_idxs,day_wrap_offset,param.config.max_time_gap);
+  [segs,stats] = preprocess_create_segments(counters,file_idxs,day_wrap_offset,param.config.max_time_gap);
   
   if 1
     % Debug: Test Code

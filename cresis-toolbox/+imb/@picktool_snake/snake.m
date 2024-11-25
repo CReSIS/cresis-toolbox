@@ -5,7 +5,7 @@ function vals = snake(obj,image_c,image_x,image_y,x_old,y_old,x_new)
 % Author: John Paden
 
 %% Get search range from tool param window
-rbin_range_str = get(obj.top_panel.snake_range_TE,'String');
+rbin_range_str = get(obj.top_panel.snake_rangeTB,'String');
 try
   % Assumes the value entered is a matlab expression that can be evaluated
   search_range = eval(sprintf('[%s]', rbin_range_str));
@@ -52,5 +52,3 @@ vals = interp1(1:length(image_y),...
  image_y,layer,'linear','extrap');
 
 vals = interp1(image_x,vals,x_new,'linear');
-
-return;

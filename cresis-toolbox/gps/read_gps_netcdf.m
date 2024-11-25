@@ -73,7 +73,7 @@ function gps = read_gps_netcdf(in_fn, param)
 %
 % Author: John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 %% Check Inputs
 if ~isfield(param,'scale') || isempty(param.scale)

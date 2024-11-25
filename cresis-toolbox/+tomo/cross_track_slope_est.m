@@ -36,7 +36,7 @@ elseif 0
   last_good_bin = 450;
   min_valid_value = 100;
   
-elseif 1
+elseif 0
   if ispc
   else
     % Summit
@@ -47,6 +47,17 @@ elseif 1
     
     out_fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/summit_2012_2014_allwf.mat';
     last_good_bin = 1036;
+    min_valid_value = 70;
+  end
+  
+elseif 1
+  if ispc
+  else
+    % EGIG
+    fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/egig_2011_2012_2014_2018_allwf_2014.mat';
+    
+    out_fn = '/cresis/snfs1/dataproducts/ct_data/rds/2014_Greenland_P3/CSARP_multipass/egig_2011_2012_2014_2018_allwf.mat';
+    last_good_bin = 970;
     min_valid_value = 70;
   end
 end
@@ -97,7 +108,8 @@ link_figures([5001 5002]);
 slope = nan_fir_dec(slope,ones(1,21)/21,1);
 slope = nan_fir_dec(slope.',ones(1,11)/11,1).';
 slope = interp_finite(slope);
-slope = medfilt2(slope,[31 31]);
+slope = medfilt2(slope,[21 21]);
+slope = echo_filt(slope,[31 31]);
 
 % Convert the results to direction of arrival
 slope = interp1(1:length(Tomo.theta),Tomo.theta,slope);

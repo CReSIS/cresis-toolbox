@@ -49,7 +49,7 @@ dt    = param.dt;
 h     = param.h;
 uy    = sin(theta).'; % make directional sines and cosines into row vecs
 uz    = cos(theta).';
-tau   = (2/c)*(param.y_pc*uy - param.z_pc*uz);
+tau   = (2/c*param.sv_dielectric)*(param.y_pc*uy - param.z_pc*uz);
 J     = wb_compute_cost(tau, param.DCM, param.fc, param.fs, h, t0,dt);
 J     = 10*log10(abs(J));
 

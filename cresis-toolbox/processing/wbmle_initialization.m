@@ -42,7 +42,7 @@ function out = wbmle_initialization(DCM,param)
 physical_constants
 
 Nk = param.nb_filter_banks;
-k = 4*pi*(param.fc + param.fs*[0:floor((Nk-1)/2), -floor(Nk/2):-1]/Nk)/c;
+k = 4*pi*(param.fc + param.fs*[0:floor((Nk-1)/2), -floor(Nk/2):-1]/Nk)/c*param.sv_dielectric;
 
 if isfield(param,'search_type') && strcmpi(param.search_type,'grid')
   %% Perform N-dimensional grid search

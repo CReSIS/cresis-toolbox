@@ -380,6 +380,7 @@ hdr.counter = hdr.counter(1:rline_out);
 hdr.file_version = hdr.file_version(1:rline_out);
 hdr.num_waveforms = hdr.num_waveforms(1:rline_out);
 hdr.num_adc = hdr.num_adc(1:rline_out);
+hdr.complex_flag = hdr.complex_flag(1:rline_out);
 hdr.nyquist_zone = hdr.nyquist_zone(1:rline_out);
 hdr.bit_shifts = hdr.bit_shifts(1:rline_out);
 hdr.start_idx = hdr.start_idx(1:rline_out);

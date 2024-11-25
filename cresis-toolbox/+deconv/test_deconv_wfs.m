@@ -129,7 +129,7 @@ for closest_idx = closest_idx_list
   
 end
 % blue green red
-load(ct_filename_support(param,'','frames'));
+frames = frames_load(param);
 frm = find(mean(param.load.recs) >= frames.frame_idxs,1,'last');
 
 figure(7); clf;

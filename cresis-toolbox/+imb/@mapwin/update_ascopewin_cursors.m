@@ -17,6 +17,9 @@ for idx = 1:length(obj.map_ascope.ascope.gps_time)
       if obj.map.source == 1
         [x_red(end+1),y_red(end+1)] ...
           = google_map.latlon_to_world(obj.map_ascope.ascope.lat(idx), obj.map_ascope.ascope.lon(idx)); y = 256-y;
+      elseif obj.map.source == 3
+        x_red(end+1) = obj.map_ascope.ascope.lon(idx);
+        y_red(end+1) = obj.map_ascope.ascope.lat(idx);
       else
         [x_red(end+1),y_red(end+1)] ...
           = projfwd(obj.map.proj, obj.map_ascope.ascope.lat(idx), obj.map_ascope.ascope.lon(idx));

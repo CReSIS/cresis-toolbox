@@ -194,7 +194,7 @@ elseif param.elev_comp == 2
   if length(param.er_depth) > 1
     TWtime = genPropProfileFromPerm(param.er_depth,param.er_ice,1);
     profile_idxs = depth > 0 & depth < param.er_depth(end);
-    depth_time(profile_idxs) = interp1(param.er_depth, [0; TWtime], depth(profile_idxs));
+    depth_time(profile_idxs) = interp1(param.er_depth, TWtime, depth(profile_idxs));
   else
     TWtime = 0;
   end
@@ -641,8 +641,8 @@ if strcmpi(param.axis_type,'bars')
     end
   end
 else
-  xtl = create_standard_x_labels(mdata.Latitude,mdata.Longitude,mdata.Elevation,param.num_x_tics);
-  add_x_labels(ah_echo,xtl,{'dist','lat','lon'});
+  xtl = xlabel_create(mdata.Latitude,mdata.Longitude,mdata.Elevation,param.num_x_tics);
+  xlabel_add(ah_echo,xtl,{'dist','lat','lon'});
   set(ah_echo_time,'Units','normalized');
   set(ah_echo,'Units','normalized');
   set(ah_echo_time,'Position',get(ah_echo,'Position'));

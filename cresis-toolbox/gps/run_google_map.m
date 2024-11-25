@@ -3,7 +3,8 @@ try
   delete(gGoogle);
 end
 
-gGoogle = google_map();
+gGoogle = google_map('AIzaSyCNexiP6WcIda8ZEa2MnwznWrGotDoLu0w');
+% global gRadar; gGoogle = google_map(gRadar.ops.google_map_api_key);
 
 % [A,x_axis,y_axis] = gGoogle.request_google_map(10,23,10,23);
 

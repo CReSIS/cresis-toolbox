@@ -12,7 +12,7 @@
 % Load the parameter spreadsheet 
 params = read_param_xls(ct_filename_param('rds_param_2019_Antarctica_Ground.xls'));
 params = ct_set_params(params,'cmd.generic',0);
-params = ct_set_params(params,'cmd.generic',1,'day_seg','20191230_01');
+params = ct_set_params(params,'cmd.generic',1,'day_seg','20200107_01');
 params = ct_set_params(params,'cmd.frms',[1]);
 
 % Set the operation to run (just choose one operation)
@@ -31,10 +31,10 @@ if strcmp(runOpsCopyLayers_operation,'copy_layer')
   copy_param.layer_source.existence_check = false;
   copy_param.layer_dest.existence_check = false;
 
-  % Set the layer name for the source (e.g. 'surface', 'bottom')
+  % Set the layer name(s) for the source (e.g. 'surface', 'bottom', {'surface','bottom'})
   copy_param.layer_source.name = 'surface';
   
-  % Set the layer name for the destination (e.g. 'surface', 'bottom')
+  % Set the layer name(s) for the destination (e.g. 'surface', 'bottom', {'surface','bottom'})
   copy_param.layer_dest.name = 'surface';
 
   % Set the source (choose one)
@@ -55,13 +55,20 @@ if strcmp(runOpsCopyLayers_operation,'copy_layer')
   elseif 1
     copy_param.layer_source.source = 'layerdata';
     copy_param.layer_source.layerdata_source = 'layer';
+  elseif 0
+    copy_param.layer_source.source = 'custom';
+    copy_param.layer_source.gps_time = {[0 1e20]};
+    copy_param.layer_source.twtt = {[1e-6 1e-6]};
+    copy_param.layer_source.type = {[2 2]};
+    copy_param.layer_source.quality = {[1 1]};
   else
     copy_param.layer_source.source = 'lidar';
     copy_param.layer_source.lidar_source = 'awi';
+    copy_param.layer_source.lever_arm_en = true;
   end
 
   if 1
-    copy_param.copy_method = 'overwrite';
+    copy_param.copy_method = 'overwrite'; % default
   elseif 0
     copy_param.copy_method = 'fillgaps';
   else
@@ -84,7 +91,7 @@ if strcmp(runOpsCopyLayers_operation,'copy_layer')
   if twtt_offset ~= 0 || gps_time_offset ~= 0
     warning('You have set a nonzero twtt_offset(%.12g) or gps_time_offset(%.3g). Normally these are both zero. Please verify that this is what you want to do before running "dbcont" to continue.\n', twtt_offset, gps_time_offset);
     keyboard
-    copy_param.eval.cmd = sprintf('source = interp1(gps_time+%.3g,source + %.12g,gps_time);',gps_time_offset,twtt_offset);
+    copy_param.eval.cmd = sprintf('s = interp1(time+%.3g,s + %.12g,time);',gps_time_offset,twtt_offset);
   end
   
   % Set overwrite quality level (e.g. []: do not overwrite, 1: good, 2: medium, 3: bad)
@@ -115,6 +122,9 @@ if strcmp(runOpsCopyLayers_operation,'copy_layer')
     copy_param.layer_dest.source = 'layerdata';
     copy_param.layer_dest.layerdata_source = 'layer';
   end
+
+  % Usually the group name is standard
+  copy_param.layer_dest.group_name = 'standard';
   
 end
 %% Copy surface from mcords records to snow layerdata  
@@ -154,15 +164,36 @@ end
 %% Automated Section
 % =====================================================================
 
-%% Load each of the day segments
 global gRadar;
+
+% Input checking
+if exist('param_override','var')
+  param_override = merge_structs(gRadar,param_override);
+else
+  param_override = gRadar;
+end
+
+%% Copy layers for each of the enabled segments
+failed_segments = [];
 for param_idx = 1:length(params)
   param = params(param_idx);
   if ~isfield(param.cmd,'generic') || iscell(param.cmd.generic) || ischar(param.cmd.generic) || ~param.cmd.generic
     continue;
   end
-  param = merge_structs(param,gRadar);
-  fprintf('opsCopyLayers %s (%s)\n', param.day_seg, datestr(now));
-  opsCopyLayers(param,copy_param);
+  param = merge_structs(param,param_override);
+  fprintf('opsCopyLayers %s from %s:%s to %s:%s (%s)\n', param.day_seg, copy_param.layer_source.source, copy_param.layer_source.name, copy_param.layer_dest.source, copy_param.layer_dest.name, datestr(now));
+  try
+    opsCopyLayers(param,copy_param);
+  catch ME
+    failed_segments(end+1).param_idx = param_idx;
+    failed_segments(end).report = ME.getReport;
+    failed_segments(end).message = ME.message;
+    %keyboard
+  end
   fprintf('  Complete (%s)\n', datestr(now));
+end
+
+for failed_idx = 1:length(failed_segments)
+  fprintf('%s: %s\n', params(failed_segments(failed_idx).param_idx).day_seg, ...
+    failed_segments(failed_idx).message);
 end

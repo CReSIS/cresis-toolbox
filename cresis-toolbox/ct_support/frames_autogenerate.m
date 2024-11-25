@@ -54,7 +54,7 @@ if ~exist(records_fn,'file')
   return;
 end
 
-records = load(records_fn);
+records = records_load(param);
 frames = [];
 
 %% Mode 2: fixed along-track spacing

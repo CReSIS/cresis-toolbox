@@ -74,7 +74,7 @@ function gps = read_gps_applanix(applanix_fn, param)
 % 
 % Author: John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 if ~isfield(param,'roll_byte_offset') || isempty(param.roll_byte_offset)
   param.roll_byte_offset = 56;

@@ -4,7 +4,7 @@ function H = tukeywin(N,R)
 % Replacement for Matlab's tukeywin to reduce dependence on signal
 % processing toolbox.
 
-if nargin < 2 || isempty(R),
+if nargin < 2 || isempty(R)
   R = 0.5;
 end
 

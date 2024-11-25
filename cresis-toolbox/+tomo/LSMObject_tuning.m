@@ -58,6 +58,7 @@ classdef LSMObject_tuning <handle
       out.alpha = this.lsmArgs.alpha;
       out.mu = this.lsmArgs.mu;
       out.innerIter = this.lsmArgs.innerIter;
+      out.storeIter = this.lsmArgs.storeIter;
       out.outerIter = this.lsmArgs.outerIter;
       out.timestep = this.lsmArgs.timestep;
       out.narrowBand = this.lsmArgs.narrowBand;
@@ -77,7 +78,8 @@ classdef LSMObject_tuning <handle
     end
     
     function showContours(this, k,s)
-      [img, ~, ftype]=readImage(this.imds{k});
+      %[img, ~, ftype]=readImage(this.imds{k});
+      img = double(this.imds{k});
       ce=this.contours{k,s}; %returns the contours for image k
       showImage(img, ftype)  %show the image
       hold on
@@ -88,39 +90,57 @@ classdef LSMObject_tuning <handle
     end
     
     function [fname,ftype]=disp(this,k)
-      [fname,ftype]=getFileName(this.imds{k});
-      this.showContours(k,this.lastContour);
+      if isfield(this,'imds')
+        [fname,ftype]=getFileName(this.imds{k});
+      end
+      if isfield(this,'lastContour')
+        this.showContours(k,this.lastContour);
+      end
     end
     
     function [flag, top, bot, matrix_x, matrix_y] = runLSM(this)
-
-      h = figure('Visible', 'off');
-      flag = ones(1,16);
+      
+      flag = ones(1,length(this.lsmArgs.storeIter));
       
       % Read the image
-      [img_orig,~,~] = readImage(this.imds{1});
+      %[img_orig,~,~] = readImage(this.imds{1});
+      img_orig = double(this.imds{1});
       img = imresize(img_orig, this.resizeRate);
       
-      matrix_x = ones(2, size(img_orig, 2), 16);
-      matrix_y = ones(2, size(img_orig, 2), 16);
+      matrix_x = ones(2, size(img_orig, 2), length(this.lsmArgs.storeIter));
+      matrix_y = ones(2, size(img_orig, 2), length(this.lsmArgs.storeIter));
       g=indicateEdge(img);
       this.phi=initializeLSM(img, this.initiArgs);
       this.contours{1,1}= getLSF(this.phi, 1/this.resizeRate);
       % LSM
-      ctr = 1;
+      last_fprintf_time = -inf;
       for n=1:this.lsmArgs.outerIter
+        if now > last_fprintf_time+30/86400
+          fprintf('  Iteration %.0f of %.0f (%s)\n', n, this.lsmArgs.outerIter, datestr(now));
+          last_fprintf_time = now;
+        end
+        
         this.phi=lsmReg(this.phi, g, this.lsmArgs);
         
         m=this.lsmArgs.innerIter*n;
         if rem(m,10)==0
           this.contours{1,m/10+1}= getLSF(this.phi, 1/this.resizeRate);
         end
-
         
-        if rem(n, 25) == 0
-          c = contour(this.phi, [0,0], 'r');
+        match_idx = find(n==this.lsmArgs.storeIter);
+        if any(match_idx)
+          c = contourc(this.phi, [0,0]);
           s = tomo.contourdata(c);
+          % Ensure proper order of layers
+          if 0
+            % Debug plot to show contours
+            figure;
+            c = contour(this.phi, [0,0], 'r');
+          end
           try
+            if sum(s(1).ydata) > sum(s(2).ydata)
+              s = s([2 1]);
+            end
             top.x = (1 / this.resizeRate) * imresize(s(1).xdata, [size(img_orig, 2) 1]);
             top.y = (1 / this.resizeRate) * imresize(s(1).ydata, [size(img_orig, 2) 1]);
             bot.x = (1 / this.resizeRate) * imresize(s(2).xdata, [size(img_orig, 2) 1]);
@@ -135,24 +155,23 @@ classdef LSMObject_tuning <handle
               keyboard
             end
           end
-          matrix_x(1, :, ctr)  = top.x';
-          matrix_x(2, :, ctr)  = bot.x';
-          matrix_y(1, :, ctr)  = top.y';
-          matrix_y(2, :, ctr)  = bot.y';
+          matrix_x(1, :, match_idx)  = top.x';
+          matrix_x(2, :, match_idx)  = bot.x';
+          matrix_y(1, :, match_idx)  = top.y';
+          matrix_y(2, :, match_idx)  = bot.y';
           
           if any(any(isnan(this.phi)))
             flag(ctr) = 0;
-            matrix_x(1, :, ctr)  = '';
-            matrix_x(2, :, ctr)  = '';
-            matrix_y(1, :, ctr)  = '';
-            matrix_y(2, :, ctr)  = '';
+            matrix_x(1, :, match_idx)  = '';
+            matrix_x(2, :, match_idx)  = '';
+            matrix_y(1, :, match_idx)  = '';
+            matrix_y(2, :, match_idx)  = '';
           end
-          ctr = ctr + 1;
-% Use below code to get echogram images with different number of iterations (n)
-%           if(n==25||n==100||n==200||n==300||n==350)
-%              figure;imagesc(img_orig);colormap(1-gray(256));hold on; plot(top.x,top.y);plot(bot.x,bot.y);
-%            end
-        end  
+          % Use below code to get echogram images with different number of iterations (n)
+          %           if(n==25||n==100||n==200||n==300||n==350)
+          %              figure;imagesc(img_orig);colormap(1-gray(256));hold on; plot(top.x,top.y);plot(bot.x,bot.y);
+          %            end
+        end
       end
     end
   end
@@ -222,6 +241,7 @@ defaultAlpah = -3;
 defaultMu = 0.1;
 defaultInnerIter = 2;
 defaultOuterIter = 400;
+defaultStoreIter = defaultOuterIter;
 defaultTimestep = 2;
 defaultViewSnaps = 100;
 defaultNarrowBand = false;
@@ -231,6 +251,7 @@ p.addParameter('alpha', defaultAlpah, @numeric);
 p.addParameter('mu', defaultMu, @numeric);
 p.addParameter('innerIter', defaultInnerIter, @isPositiveInteger);
 p.addParameter('outerIter', defaultOuterIter, @isPositiveInteger);
+p.addParameter('storeIter', defaultStoreIter, @isPositiveInteger);
 p.addParameter('timestep', defaultTimestep, @isPositiveInteger);
 p.addParameter('snapshots', defaultViewSnaps, @isPositiveInteger);
 p.addParameter('narrowBand', defaultNarrowBand, @islogical);
@@ -257,6 +278,7 @@ lsmArgs.lambda = results.lambda;
 lsmArgs.alpha = results.alpha;
 lsmArgs.mu = results.mu;
 lsmArgs.innerIter = results.innerIter;
+lsmArgs.storeIter = results.storeIter;
 lsmArgs.outerIter = results.outerIter;
 lsmArgs.timestep = results.timestep;
 lsmArgs.snapshots = results.snapshots;
@@ -272,8 +294,8 @@ end
 
 
 function tf = isPositiveInteger(x)
-isPositive = x>0;
-isInteger = isreal(x) && isnumeric(x) && all(mod(x,1)==0);
+isPositive = all(x>0);
+isInteger = all(isreal(x)) && all(isnumeric(x)) && all(mod(x,1)==0);
 tf = isPositive && isInteger;
 end
 
@@ -357,7 +379,7 @@ function [img, fname , ftype]= readImage(filepath)
 [fname,ftype]=getFileName(filepath);
 if ftype=='.mat'
   in = load(filepath, 'Data');
-%   img=lp(in.Data);
+  %   img=lp(in.Data);
   img = 20*log10(in.Data);
 elseif ftype=='.png'
   img=imread(filepath);

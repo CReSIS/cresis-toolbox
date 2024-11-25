@@ -106,6 +106,9 @@ for task_idx = 1:length(task_ids)
     fprintf('  %s: %s\n', mfilename, param.notes);
     fprintf('  %s: Eval %s\n', mfilename, eval_cmd);
     
+    global gRadar;
+    gRadar.cluster.is_cluster_job = false;
+    
     if ctrl.cluster.dbstop_if_error
       dbstop_if_error = false; 
       breakpoints = dbstatus;
@@ -151,14 +154,14 @@ for task_idx = 1:length(task_ids)
     system([ctrl.cluster.cluster_job_fn ' </dev/null']);
     
   elseif run_mode == 4
-    ctrl.job_id_list(task_id) = -1;;
+    ctrl.job_id_list(task_id) = -1;
     ctrl.submission_queue = task_id;
     ctrl.job_status(:) = 'C';
     ctrl.job_status(task_id) = 'T';
     ctrl.error_mask(task_id) = 0;
+    ctrl.retries(task_id) = 0;
     ctrl_chain = {{ctrl}};
     ctrl_chain = cluster_run(ctrl_chain);
     
   end
 end
-return;

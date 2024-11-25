@@ -1,6 +1,10 @@
 function layers_callback(obj,status,event)
 
 h_status = get(status);
+if isfield(h_status,'Text')
+  % Handle missing label field in newer versions of Matlab (R2017b+)
+  h_status.Label = h_status.Text;
+end
 if isfield(h_status,'Label') && strcmp(get(status,'Label'),'New')
   h_fig = figure('NumberTitle','off','Name','New Layer','DockControls','off','NumberTitle','off','ToolBar','none','MenuBar','none');
   pos = get(h_fig,'Position');

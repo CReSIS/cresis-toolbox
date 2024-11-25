@@ -23,10 +23,10 @@ elseif yaxis_choice == 2 % WGS_84 Elevation
   layer_y_curUnit = obj.eg.layers.y;
   elevation = interp1(obj.eg.gps_time,...
     obj.eg.elev,...
-    obj.eg.layers.x{1},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{1},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for idx = 1: length(layer_y_curUnit)
     range = min(layer_y_curUnit{idx},surface)*vel_air ...
       +max(0,layer_y_curUnit{idx}-surface) * vel_ice;
@@ -39,7 +39,7 @@ elseif yaxis_choice == 3 % Depth/Range
   layer_y_curUnit = obj.eg.layers.y;
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{1},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for idx = 1:length(layer_y_curUnit)
     layer_y_curUnit{idx} = min(layer_y_curUnit{idx},surface)*vel_air ...
       +max(0,layer_y_curUnit{idx}-surface)*vel_ice;
@@ -60,7 +60,7 @@ elseif yaxis_choice == 5 % Surface flat
   layer_y_curUnit = obj.eg.layers.y;
   surface = interp1(obj.eg.gps_time,...
     obj.eg.surf_twtt,...
-    obj.eg.layers.x{1},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   for idx = 1:length(layer_y_curUnit)
     layer_y_curUnit{idx} = min(0,(layer_y_curUnit{idx}-surface))*vel_air ...
       +max(0,(layer_y_curUnit{idx}-surface))*vel_ice;
@@ -71,14 +71,21 @@ end
 
 %% Plot layers
 %% WARNING: DO NOT IMPLEMENT WITH SCATTER... TOO SLOW RENDERING
-layer_data_x = obj.eg.layers.x;
-obj.eg.layers.x_curUnit = {};
+obj.eg.layers.x_curUnit = [];
 obj.eg.layers.y_curUnit = {};
-for idx = 1:length(layer_data_x)
+try
+  delete(obj.h_layer(2*length(obj.eg.layers.y) + 1:end));
+end
+obj.h_layer = obj.h_layer(1:2*length(obj.eg.layers.y));
+try
+  delete(obj.h_quality(6*length(obj.eg.layers.y)+1:end));
+end
+obj.h_quality = obj.h_quality(1:6*length(obj.eg.layers.y));
+for idx = 1:length(obj.eg.layers.y)
   % Convert x-axis units
   layer_x_curUnit = interp1(obj.eg.image_gps_time,...
     obj.eg.image_xaxis,...
-    layer_data_x{idx},'linear','extrap');
+    obj.eg.layers.x,'linear','extrap');
   
   % get manual/auto pts (use them for layer handles)
   layer_manual = obj.eg.layers.type{idx} == 1;
@@ -125,7 +132,7 @@ for idx = 1:length(layer_data_x)
     {layer_x_curUnit,layer_y_curUnit_derived});
 
   %% Update obj.eg layers with current units
-  obj.eg.layers.x_curUnit{idx} = layer_x_curUnit;
+  obj.eg.layers.x_curUnit = layer_x_curUnit;
   obj.eg.layers.y_curUnit{idx} = layer_y_curUnit{idx};
 end
 

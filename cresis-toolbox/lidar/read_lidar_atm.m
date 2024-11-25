@@ -252,8 +252,15 @@ for file_idx = 1:length(atm_fns)
   elseif strcmpi(file_type,'csv')
     %% Use the "CSV" Read Method
     % =====================================================================
+    %  Skip header lines first, and then read data
     fid = fopen(atm_fn);
-    A = textscan(fid,'%f%f%f%f%f%f%f%f%f%f%f', 'Delimiter',',', 'HeaderLines', 10);
+    while ~feof(fid)
+      hdline = fgetl(fid);
+      if strfind(hdline,'UTC_Seconds_Of_Day')
+        break
+      end
+    end
+    A = textscan(fid,'%f%f%f%f%f%f%f%f%f%f%f', 'Delimiter',',');    
     fclose(fid);
 
     % Some files are empty so skip these

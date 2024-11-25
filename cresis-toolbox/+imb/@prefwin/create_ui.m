@@ -11,47 +11,58 @@ obj.ops.profile = [];
 obj.ops.layers = [];
 obj.ops.layers.lyr_name = {};
 
-layer_sources = {'layerdata','Connect to OPS'};
+if obj.map_toolbox
+  layer_sources = {'layerdata','Connect to OPS'};
+  flightlines = {'tracks files Flightlines','Connect to OPS'};
+else
+  layer_sources = {'layerdata'};
+  flightlines = {'tracks files Flightlines'};
+end
 
-flightlines = {'layerdata Flightlines','Connect to OPS'};
+if obj.map_toolbox
+  wms_maps = {'arctic:Blank Geodetic Map';'antarctic:Blank Geodetic Map';'arctic:Blank Stereographic Map';'antarctic:Blank Stereographic Map';'arctic:Google Map';'antarctic:Google Map';'Connect to OPS'};
+else
+  %error('Mapping toolbox is not available. Mapping toolbox must be available for projections and/or WMS service. Blank Geodetic Maps not supported yet.')
+  wms_maps = {'arctic:Blank Geodetic Map';'antarctic:Blank Geodetic Map'};
+end
 
-wms_maps = {'arctic:blank_map';'antarctic:blank_map';'arctic:google_map';'antarctic:google_map';'Connect to OPS'};
-
-%% Get System Info from LayerData
+%% Load tracks files
 % =========================================================================
-layer_fn_dir = ct_filename_support(struct('radar_name','rds'),'layer',''); % Setting radar_name to rds is arbitrary
-fprintf('Finding the season layerdata in %s\n', layer_fn_dir);
-layer_fns = get_filenames(layer_fn_dir,'layer','','.mat');
+
+% Create tracks file paths
+% -------------------------------------------------------------------------
+track_fn_dir = ct_filename_support(struct('radar_name','rds'),'tracks',''); % Setting radar_name to rds is arbitrary
+fprintf('Finding the csarp_support/tracks files in %s\n', track_fn_dir);
+track_fns = get_filenames(track_fn_dir,'tracks','','.mat');
+
+% Parse tracks filenames one at a time to populate
+%   obj.systems
+%   obj.seasons
+%   obj.locations
+% -------------------------------------------------------------------------
 valid_file_count = 0;
-for layer_idx = 1:length(layer_fns)
-  layer_fn = layer_fns{layer_idx};
-  % Parse layer_fn: layer_SYSTEM_SEASONNAME.mat
-  [~,layer_fn_name] = fileparts(layer_fn);
-  [token,remain] = strtok(layer_fn_name,'_');
-  if strcmpi(token,'layer')
-    [token,remain] = strtok(remain,'_');
-    [sys_token,remain] = strtok(remain,'_');
-    if strcmpi(token,'arctic')
+for track_idx = 1:length(track_fns)
+  track_fn = track_fns{track_idx};
+  % Parse track_fn: layer_SYSTEM_SEASONNAME.mat
+  [~,track_fn_name] = fileparts(track_fn);
+  [file_type_str,remain] = strtok(track_fn_name,'_');
+  if strcmpi(file_type_str,'tracks')
+    [location_str,remain] = strtok(remain,'_');
+    [sys_str,remain] = strtok(remain,'_');
+    if any(strcmpi(location_str,{'arctic','antarctic'}))
       % sys_token: accum, kuband, rds, or snow string
       % remain: _YYYY_LOCATION_PLATFORM string
-      obj.systems{end+1} = 'layerdata';
-      obj.seasons{end+1} = sprintf('%s_%s',sys_token,remain(2:end));
-      obj.locations{end+1} = 'arctic';
-      valid_file_count = valid_file_count+1;
-    elseif strcmpi(token,'antarctic')
-      % sys_token: accum, kuband, rds, or snow string
-      % remain: _YYYY_LOCATION_PLATFORM string
-      obj.systems{end+1} = 'layerdata';
-      obj.seasons{end+1} = sprintf('%s_%s',sys_token,remain(2:end));
-      obj.locations{end+1} = 'antarctic';
+      obj.systems{end+1} = 'tracks';
+      obj.seasons{end+1} = sprintf('%s_%s',sys_str,remain(2:end));
+      obj.locations{end+1} = location_str;
       valid_file_count = valid_file_count+1;
     end
   end
 end
 if valid_file_count == 0
-  warning('No season layerdata files found. Use create_season_layerdata_files.m to create season layerdata files. Continuing without layerdata.');
+  warning('No tracks files found. Use imb.create_track_files.m to create tracks files. Continuing without tracks files.');
 else
-  fprintf('  Found %d season layerdata files.\n', valid_file_count);
+  fprintf('  Found %d tracks files.\n', valid_file_count);
 end
 
 %% Set Prefwin Figure
@@ -78,17 +89,18 @@ set(obj.h_gui.layerSourcePM,'Value',1);
 set(obj.h_gui.layerSourcePM,'Style','popupmenu');
 set(obj.h_gui.layerSourcePM,'HorizontalAlignment','Center');
 set(obj.h_gui.layerSourcePM,'FontName','fixed');
-set(obj.h_gui.layerSourcePM,'TooltipString','Available layer sources (select one)');
+set(obj.h_gui.layerSourcePM,'TooltipString','Layer two way travel time data source (select one)');
 set(obj.h_gui.layerSourcePM,'Callback',@obj.layerSourcePM_callback);
 
 % layerdata sources pop up menu (populate later from preference window)%%
 obj.h_gui.layerDataSourcePM = popupmenu_edit(obj.h_fig,{'layer','CSARP_post/layer'});
-set(obj.h_gui.layerDataSourcePM.h_valuePM,'TooltipString','Available layerdata filepath sources (select one). Right click to add, edit, or delete entries.');
+set(obj.h_gui.layerDataSourcePM.h_valuePM,'TooltipString',sprintf('Available layerdata filepath sources (select one). Right click to add, edit, or delete entries.\nThe entry "layer" will look in the CSARP_layer directory.\nThe entry "CSARP_post / layer" will look in the CSARP_post / CSARP_layer directory.'));
 
 % Layer selection class (populate later from preference file)
 obj.h_gui.h_layers = selectionbox(obj.h_fig,'Layers',[],1);
-set(obj.h_gui.h_layers.h_list_available,'TooltipString','Available layers (double or right click to select).');
-set(obj.h_gui.h_layers.h_list_selected,'TooltipString','Selected layers (double or right click to remove).');
+set(obj.h_gui.h_layers.h_text,'TooltipString','Select the layer two way travel time data source. If layerdata, then select the layerdata source. If OPS, then select layers to load.');
+set(obj.h_gui.h_layers.h_list_available,'TooltipString','Available OPS layers (double or right click to select).');
+set(obj.h_gui.h_layers.h_list_selected,'TooltipString','Selected OPS layers (double or right click to remove).');
 obj.h_gui.h_layers.set_enable(false);
 
 uimenu(obj.h_gui.h_layers.h_list_availableCM, 'Label', 'New', 'Callback', @obj.layers_callback);
@@ -98,13 +110,13 @@ uimenu(obj.h_gui.h_layers.h_list_availableCM, 'Label', 'Refresh', 'Callback', @o
 
 % Season selection class (populate later from preference file)
 obj.h_gui.h_seasons = selectionbox(obj.h_fig,'Seasons',[],1);
-set(obj.h_gui.h_seasons.h_list_available,'TooltipString','Available seasons (double click or right click to select).');
-set(obj.h_gui.h_seasons.h_list_selected,'TooltipString','Selected seasons(double click or right click to remove).');
+set(obj.h_gui.h_seasons.h_list_available,'TooltipString','Available seasons for the chosen map (double click or right click to select).');
+set(obj.h_gui.h_seasons.h_list_selected,'TooltipString','Selected seasons for the chosen map (double click or right click to remove).');
 
 % System list box label
 obj.h_gui.systemsText = uicontrol('Parent',obj.h_fig);
 set(obj.h_gui.systemsText,'Style','Text');
-set(obj.h_gui.systemsText,'String','Systems');
+set(obj.h_gui.systemsText,'String','Radar Systems');
 
 % Source list box label
 obj.h_gui.sourceText = uicontrol('Parent',obj.h_fig);
@@ -113,13 +125,13 @@ set(obj.h_gui.sourceText,'String','Echogram Sources');
 
 % System list box
 obj.h_gui.systemsLB = uicontrol('Parent',obj.h_fig);
-set(obj.h_gui.systemsLB,'String',{'layerdata'});
+set(obj.h_gui.systemsLB,'String',{'tracks'});
 set(obj.h_gui.systemsLB,'Style','listbox');
 set(obj.h_gui.systemsLB,'HorizontalAlignment','Center');
 set(obj.h_gui.systemsLB,'FontName','fixed');
 set(obj.h_gui.systemsLB,'Callback',@obj.systemsLB_callback);
 set(obj.h_gui.systemsLB,'Min',1); % One must always be selected
-set(obj.h_gui.systemsLB,'TooltipString','Systems (choose one)');
+set(obj.h_gui.systemsLB,'TooltipString','Radar systems (choose one)');
 
 % Source list box (populate later from preference file)
 obj.h_gui.sourceLB = uicontrol('Parent',obj.h_fig);
@@ -311,17 +323,19 @@ table_draw(obj.h_gui.table);
 
 % Check to see if default parameters require OPS
 load_ops = false;
-if ~strcmp(obj.default_params.system,'layerdata')
-  load_ops = true;
-end
-if strcmp(obj.default_params.layer_source,'OPS')
-  load_ops = true;
-end
-if strcmp(obj.default_params.flightlines(1:3),'OPS')
-  load_ops = true;
-end
-if all(~strcmp(obj.default_params.map_name,{'arctic:blank_map';'antarctic:blank_map';'arctic:google_map';'antarctic:google_map'}))
-  load_ops = true;
+if obj.map_toolbox
+  if ~strcmp(obj.default_params.system,'tracks')
+    load_ops = true;
+  end
+  if strcmp(obj.default_params.layer_source,'OPS')
+    load_ops = true;
+  end
+  if strcmp(obj.default_params.flightlines(1:3),'OPS')
+    load_ops = true;
+  end
+  if all(~strcmp(obj.default_params.map_name,{'arctic:Blank Geodetic Map';'antarctic:Blank Geodetic  Map';'arctic:Blank Stereographic Map';'antarctic:Blank Stereographic Map';'arctic:Google Map';'antarctic:Google Map'}))
+    load_ops = true;
+  end
 end
 if load_ops
   obj.ops_connect();

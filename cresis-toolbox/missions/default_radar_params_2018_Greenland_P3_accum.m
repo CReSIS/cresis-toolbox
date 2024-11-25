@@ -38,7 +38,6 @@ param.config.max_tx_voltage = sqrt(400*50)*10^(-2/20); % voltage at max_tx
 %% CReSIS Parameters
 param.config.cresis.clk = 1.6e9/8;
 param.config.cresis.rx_gain_dB = 45;
-param.config.cresis.presum_bug_fixed = true;
 
 %% BAS ACCUM Arena Parameters
 arena = [];
@@ -138,7 +137,7 @@ default.records.frames.geotiff_fn = 'greenland/Landsat-7/Greenland_natural_150m'
 default.records.frames.mode = 2;
 default.records.gps.en = 1;
 default.records.gps.time_offset = 1;
-default.records.presum_bug_fixed = 1;
+default.records.presum_mode = 0;
 
 %% Qlook worksheet
 default.qlook.out_path = '';
@@ -210,8 +209,6 @@ default.array.rline_rng = -5:5;
 default.array.dbin = 1;
 default.array.dline = 6;
 default.array.DCM = [];
-default.array.three_dim.en = 0;
-default.array.three_dim.layer_fn = '';
 default.array.Nsv = 1;
 default.array.theta_rng = [0 0];
 default.array.sv_fh = @array_proc_sv;

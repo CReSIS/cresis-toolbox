@@ -41,92 +41,90 @@ param.config.cresis.rx_gain_dB = 51.5;
 param.config.cresis.gps_file_mask = 'GPS*';
 
 %% Command worksheet
-default.cmd.records = 1;
-default.cmd.qlook = 1;
-default.cmd.generic = 1;
+param.cmd.records = 1;
+param.cmd.qlook = 1;
+param.cmd.generic = 1;
 
 %% Records worksheet
-default.records.gps.time_offset = 1;
-default.records.frames.mode = 2;
-default.records.frames.geotiff_fn = fullfile('greenland','Landsat-7','Greenland_natural_150m.tif');
-default.records.presum_bug_fixed = 0;
+param.records.gps.time_offset = 1;
+param.records.frames.mode = 1;
+param.records.frames.geotiff_fn = fullfile('greenland','Landsat-7','Greenland_natural_150m.tif');
+param.records.presum_mode = 1;
 
 %% Qlook worksheet
-default.qlook.out_path = '';
-default.qlook.en = 1;
-default.qlook.block_size = 10000;
-default.qlook.dec = 20;
-default.qlook.inc_dec = 5;
-default.qlook.surf.en = 1;
-default.qlook.surf.profile = 'RDS_OIB';
+param.qlook.out_path = '';
+param.qlook.en = 1;
+param.qlook.block_size = 10000;
+param.qlook.dec = 20;
+param.qlook.inc_dec = 5;
+param.qlook.surf.en = 1;
+param.qlook.surf.profile = 'RDS_OIB';
 
 %% SAR worksheet
-default.sar.out_path = '';
-default.sar.chunk_len = 5000;
-default.sar.combine_rx = 0;
-default.sar.mocomp.en = 1;
-default.sar.mocomp.type = 2;
-default.sar.mocomp.filter = {@butter  [2]  [0.1000]};
-default.sar.mocomp.uniform_en = 1;
-default.sar.sar_type = 'fk';
-default.sar.sigma_x = 2.5;
-default.sar.sub_aperture_steering = 0;
-default.sar.st_wind = @hanning;
-default.sar.start_eps = 3.15;
+param.sar.out_path = '';
+param.sar.chunk_len = 5000;
+param.sar.combine_rx = 0;
+param.sar.mocomp.en = 1;
+param.sar.mocomp.type = 2;
+param.sar.mocomp.filter = {@butter  [2]  [0.1000]};
+param.sar.mocomp.uniform_en = 1;
+param.sar.sar_type = 'fk';
+param.sar.sigma_x = 2.5;
+param.sar.sub_aperture_steering = 0;
+param.sar.st_wind = @hanning;
+param.sar.start_eps = 3.15;
 
 %% Array worksheet
-default.array.in_path = '';
-default.array.array_path = '';
-default.array.out_path = '';
-default.array.method = 'standard';
-default.array.window = @hanning;
-default.array.bin_rng = 0;
-default.array.line_rng = -5:5;
-default.array.dbin = 1;
-default.array.dline = 6;
-default.array.DCM = [];
-default.array.tomo_en = 0;
-default.array.tomo.layer_fn = '';
-default.array.Nsv = 1;
-default.array.theta_rng = [0 0];
-default.array.sv_fh = @array_proc_sv;
-default.array.diag_load = 0;
-default.array.Nsrc = 2;
+param.array.in_path = '';
+param.array.array_path = '';
+param.array.out_path = '';
+param.array.method = 'standard';
+param.array.window = @hanning;
+param.array.bin_rng = 0;
+param.array.line_rng = -5:5;
+param.array.dbin = 1;
+param.array.dline = 6;
+param.array.DCM = [];
+param.array.tomo_en = 0;
+param.array.Nsv = 1;
+param.array.theta_rng = [0 0];
+param.array.sv_fh = @array_proc_sv;
+param.array.diag_load = 0;
+param.array.Nsrc = 2;
 
 %% Radar worksheet
-default.radar.fs = 1e9/9;
-default.radar.Tadc = []; % normally leave empty to use value in file header
-default.radar.adc_bits = 14;
-default.radar.Vpp_scale = 2;
-default.radar.lever_arm_fh = @lever_arm;
+param.radar.fs = 1e9/9;
+param.radar.Tadc = []; % normally leave empty to use value in file header
+param.radar.adc_bits = 14;
+param.radar.Vpp_scale = 2;
+param.radar.lever_arm_fh = @lever_arm;
 
-default.radar.wfs.rx_paths = [1 2 3 4 5 6 7 NaN];
-default.radar.wfs.noise_figure = 2;
-default.radar.wfs.Tadc_adjust = -1.4455e-06; % System time delay: leave this empty or set it to zero at first, determine this value later using data over surface with known height or from surface multiple
+param.radar.wfs.rx_paths = [1 2 3 4 5 6 7 NaN];
+param.radar.wfs.Tadc_adjust = -1.4455e-06; % System time delay: leave this empty or set it to zero at first, determine this value later using data over surface with known height or from surface multiple
 
-default.radar.wfs(1).Tsys = [0 0 0 0 0 0 0]/1e9;
-default.radar.wfs(1).chan_equal_dB = [0 0 0 0 0 0 0];
-default.radar.wfs(1).chan_equal_deg = [0 0 0 0 0 0 0];
+param.radar.wfs(1).Tsys = [0 0 0 0 0 0 0]/1e9;
+param.radar.wfs(1).chan_equal_dB = [0 0 0 0 0 0 0];
+param.radar.wfs(1).chan_equal_deg = [0 0 0 0 0 0 0];
 
 %% Post worksheet
-default.post.data_dirs = {'qlook'};
-default.post.layer_dir = 'layerData';
-default.post.maps_en = 1;
-default.post.echo_en = 1;
-default.post.layers_en = 0;
-default.post.data_en = 0;
-default.post.csv_en = 1;
-default.post.concat_en = 1;
-default.post.pdf_en = 1;
-default.post.map.location = 'Greenland';
-default.post.map.type = 'combined';
-default.post.echo.elev_comp = 3;
-default.post.echo.depth = '[publish_echogram_switch(Bbad,0.25,Surface_Elev,-3500,DBottom,-100),max(Surface_Elev+100)]';
-default.post.echo.er_ice = 3.15;
-default.post.ops.en = 0;
-default.post.ops.location = 'arctic';
-default.post.ops.layers = {'bottom','surface'};
-default.post.ops.gaps_dist = [300 60];
+param.post.data_dirs = {'qlook'};
+param.post.layer_dir = 'layerData';
+param.post.maps_en = 1;
+param.post.echo_en = 1;
+param.post.layers_en = 0;
+param.post.data_en = 0;
+param.post.csv_en = 1;
+param.post.concat_en = 1;
+param.post.pdf_en = 1;
+param.post.map.location = 'Greenland';
+param.post.map.type = 'combined';
+param.post.echo.elev_comp = 3;
+param.post.echo.depth = '[publish_echogram_switch(Bbad,0.25,Surface_Elev,-3500,DBottom,-100),max(Surface_Elev+100)]';
+param.post.echo.er_ice = 3.15;
+param.post.ops.en = 0;
+param.post.ops.location = 'arctic';
+param.post.ops.layers = {'bottom','surface'};
+param.post.ops.gaps_dist = [300 60];
 
 
 %% Radar Settings

@@ -40,10 +40,10 @@ else
     data = response.data;
     
     % FORMAT LOADJSON OUTPUT TO MATCH FROMJSON OUTPUT
-    if status == 1 && ~isempty(data)
+    if status == 1 && ~isempty(data) && isstruct(data)
       dataFns = fieldnames(data);
       for fidx = 1:length(dataFns)
-        data.dataFns(fidx) = data.dataFns(fidx)';
+        data.(dataFns{fidx}) = data.(dataFns{fidx}).';
       end
     end
     

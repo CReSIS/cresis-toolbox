@@ -102,7 +102,7 @@ classdef (HandleCompatible = true) geotiff < handle
         if isempty(geotiff_fn)
           error('No geotiff file specified, using lat/lon.');
         end
-        [obj.proj] = plot_geotiff(geotiff_fn,[],[],[obj.h_fig obj.h_axes]);
+        [obj.proj] = geotiff_plot(geotiff_fn,[],[],[obj.h_fig obj.h_axes]);
         xlabel(obj.h_axes,'X (km)');
         ylabel(obj.h_axes,'Y (km)');
         obj.xlims = xlim(obj.h_axes);

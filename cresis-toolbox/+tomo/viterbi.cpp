@@ -10,388 +10,555 @@
 //
 // Changes to cost function (shifted exponential decay): Victor Berger and John Paden 2018
 // Changes to cost function (geostatistical analysis): Victor Berger and John Paden 2019
+// Various changes throughout (purge dead code, fix bugs, add more weights): Reece Mathews 2020 
 //
 // See also: viterbi.h
 //
 // mex -v -largeArrayDims viterbi.cpp
 
+
 #include "viterbi.h"
 
 //  Used to define unary cost of target at position x, y
-double viterbi::unary_cost(int x, int y) { 
-    
-    // Merge layers when no ice exists
-    if (f_mask[x] == 0 && f_sgt[x] > t && y + t != f_sgt[x]) {
-        return LARGE;
-    }
+double viterbi::unary_cost(int x, int y)
+{
 
-    // Set cost to large if bottom is above surface
-    if (y + t + 1 < f_sgt[x]) {
-        return LARGE;
-    }
+  double sgt = get_y(0, x); // Surface layer is always layer 0
+  // Merge layers when no ice exists
+  if (f_mask[x] == 0 && y != sgt)
+  {
+    return LARGE;
+  }
 
-    // Set cost to large if far from center ground truth (if present)
-    if ((f_bgt != -1) && (x == f_mid) && (y + t < f_bgt - 20 || y + t > f_bgt + 20)) {
-        return LARGE;
-    }
+  // Set cost to large if bottom is above surface
+  if (!mxIsNaN(sgt) && y < sgt)
+  {
+    return LARGE;
+  }
 
-    double cost = 0;
-    
-    // Increase cost if far from extra ground truth
-    for (int f = 0; f < (f_num_extra_tr / 2); ++f) {
-        if (f_egt_x[f] == x) {
-            cost += f_weight_points[x] * 10 * sqr(((int)f_egt_y[f] - (int)(t + y)) / f_egt_weight);
-            break;
+  double cost = 0;
+
+  // Increase cost if far from layer ground truth
+  for (int layer_num = 0; layer_num < f_num_layers; layer_num++) {
+    double gt = get_y(layer_num, x);
+    if (is_valid(gt))
+    {
+      double cutoff = get_y_cutoff(layer_num, x);
+      int dist = abs((int)gt - (int)y);
+      if (is_valid(cutoff) && dist > cutoff)
+      {
+        // Must be within cutoff range
+        return LARGE;
+      }
+      else
+      {
+        double layer_cost = get_y_cost(layer_num, x);
+        if (!mxIsNaN(layer_cost)) {
+          if (layer_cost > 0) {
+            // Positive cost decreases cost further away -- Repel from point
+            cost += layer_cost * exp(-sqr(dist)*.001); 
+          }
+          else {
+            // Negative cost increases cost further away -- Attract to point
+            cost += layer_cost * exp(-sqr(dist)*.001) - layer_cost; 
+          }
         }
+      }
     }
+  }
+
+  // Increase cost if near surface or surface multiple bin
+  double multiple_cost = 0;
+  if (!mxIsNaN(sgt)) {
+    const int travel_time = sgt - f_zero_bin; // Between multiples
+    int dist_to_surf = abs((int)y - (int)sgt);
+    int multiple_bin = travel_time == 0 ? -1 : floor((y - sgt) / travel_time) - 1;
+    int dist_to_bin = travel_time == 0 ? dist_to_surf : dist_to_surf % travel_time;
+    // If closer to next multiple, use that distance instead
+    double current_mult_weight = f_mult_weight;
+    if (dist_to_bin > travel_time / 2)
+    {
+      dist_to_bin = travel_time - dist_to_bin;
+      multiple_bin++;
+      current_mult_weight *= .75; // Return is not as strong above multiple
+    }
+    if (multiple_bin < 0)
+    {
+      // multiple bin -1 is surface, others are multiples
+      multiple_bin = 0;
+      current_mult_weight = 0;  // Surface repulsion handled above as cost
+    }
+
+    multiple_cost = current_mult_weight;
+    multiple_cost *= pow(f_mult_weight_decay, multiple_bin);
+    multiple_cost *= pow(f_mult_weight_local_decay, dist_to_bin);
+
+    multiple_cost = multiple_cost < 0 ? 0 : multiple_cost;
+    cost += multiple_cost;
 
     // Distance from nearest ice-mask
     // Probabilistic measurement
-    int DIM = (std::isinf(f_mask_dist[x]) || f_mask_dist[x] >=  f_costmatrix_Y) ? f_costmatrix_Y - 1 : f_mask_dist[x];
-    cost += f_costmatrix[f_costmatrix_X * DIM + y + t + 1 - f_sgt[x]];
-
-    // Image magnitude correlation
-    double tmp_cost = 0;
-    for (size_t i = 0; i < f_ms; i++) {
-        cost -= f_image[encode(x, y + i)] * f_mu[i] / f_sigma[i];
+    int DIM = (std::isinf(f_mask_dist[x]) || f_mask_dist[x] >= f_costmatrix_Y) ? f_costmatrix_Y - 1 : f_mask_dist[x];
+    int matrix_idx = f_costmatrix_X * DIM + y - sgt;
+    int matrix_final_idx = f_costmatrix_X * f_costmatrix_Y - 1;
+    if (matrix_idx >= 0 && matrix_idx <= matrix_final_idx)
+    {
+      // Index within bounds of costmatrix
+      cost += f_costmatrix[matrix_idx];
     }
-    
-    return cost;
+    else if (f_costmatrix_X > 0)
+    {
+      // costmatrix provided but index outside bounds
+      if (matrix_idx < 0)
+      {
+        // Use first cost in matrix when index is before matrix start
+        cost += f_costmatrix[0];
+      }
+      else
+      {
+        // Use last cost in matrix when index is after matrix end
+        cost += f_costmatrix[matrix_final_idx];
+      }
+    }
+  }
+  // Image magnitude
+  cost -= f_image[encode(x, y)] * f_img_mag_weight;
+
+  return cost;
 }
 
 // Returns Viterbi solution of optimal path
-double* viterbi::find_path(void) { 
-    start_col   = f_bounds[0];
-    end_col     = f_bounds[1];
-    t           = (f_ms - 1) / 2;
-    depth       = f_row - f_ms;
-    num_col_vis = end_col - start_col;
-    
-    int *path = new int[depth * (num_col_vis + 2)];
-    double path_prob[depth], path_prob_next[depth], index[depth];
-    
-    for (int k = 0; k < f_col; ++k)
-        f_result[k] = 0;
+double *viterbi::find_path(void)
+{
+  start_col = f_hori_bounds[0];
+  end_col = f_hori_bounds[1];
+  num_col_vis = end_col - start_col + 1;
 
-    for (int k = 0; k < depth * (num_col_vis + 2); ++k) {
-        path[k] = 0;
+  int *path = new int[f_row * num_col_vis];
+  double path_prob[f_row], path_prob_next[f_row], index[f_row];
+
+  for (int k = 0; k < f_col; ++k)
+    f_result[k] = NAN;
+
+  for (int k = 0; k < f_row * num_col_vis; ++k)
+  {
+    path[k] = 0;
+  }
+
+  for (int k = 0; k < f_row; ++k)
+  {
+    path_prob[k] = 0;
+    path_prob_next[k] = 0;
+    index[k] = 0;
+  }
+
+  viterbi_right(path, path_prob, path_prob_next, index);
+
+  int encode;
+  int viterbi_index = calculate_best(path_prob);
+  int idx = end_col;
+  f_result[end_col] = (f_mask[end_col] == 1 || std::isinf(f_mask[end_col])) ? viterbi_index + 1 : get_y(0, end_col) + 1;
+
+  // Set result vector
+  for (int k = start_col + 1; k <= end_col; ++k)
+  {
+    encode = vic_encode(viterbi_index, num_col_vis + start_col - k);
+    viterbi_index = path[encode];
+    f_result[idx - 1] = viterbi_index + 1;  // Account for matlab 1-indexing
+    --idx;
+    if (encode < 0 || idx < 1)
+    {
+      break;
     }
-    
-    for (int k = 0; k < depth; ++k) {
-        path_prob[k] = 0;
-        path_prob_next[k] = 0;
-        index[k] = 0;
-    }
+  }
 
-    viterbi_right(path, path_prob, path_prob_next, index); 
-
-    int encode;
-    int viterbi_index     = calculate_best(path_prob);
-    int idx               = end_col;
-    f_result[end_col - 1] = (f_mask[end_col - 1] == 1 || std::isinf(f_mask[end_col - 1])) ? viterbi_index + t : f_sgt[end_col - 1];
-
-    // Set result vector
-    for (int k = start_col + 1; k <= end_col; ++k) {
-        encode = vic_encode(viterbi_index, num_col_vis + start_col - k);
-        viterbi_index = path[encode];
-        f_result[idx - 2] = viterbi_index + t; 
-        --idx;
-        if (encode < 0 || idx < 2) {
-            break;
-        }
-    }
-    
-    delete[] path; 
-    return f_result;
+  delete[] path;
+  return f_result;
 }
 
 // Select path with lowest overall cost
-int viterbi::calculate_best(double *path_prob) {
-    double min = LARGE;
-    int viterbi_index = 0;
-    for (int k = 0; k < depth; ++k) {
-        if (path_prob[k] < min) {
-            min = path_prob[k];
-            viterbi_index = k;
-        }
+int viterbi::calculate_best(double *path_prob)
+{
+  double min = LARGE;
+  int viterbi_index = 0;
+  for (int k = 0; k < f_row; ++k)
+  {
+    if (path_prob[k] < min)
+    {
+      min = path_prob[k];
+      viterbi_index = k;
     }
-    return viterbi_index;
+  }
+  return viterbi_index;
 }
 
 // Perform viterbi to the right
-void viterbi::viterbi_right(int *path, double *path_prob, double *path_prob_next, double *index) {
-    int idx = 0;
-    bool next = 0;
-    double norm = 0;
-    
-    for (int col = start_col; col <= end_col + 1; ++col) {   
-        if (idx >= depth * (num_col_vis + 2) || col >= f_col || col < 0) {
-            continue;
-        }
-        if (f_transition_mu[col] < 0 && f_transition_sigma[col] < 0) {
-            norm = norm_pdf(col, (double)f_mid, f_smooth_var, f_smooth_weight);
-        }
-        else if (f_transition_mu[col] < 0) {
-            norm = norm_pdf(col, path[col], f_transition_sigma[col], f_smooth_weight);
-            norm = norm < f_smooth_weight ? f_smooth_weight : norm;
-        }
-        else {
-            norm = norm_pdf(col, f_transition_mu[col], f_transition_sigma[col], f_smooth_weight);
-        }
-        if (!next) {
-            dt_1d(path_prob, norm, path_prob_next, index, 0, depth, f_smooth_slope[col-1]);
-        }
-        else {
-            dt_1d(path_prob_next, norm, path_prob, index, 0, depth, f_smooth_slope[col-1]);
-        }
-        for (int row = 0; row < depth; ++row) {
-            path[idx] = index[row];
-            if(!next) {
-                path_prob_next[row] += unary_cost(col, row);
-            }
-            else {
-                path_prob[row] += unary_cost(col, row);
-            }
-            ++idx;
-        }
-        next = !next;
+void viterbi::viterbi_right(int *path, double *path_prob, double *path_prob_next, double *index)
+{
+  int idx = 0;
+  bool next = 0;
+
+  for (int col = start_col; col <= end_col; ++col)
+  {
+    if (idx >= f_row * num_col_vis || col >= f_col || col < 0)
+    {
+      continue;
     }
+    // Have to add unary cost to first column before calculating best prev index for next column
+    for (int row = 0; row < f_row; ++row)
+    {
+      if (col > start_col)
+      {
+        path[idx] = index[row];
+      }
+      if (next)
+      {
+        path_prob_next[row] += unary_cost(col, row);
+      }
+      else
+      {
+        path_prob[row] += unary_cost(col, row);
+      }
+      ++idx;
+    }
+
+    if (col >= end_col)
+    {
+      // Allow addition of unary cost to final column but do not
+      // add binary cost for next column since there are no more columns
+
+      // Overwrite path_prob with path_prob_next if that is more recent
+      // path_prob is always searched for the best index after the viterbi_right call
+      if (next) 
+      {
+        for (int i = 0; i < f_row; i++) 
+        {
+          path_prob[i] = path_prob_next[i];
+        }
+      }
+
+      continue;
+    }
+
+    if (!next)
+    {
+      dt_1d(path_prob, f_transition_weights[col], path_prob_next, index, 0, f_row-1, f_smooth_slope[col], f_max_slope);
+    }
+    else
+    {
+      dt_1d(path_prob_next, f_transition_weights[col], path_prob, index, 0, f_row-1, f_smooth_slope[col], f_max_slope);
+    }
+    next = !next;
+  }
 }
 
 // MATLAB FUNCTION START
-void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {        
-    if (nrhs != 19 || nlhs != 1) {
-        mexErrMsgTxt("Usage: [labels] = viterbi(input_img, surface_gt, bottom_gt, extra_gt, ice_mask, mean, var, egt_weight, smooth_weight, smooth_var, smooth_slope, bounds, viterbi_weight, repulsion, ice_bin_thr,  CF_sensory_distance, CF_max_cost, CF_lambda)\n"); 
+void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
+{
+  int max_args = 17;           // All args including optional
+  int min_args = max_args - 1; // Number of required arguments
+  int arg = 0;
+
+  if (nrhs < min_args || nrhs > max_args || nlhs != 1)
+  {
+    mexErrMsgTxt("Usage: [labels] = viterbi(input_img, layers, layer_costs, layer_cutoffs, ice_mask, img_mag_weight, smooth_slope, max_slope, horizontal bounds, vertical bounds, mask_dist, costmatrix, transition_weights, mult_weight, mult_weight_decay, mult_weight_local_decay, [zero_bin])\n");
+  }
+
+  // Input checking
+  // input image ========================================================
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: image must be type double");
+  }
+  if (mxGetNumberOfDimensions(prhs[arg]) != 2)
+  {
+    mexErrMsgTxt("usage: image must be a 2D matrix");
+  }
+  const int _row = mxGetM(prhs[arg]);
+  const int _col = mxGetN(prhs[arg]);
+  const double *_image = mxGetPr(prhs[arg]);
+
+  // layers ===============================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))  // Must be double to allow for NaN
+  {
+    mexErrMsgTxt("usage: layers must be type double");
+  }
+  const int _num_layers = mxGetM(prhs[arg]);
+  const int _layer_length = mxGetN(prhs[arg]);
+  if (_layer_length != _col)
+  {
+    mexErrMsgTxt("usage: layers must have size(layers,2)=size(image,2)");
+  }
+  double *_layers = (double *)mxGetPr(prhs[arg]);
+  
+  // layer costs ===============================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: layer costs must be type double");
+  }
+  const int _num_layer_costs = mxGetM(prhs[arg]);
+  const int _layer_costs_length = mxGetN(prhs[arg]);
+  if (_layer_costs_length != _col)
+  {
+    mexErrMsgTxt("usage: layer costs must have size(layer costs,2)=size(image,2)");
+  }
+  if (_num_layer_costs != _num_layers)
+  {
+    mexErrMsgTxt("usage: layer costs must have size(layer costs,1)=size(layers,1)");
+  }
+  const double *_layer_costs = (double *)mxGetPr(prhs[arg]);
+  
+  // layer cutoffs ===============================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: layer cutoffs must be type double");
+  }
+  const int _num_layer_cutoffs = mxGetM(prhs[arg]);
+  const int _layer_cutoffs_length = mxGetN(prhs[arg]);
+  if (_layer_cutoffs_length != _col)
+  {
+    mexErrMsgTxt("usage: layer cutoffs must have size(layer cutoffs,2)=size(image,2)");
+  }
+  if (_num_layer_cutoffs != _num_layers)
+  {
+    mexErrMsgTxt("usage: layer cutoffs must have size(layer cutoffs,1)=size(layers,1)");
+  }
+  const double *_layer_cutoffs = (double *)mxGetPr(prhs[arg]);
+
+  // mask ===============================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: mask must be type double");
+  }
+  if (mxGetNumberOfElements(prhs[arg]) != _col)
+  {
+    mexErrMsgTxt("usage: mask must have numel(mask)=size(image,2)");
+  }
+  const double *_mask = mxGetPr(prhs[arg]);
+
+  // img_mag_weight ==========================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]) || mxGetNumberOfElements(prhs[arg]) != 1)
+  {
+    mexErrMsgTxt("usage: img_mag_weight must be scalar double");
+  }
+  const double _img_mag_weight = *(double *)mxGetPr(prhs[arg]);
+
+  // smooth_slope =======================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: smooth_slope must be type double");
+  }
+  if (_col - 1 != mxGetNumberOfElements(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: smooth_slope must have numel(smooth_slope)=size(image,2)-1");
+  }
+  const double *_smooth_slope = mxGetPr(prhs[arg]);
+
+  // max_slope =======================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]) || mxGetNumberOfElements(prhs[arg]) != 1)
+  {
+    mexErrMsgTxt("usage: max_slope must be type scalar double");
+  }
+  const double _max_slope = *(double *)mxGetPr(prhs[arg]);
+
+  // Horizontal bounds =============================================================
+  arg++;
+  ptrdiff_t _hori_bounds[2];
+  if (mxGetNumberOfElements(prhs[arg]) != 0)
+  {
+    if (!mxIsInt64(prhs[arg]))
+    {
+      mexErrMsgTxt("Usage: horizontal bounds must be type int64");
     }
-    
-    // Input checking
-    // input image ========================================================
-    if (!mxIsDouble(prhs[0])) {
-        mexErrMsgTxt("usage: image must be type double");
+    if (mxGetNumberOfElements(prhs[arg]) != 2)
+    {
+      mexErrMsgTxt("Usage: horizontal bounds must be a 2 element vector");
     }
-    if (mxGetNumberOfDimensions(prhs[0]) != 2) {
-        mexErrMsgTxt("usage: image must be a 2D matrix");
+    ptrdiff_t *tmp = (ptrdiff_t *)mxGetPr(prhs[arg]);
+    _hori_bounds[0] = tmp[0] - 1;  // Account for matlab 1-indexing
+    _hori_bounds[1] = tmp[1] - 1;
+    if (_hori_bounds[0] < 0)
+    {
+      _hori_bounds[0] = 0;
     }
-    const int _row = mxGetM(prhs[0]);
-    const int _col = mxGetN(prhs[0]);
-    const double *_image = mxGetPr(prhs[0]);
-    
-    // surface ground truth ===============================================
-    if (!mxIsDouble(prhs[1])) {
-        mexErrMsgTxt("usage: sgt must be type double");
+    if (_hori_bounds[1] < 0)
+    {
+      _hori_bounds[1] = _col - 1;
     }
-    if (mxGetNumberOfElements(prhs[1]) != _col) {
-        mexErrMsgTxt("usage: sgt must have size(sgt,1)=size(image,2)");
+    if (_hori_bounds[0] > _col)
+    {
+      mexErrMsgTxt("Usage: horizontal bounds[0] <= size(input,2)");
     }
-    const double *_surf_tr = mxGetPr(prhs[1]);
-    
-    // bottom ground truth ================================================
-    if (!mxIsDouble(prhs[2]) || mxGetNumberOfElements(prhs[2]) != 1) {
-        mexErrMsgTxt("usage: bgt must be a scalar of type double");
+    if (_hori_bounds[1] > _col)
+    {
+      mexErrMsgTxt("Usage: horizontal bounds[1] <= size(input,2)");
     }
-    const double *t_bott_tr = mxGetPr(prhs[2]);
-    
-    // extra ground truth =================================================
-    if (!mxIsDouble(prhs[3])) {
-        mexErrMsgTxt("usage: egt must be type double");
+    if (_hori_bounds[1] < _hori_bounds[0])
+    {
+      mexErrMsgTxt("Usage: horizontal bounds[1] must be greater than horizontal bounds[0]");
     }
-    const int _num_extra_tr = mxGetNumberOfElements(prhs[3]);
-    if (_num_extra_tr % 2 != 0) {
-        mexErrMsgTxt("usage: egt size must be a multiple of 2");
+  }
+  else
+  {
+    // Default setting is to process all columns
+    _hori_bounds[0] = 0;
+    _hori_bounds[1] = _col - 1;
+  }
+  
+  // Veritcal bounds =============================================================
+  arg++;
+  ptrdiff_t _vert_bounds[2];
+  if (mxGetNumberOfElements(prhs[arg]) != 0)
+  {
+    if (!mxIsInt64(prhs[arg]))
+    {
+      mexErrMsgTxt("Usage: veritcal bounds must be type int64");
     }
-    if (mxGetNumberOfElements(prhs[3]) > 0) {
-        if (mxGetNumberOfDimensions(prhs[3]) != 2) {
-            mexErrMsgTxt("usage: egt must be a 2xN array");
-        }
+    if (mxGetNumberOfElements(prhs[arg]) != 2)
+    {
+      mexErrMsgTxt("Usage: veritcal bounds must be a 2 element vector");
     }
-    const double *t_egt = mxGetPr(prhs[3]);
-    
-    // mask ===============================================================
-    if (!mxIsDouble(prhs[4])) {
-        mexErrMsgTxt("usage: mask must be type double");
+    ptrdiff_t *tmp = (ptrdiff_t *)mxGetPr(prhs[arg]);
+    _vert_bounds[0] = tmp[0] - 1;  // Account for matlab 1-indexing
+    _vert_bounds[1] = tmp[1] - 1;
+    if (_vert_bounds[0] < 0)
+    {
+      _vert_bounds[0] = 0;
     }
-    if (mxGetNumberOfElements(prhs[4]) != _col) {
-        mexErrMsgTxt("usage: mask must have size(mask,1)=size(image,2)");
+    if (_vert_bounds[1] < 0)
+    {
+      _vert_bounds[1] = _row - 1;
     }
-    const double *_mask = mxGetPr(prhs[4]);
-    
-    // mu (mean) ==========================================================
-    if (!mxIsDouble(prhs[5])) {
-        mexErrMsgTxt("usage: mean must be type double");
+    if (_vert_bounds[0] > _row)
+    {
+      mexErrMsgTxt("Usage: veritcal bounds[0] <= size(input,2)");
     }
-    const size_t _ms = mxGetNumberOfElements(prhs[5]);
-    const double *_mu = mxGetPr(prhs[5]); 
-    
-    // sigma (variance) ===================================================
-    if (!mxIsDouble(prhs[6])) {
-        mexErrMsgTxt("usage: variance must be type double");
+    if (_vert_bounds[1] > _row)
+    {
+      mexErrMsgTxt("Usage: veritcal bounds[1] <= size(input,2)");
     }
-    if (_ms != mxGetNumberOfElements(prhs[6])) {
-        mexErrMsgTxt("usage: variance must have numel=numel(variance)");
+    if (_vert_bounds[1] < _vert_bounds[0])
+    {
+      mexErrMsgTxt("Usage: veritcal bounds[1] must be greater than veritcal bounds[0]");
     }
-    const double *_sigma = mxGetPr(prhs[6]); 
-    
-    // extra ground truth weight ==========================================
-    if (!mxIsDouble(prhs[7])) {
-        mexErrMsgTxt("usage: extra_ground_truth must be type double");
+  }
+  else
+  {
+    // Default setting is to process all rows
+    _vert_bounds[0] = 0;
+    _vert_bounds[1] = _row - 1;
+  }
+
+  // mask_dist ==========================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: mask_dist must be type double");
+  }
+  if (mxGetNumberOfElements(prhs[arg]) != _col)
+  {
+    mexErrMsgTxt("usage: mask_dist must have numel(mask_dist)=size(image,2)");
+  }
+  const double *_mask_dist = mxGetPr(prhs[arg]);
+
+  // costmatrix =========================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: costmatrix must be type double");
+  }
+  const double *_costmatrix = mxGetPr(prhs[arg]);
+  const int _costmatrix_X = mxGetM(prhs[arg]);
+  const int _costmatrix_Y = mxGetN(prhs[arg]);
+
+  // transition_weights ===================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]))
+  {
+    mexErrMsgTxt("usage: transition_weights must be type double");
+  }
+  if (mxGetNumberOfElements(prhs[arg]) != _col - 1)
+  {
+    mexErrMsgTxt("usage: transition_weights have numel(transition_weights)=size(image,2)-1");
+  }
+  const double *_transition_weights = mxGetPr(prhs[arg]);
+
+  // mult_weight ===================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]) || mxGetNumberOfElements(prhs[arg]) != 1)
+  {
+    mexErrMsgTxt("usage: mult_weight must be type scalar double");
+  }
+  double _mult_weight = *(double *)mxGetPr(prhs[arg]);
+  if (_mult_weight == -1)
+  {
+    _mult_weight = MULT_WEIGHT;
+  }
+
+  // mult_weight_decay ===================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]) || mxGetNumberOfElements(prhs[arg]) != 1)
+  {
+    mexErrMsgTxt("usage: mult_weight_decay must be type scalar double");
+  }
+  double _mult_weight_decay = *(double *)mxGetPr(prhs[arg]);
+  if (_mult_weight_decay == -1)
+  {
+    _mult_weight_decay = MULT_WEIGHT_DECAY;
+  }
+
+  // mult_weight_local_decay ===================================================
+  arg++;
+  if (!mxIsDouble(prhs[arg]) || mxGetNumberOfElements(prhs[arg]) != 1)
+  {
+    mexErrMsgTxt("usage: mult_weight_local_decay must be type scalar double");
+  }
+  double _mult_weight_local_decay = *(double *)mxGetPr(prhs[arg]);
+  if (_mult_weight_local_decay == -1)
+  {
+    _mult_weight_local_decay = MULT_WEIGHT_LOCAL_DECAY;
+  }
+
+  // zero bin ===================================================
+  arg++;
+  int _zero_bin = 0;
+  if (nrhs >= min_args + 1)
+  {
+    if (!mxIsInt64(prhs[arg]))
+    {
+      mexErrMsgTxt("usage: zero bin must be type int64");
     }
-    if (mxGetNumberOfElements(prhs[7]) != 1) {
-        mexErrMsgTxt("usage: extra_ground_truth must be a scalar");  
-    }    
-    const double *t_egt_weight    = mxGetPr(prhs[7]);
-    const double _egt_weight = t_egt_weight && t_egt_weight < 0 ? EGT_WEIGHT : t_egt_weight[0];
-    
-    // smooth_weight ======================================================
-    if (!mxIsDouble(prhs[8])) {
-        mexErrMsgTxt("usage: smooth_weight must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[8]) != 1) {
-        mexErrMsgTxt("usage: smooth_weight must be a scalar");  
-    }    
-    const double *t_smooth_weight = mxGetPr(prhs[8]);
-    const double _smooth_weight = t_smooth_weight[0] < 0 ? SCALE : t_smooth_weight[0];
-    
-    // smooth_var =========================================================
-    if (!mxIsDouble(prhs[9])) {
-        mexErrMsgTxt("usage: smooth_var must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[9]) != 1) {
-        mexErrMsgTxt("usage: smooth_var must be a scalar");  
-    }    
-    const double *t_smooth_var = mxGetPr(prhs[9]);
-    const double _smooth_var = t_smooth_var[0] < 0 ? SIGMA : t_smooth_var[0];
-    
-    // smooth_slope =======================================================
-    if (!mxIsDouble(prhs[10])) {
-        mexErrMsgTxt("usage: smooth_slope must be type double");
-    }
-    if (_col-1 != mxGetNumberOfElements(prhs[10])) {
-        mexErrMsgTxt("usage: smooth_slope must have numel=size(image,2)-1");
-    }
-    const double *_smooth_slope = mxGetPr(prhs[10]);
-    
-    // bounds =============================================================
-    ptrdiff_t _bounds[2];
-    if (nrhs >= 13 && mxGetNumberOfElements(prhs[11])) {
-        if (!mxIsInt64(prhs[11])) {
-            mexErrMsgTxt("Usage: bounds must be type int64");
-        }
-        if (mxGetNumberOfElements(prhs[11]) != 2) {
-            mexErrMsgTxt("Usage: bounds must be a 2 element vector");
-        }
-        ptrdiff_t *tmp = (ptrdiff_t*)mxGetPr(prhs[11]);
-        _bounds[0] = tmp[0];
-        _bounds[1] = tmp[1];
-        if (_bounds[0] < 0) {
-            _bounds[0] = 0;
-        }
-        if (_bounds[1] < 0) {
-            _bounds[1] = _col;
-        }
-        if (_bounds[0] > _col) {
-            mexErrMsgTxt("Usage: bounds[0] <= size(input,2)");
-        }
-        if(_bounds[1] > _col) {
-            mexErrMsgTxt("Usage: bounds[1] <= size(input,2)");
-        }
-        if(_bounds[1] < _bounds[0]) {
-            mexErrMsgTxt("Usage: bounds[1] must be greater than bounds[0]");
-        }
-    }
-    else {
-        // Default setting is to process all columns
-        _bounds[0] = 0;
-        _bounds[1] = _col;
-    }
-    
-    // weight_points ======================================================
-    if (!mxIsDouble(prhs[12])) {
-        mexErrMsgTxt("usage: weight_points must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[12]) != _col) {
-        mexErrMsgTxt("usage: weight_points must have size(mask,1)=size(image,2)");
-    }   
-    const double *_weight_points  = mxGetPr(prhs[12]);
-    
-    // repulsion ==========================================================
-    if (!mxIsDouble(prhs[13])) {
-        mexErrMsgTxt("usage: repulsion must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[13]) != 1) {
-        mexErrMsgTxt("usage: repulsion must be a scalar");  
-    }    
-    const double *t_repulsion = mxGetPr(prhs[13]);
-    const double _repulsion = t_repulsion[0] < 0 ? REPULSION : t_repulsion[0];
-    
-    // ice_bin_thr ========================================================
-    if (!mxIsDouble(prhs[14])) {
-        mexErrMsgTxt("usage: ice_bin_thr must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[14]) != 1) {
-        mexErrMsgTxt("usage: ice_bin_thr must be a scalar");  
-    }    
-    const double *t_ice_bin_thr = mxGetPr(prhs[14]);
-    const double _ice_bin_thr = t_ice_bin_thr[0] < 0 ? ICE_BIN_THR : t_ice_bin_thr[0];
-        
-    // mask_dist ==========================================================
-    if (!mxIsDouble(prhs[15])) {
-        mexErrMsgTxt("usage: mask_dist must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[15]) != _col) {
-        mexErrMsgTxt("usage: mask_dist must have size(mask,1)=size(image,2)");
-    }   
-    const double *_mask_dist = mxGetPr(prhs[15]);
-    
-    // costmatrix =========================================================
-    if (!mxIsDouble(prhs[16])) {
-        mexErrMsgTxt("usage: costmatrix must be type double");
-    } 
-    const double *_costmatrix = mxGetPr(prhs[16]);
-    const int _costmatrix_X = mxGetM(prhs[16]);
-    const int _costmatrix_Y = mxGetN(prhs[16]);
-    
-    // transition_mu ======================================================
-    if (!mxIsDouble(prhs[17])) {
-        mexErrMsgTxt("usage: transition_mu must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[17]) != _col) {
-        mexErrMsgTxt("usage: transition_mu must have size(mask,1)=size(image,2)");
-    }   
-    const double *_transition_mu = mxGetPr(prhs[17]);
-    
-    // transition_sigma ===================================================
-    if (!mxIsDouble(prhs[18])) {
-        mexErrMsgTxt("usage: transition_sigma must be type double");
-    }
-    if (mxGetNumberOfElements(prhs[18]) != _col) {
-        mexErrMsgTxt("usage: transition_sigma must have size(mask,1)=size(image,2)");
-    }   
-    const double *_transition_sigma = mxGetPr(prhs[18]);
-    
-    // ====================================================================
-    
-    // Initialize surface layer array
-    int _sgt[_col];
-    for (int k = 0; k < _col; ++k) {
-        _sgt[k] = (int)_surf_tr[k];
-    }
-    
-    // Initialize variables to default values if temporary values not set
-    const int _mid = floor(_col / 2);
-    const int _bgt = ((t_bott_tr) ? (t_bott_tr[0] > 0 ? round(t_bott_tr[0]) : -1) : -1);
-    
-    double _egt_x[(_num_extra_tr / 2)], _egt_y[(_num_extra_tr / 2)];
-    for (int p = 0; p < (_num_extra_tr / 2); ++p) {
-        _egt_x[p] = t_egt[(p * 2)];
-        _egt_y[p] = t_egt[(p * 2) + 1];
-    }
-    
-    // Allocate output    
-    plhs[0] = mxCreateDoubleMatrix(1, _col, mxREAL);
-    double *_result = mxGetPr(plhs[0]); 
-    viterbi obj(_row, _col, _image, _sgt, _bgt, _mask, _mu, _sigma, _mid, 
-        _egt_weight, _smooth_weight, _smooth_var, _smooth_slope, _bounds, 
-        _ms, _num_extra_tr, _egt_x, _egt_y, _weight_points, _repulsion, 
-        _ice_bin_thr, _mask_dist, _costmatrix, _costmatrix_X, _costmatrix_Y,
-        _transition_mu, _transition_sigma, _result); 
+    _zero_bin = *(int *)mxGetPr(prhs[arg]) - 1;  // Account for matlab 1-indexing
+  }
+
+  // ====================================================================
+
+  // Assert arg == max_args
+  if (arg != max_args - 1)
+  {
+    mexErrMsgTxt("BUG: Viterbi.cpp mex function args incorrectly ordered.");
+  }
+
+  // Account for Matlab 1-indexing
+  double _layers_indexed[_col * _num_layers];
+  for (int k = 0; k < _col * _num_layers; k++)
+  {
+    _layers_indexed[k] = round(_layers[k]) - 1;
+  }
+
+  // Allocate output
+  plhs[0] = mxCreateDoubleMatrix(1, _col, mxREAL);
+  double *_result = mxGetPr(plhs[0]);
+  viterbi obj(_row, _col, _image, _num_layers, _layers_indexed, _layer_costs, 
+    _layer_cutoffs, _mask, _img_mag_weight, _smooth_slope, _max_slope, _hori_bounds, 
+    _vert_bounds, _mask_dist, _costmatrix, _costmatrix_X, _costmatrix_Y, 
+    _transition_weights, _mult_weight, _mult_weight_decay, _mult_weight_local_decay, 
+    _zero_bin, _result);
 }

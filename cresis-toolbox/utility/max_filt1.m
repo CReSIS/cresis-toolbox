@@ -14,7 +14,7 @@ size_x = size(x);
 y = zeros(size_x);
 
 if size(x,1) == 1
-  y = max_filt1_1D(x.',n).';
+  y = max_filt1_1D(x.',n);
 else
   for col = 1:prod(size_x(2:end))
     y(:,col) = max_filt1_1D(x(:,col),n);

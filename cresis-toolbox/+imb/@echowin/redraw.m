@@ -178,12 +178,20 @@ else
     % No frames changed
     % Update echogram surface if there are enough good points from OPS
     % Find good surface points
-    good_mask = ~isnan(obj.eg.layers.y{obj.eg.layers.lyr_id==1});
-    if sum(good_mask) > 2
-      % There are surface layer points in the database, overwrite the surface
-      % with these
-      obj.eg.surf_twtt = interp1(obj.eg.map_gps_time(good_mask),obj.eg.layers.y{obj.eg.layers.lyr_id==1}(good_mask),obj.eg.gps_time);
-      obj.eg.surf_twtt = interp_finite(obj.eg.surf_twtt,0);
+    if ~isempty(obj.eg.layers.lyr_id)
+      if isempty(obj.eg.layers.surf_id) || all(obj.eg.layers.surf_id ~= obj.eg.layers.lyr_id)
+        % Surface ID not set yet, assume it is the minimum
+        obj.eg.layers.surf_id = min(obj.eg.layers.lyr_id);
+      end
+      % good_mask: logical vector with 1 where the twtt of the surface is a number and 0
+      % when NaN.
+      good_mask = ~isnan(obj.eg.layers.y{obj.eg.layers.lyr_id==obj.eg.layers.surf_id});
+      if sum(good_mask) > 2
+        % There are surface layer points in the database, overwrite the surface
+        % with these
+        obj.eg.surf_twtt = interp1(obj.eg.map_gps_time(good_mask),obj.eg.layers.y{obj.eg.layers.lyr_id==1}(good_mask),obj.eg.gps_time);
+        obj.eg.surf_twtt = interp_finite(obj.eg.surf_twtt,0);
+      end
     end
     obj.plot_echogram(x_min,x_max,y_min,y_max);
     obj.plot_layers();

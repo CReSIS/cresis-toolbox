@@ -17,7 +17,7 @@ function gps = read_gps_dmsraw(fn,param)
 %
 % Author: Huan Zhao, John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 [fid,msg] = fopen(fn,'r');
 if fid < 1

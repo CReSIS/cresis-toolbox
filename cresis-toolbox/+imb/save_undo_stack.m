@@ -168,10 +168,11 @@ for cur_layer = unique_layers
           if isempty(lay_idx)
             % Layer does not exist in this layerData file yet
             lay_idx = length(undo_stack.user_data.layer_info(frm).id) + 1;
+            Nx = length(undo_stack.user_data.layer_info(frm).gps_time);
             undo_stack.user_data.layer_info(frm).id(lay_idx) = cur_layer;
-            undo_stack.user_data.layer_info(frm).quality(lay_idx,:) = ones(size(undo_stack.user_data.layer_info(frm).gps_time));
-            undo_stack.user_data.layer_info(frm).twtt(lay_idx,:) = nan(size(undo_stack.user_data.layer_info(frm).gps_time));
-            undo_stack.user_data.layer_info(frm).type(lay_idx,:) = 2*ones(size(undo_stack.user_data.layer_info(frm).gps_time));
+            undo_stack.user_data.layer_info(frm).quality(lay_idx,:) = ones(1,Nx);
+            undo_stack.user_data.layer_info(frm).twtt(lay_idx,:) = nan(1,Nx);
+            undo_stack.user_data.layer_info(frm).type(lay_idx,:) = 2*ones(1,Nx);
           end
           
           % Update quality
@@ -259,9 +260,9 @@ for cur_layer = unique_layers
           % Create a mask for the modified points that is this frame only
           Nx = sum(undo_stack.user_data.frame == frm);
           lay_idx = length(undo_stack.user_data.layer_info(frm).id) + 1;
-          undo_stack.user_data.layer_info(frm).twtt(lay_idx,:) = nan(1,Nx);
-          undo_stack.user_data.layer_info(frm).quality(lay_idx,:) = ones(1,Nx);
-          undo_stack.user_data.layer_info(frm).type(lay_idx,:) = 2*ones(1,Nx);
+          undo_stack.user_data.layer_info(frm).twtt(lay_idx,1:Nx) = nan(1,Nx);
+          undo_stack.user_data.layer_info(frm).quality(lay_idx,1:Nx) = ones(1,Nx);
+          undo_stack.user_data.layer_info(frm).type(lay_idx,1:Nx) = 2*ones(1,Nx);
           undo_stack.user_data.layer_info(frm).id(lay_idx) = id;
           layerdata_frms(end+1) = frm;
         end
@@ -342,7 +343,7 @@ if strcmpi(undo_stack.user_data.layer_source,'layerdata')
     else
       lay = undo_stack.user_data.layer_info(frm);
       layer_fn = undo_stack.user_data.filename{frm};
-      ct_save(layer_fn,'-struct','lay') % saving to layerData file
+      ct_save(layer_fn,'-struct','lay') % saving to layer data file
     end
   end
 end

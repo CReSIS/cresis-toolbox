@@ -63,6 +63,9 @@ do
   fi
 done
 MCR_CACHE_ROOT=$MCR_CACHE_ROOT/`hostname`
+# Export MCR_CACHE_ROOT so that the child processes that cluster_job.sh
+# creates will have the environment variable too.
+export MCR_CACHE_ROOT
 
 # =========================================================================
 # ATTEMPT TO RUN CLUSTER_JOB.M UP TO MAX_ATTEMPTS TIMES
@@ -105,7 +108,7 @@ do
     # Update maximum memory and maximum CPU
 
     child_proc=`ps -eo ppid,pid | sed -n "/^\s*$parent_pid\s*$child_pid/p" | awk '{print $2}'`
-    sleep 0.5
+    sleep 0.1
   done
   echo "Max Mem (KB):" $max_mem
   echo "Max CPU (MM:SS):" $max_cpu

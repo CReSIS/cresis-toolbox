@@ -11,7 +11,7 @@
 
 %% User Settings
 
-params = read_param_xls(ct_filename_param('snow_param_2017_Greenland_P3.xls'));
+params = read_param_xls(ct_filename_param('snow_param_2019_SouthDakota_CESSNA.xls'));
 params = ct_set_params(params,'cmd.generic',1);
 params = ct_set_params(params,'cmd.generic',0,'cmd.notes','Do not process');
 
@@ -60,14 +60,15 @@ for param_idx = 1:length(params)
     mkdir(kml_dir)
   end
   
-  records_fn = ct_filename_support(param, '', 'records');
-  fprintf('Loading %s\n', records_fn);
-  records = load(records_fn);
-  UTC_sod = epoch_to_sod(records.gps_time,param.day_seg(1:8));
-  
-  frames_fn = ct_filename_support(param, '', 'frames');
-  fprintf('Loading %s\n', frames_fn);
-  load(frames_fn);
+  try
+    records = records_load(param);
+    UTC_sod = epoch_to_sod(records.gps_time,param.day_seg(1:8));
+    
+    frames = frames_load(param);
+  catch ME
+    warning(ME.getReport);
+    continue;
+  end
   
   % Create new filename
   csv_fn = sprintf('Browse_Data_%s.csv',param.day_seg);

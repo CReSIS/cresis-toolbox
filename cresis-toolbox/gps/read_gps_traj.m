@@ -55,7 +55,7 @@ function gps = read_gps_traj(in_fn, param)
 %
 % Author: John Paden, Kyle Purdon
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 % Set Defaults (If var does not exist)
 if ~isfield(param,'headerlines')

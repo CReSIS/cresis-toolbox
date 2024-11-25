@@ -10,11 +10,19 @@ function cluster_job(task_in_fn_dir,task_out_fn_dir,task_ids,num_proc)
 %
 % Author: John Paden
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list, 
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% Author: John Paden
+%
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 if ~exist('task_in_fn_dir','var')
   task_in_fn_dir = getenv('INPUT_PATH');
@@ -99,16 +107,20 @@ for task_idx = 1:length(task_ids)
   eval_cmd = sprintf('%s);', eval_cmd);
   
   % Evaluate command
+  global gRadar;
   try
     argsout = {};
     fprintf('%s: %s\n', mfilename, param.notes);
     fprintf('%s: Eval %s\n', mfilename, eval_cmd);
+    gRadar.cluster.is_cluster_job = true;
     eval(eval_cmd);
+    gRadar.cluster.is_cluster_job = false;
     fprintf('%s: Done Eval (%s)\n', mfilename, datestr(now));
     errorstruct = [];
     cpu_time_actual = toc(cluster_task_start_time);
     save(out_fn,param.file_version,'argsout','errorstruct','cpu_time_actual');
   catch errorstruct
+    gRadar.cluster.is_cluster_job = false;
     fprintf('%s: Error\n  %s: %s (%s)\n', mfilename, errorstruct.identifier, errorstruct.message, datestr(now));
     for stack_idx = 1:length(errorstruct.stack)
       fprintf('  %s: %d\n', errorstruct.stack(stack_idx).name, errorstruct.stack(stack_idx).line);

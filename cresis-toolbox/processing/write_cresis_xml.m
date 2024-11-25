@@ -586,7 +586,10 @@ out_xml_fn_dir = fileparts(out_xml_fn);
 if ~exist(out_xml_fn_dir,'dir')
   mkdir(out_xml_fn_dir);
 end
-fid = fopen(out_xml_fn,'w');
+[fid,msg] = fopen(out_xml_fn,'w');
+if fid == -1
+  error(msg);
+end
 fprintf(fid,'<?xml version=''1.0'' standalone=''yes'' ?>\n');
 fprintf(fid,'<LVData xmlns="http://www.ni.com/LVData">\n');
 write_ni_xml_object(settings_enc,fid,true,struct('array_list','Waveforms','enum_list','DDCZ20sel'));
@@ -604,10 +607,10 @@ if isfield(param,'arena')
   end
   
   % Create arena parameter structure
-  arena = struct('version','1');
-  arena.awg = param.arena.awg;
-  arena.dacs = param.arena.dacs;
-  arena.dacs_sampFreq = param.arena.dacs_sampFreq;
+  arena = param.arena;
+%   arena.awg = param.arena.awg;
+  arena.dac = param.arena.dac;
+%   arena.dacs_sampFreq = param.arena.dacs_sampFreq;
   arena.dacs_internal_delay = param.arena.dacs_internal_delay;
   arena.dacs_start_delay = param.arena.dacs_start_delay;
   arena.zeropimods = param.arena.zeropimods;
@@ -628,36 +631,46 @@ if isfield(param,'arena')
     arena.wfs(wf).tukey = settings_enc.sys.DDSZ5FSetup.RAMZ20Taper;
     arena.wfs(wf).enabled = fliplr(~logical(dec2bin(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).TXZ20Mask(1),8)-'0'));
     arena.wfs(wf).scale = double(settings_enc.sys.DDSZ5FSetup.RamZ20Amplitude) .* param.arena.max_tx ./ max_DDS_amp;
-    arena.wfs(wf).fc = (settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq ...
-      + settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq)/2;
-    arena.wfs(wf).BW = abs(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq ...
-      - settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq);
+      arena.wfs(wf).f0 = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq;
+      arena.wfs(wf).f1 = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq;
+%     arena.wfs(wf).fc = (settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq ...
+%       + settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq)/2;
+%     arena.wfs(wf).BW = abs(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StopZ20Freq ...
+%       - settings_enc.sys.DDSZ5FSetup.Waveforms(wf).StartZ20Freq);
     arena.wfs(wf).delay = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).Delay - min_delay;
     arena.wfs(wf).phase = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).PhaseZ20Offset;
     arena.wfs(wf).Tpd = double(settings_enc.sys.DDSZ5FSetup.Waveforms(wf).LenZ20Mult) ...
       * settings_enc.sys.DDSZ5FSetup.BaseZ20Len;
     arena.wfs(wf).presums = settings_enc.sys.DDSZ5FSetup.Waveforms(wf).Presums;
   end
-  
-  % Create XML document
-  doc = write_arena_xml([],'init',arena);
-  doc = write_arena_xml(doc,'ctu_0013',arena);
-  doc = write_arena_xml(doc,'dac-ad9129_0014',arena);
-  doc = write_arena_xml(doc,'dac-ad9129_0014_waveform',arena);
-  doc = write_arena_xml(doc,'psc_0001',arena);
-  doc = write_arena_xml(doc,'subsystems',arena);
-  
-  out_str = xmlwrite(doc);
-  out_str = ['<!DOCTYPE systemXML>' out_str(find(out_str==10,1):end)];
-  [~,rss_fn_name] = fileparts(param.fn);
-  rss_fn = fullfile(param.rss_base_dir,[rss_fn_name '.xml']);
-  if ~exist(param.rss_base_dir,'dir')
-    mkdir(param.rss_base_dir);
-  end
-  fprintf('  Writing RSS: %s\n', rss_fn);
-  fid = fopen(rss_fn,'w');
-  fwrite(fid,out_str,'char');
-  fclose(fid);
+
+    % Create XML document
+    xml_param = param;
+    xml_param.wfs = arena.wfs;
+    xml_param.prf = 1/arena.PRI;
+    xml_param.arena = arena;
+    xml_param.arena.adc = [];
+    xml_param.board_map = {};
+
+    [~,xml_param.arena.psc_name] = ct_fileparts(out_xml_fn);
+    xml_param.arena.fn = fullfile(param.arena_base_dir,[xml_param.arena.psc_name '.xml']);
+
+    [doc,xml_param] = write_arena_xml([],xml_param);
+
+    % Create XML document
+    out_str = xmlwrite(doc);
+    out_str = ['<!DOCTYPE systemXML>' out_str(find(out_str==10,1):end)];
+    arena_fn_dir = fileparts(xml_param.arena.fn);
+    if ~exist(arena_fn_dir,'dir')
+      mkdir(arena_fn_dir);
+    end
+    fprintf('  Writing Arena XML: %s\n', xml_param.arena.fn);
+    [fid,msg] = fopen(xml_param.arena.fn,'w');
+    if fid == -1
+      error(msg);
+    end
+    fwrite(fid,out_str,'char');
+    fclose(fid);
   
 end
 

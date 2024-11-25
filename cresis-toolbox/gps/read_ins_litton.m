@@ -37,7 +37,7 @@ function gps = read_ins_litton(litton_fn, param)
 % 
 % Author: John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 if ischar(litton_fn)
   tmp = litton_fn;

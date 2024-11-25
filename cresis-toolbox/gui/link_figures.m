@@ -12,6 +12,9 @@ function [h_axes] = link_figures(h_fig,option)
 %
 % See also: linkaxes.m
 
+if ~exist('h_fig','var') || isempty(h_fig)
+  h_fig = get(0,'Children');
+end
 if ~exist('option','var') || isempty(option)
   option = 'xy';
 end
@@ -19,10 +22,12 @@ end
 % Get all the axes children of each figure that is passed in
 h_axes = [];
 for fig_idx = 1:length(h_fig)
-  h_children = get(h_fig(fig_idx),'children');
-  for child_idx = 1:length(h_children)
-    if isa(h_children(child_idx),'matlab.graphics.axis.Axes')
-      h_axes(end+1) = h_children(child_idx);
+  try
+    h_children = get(h_fig(fig_idx),'children');
+    for child_idx = 1:length(h_children)
+      if isa(h_children(child_idx),'matlab.graphics.axis.Axes')
+        h_axes(end+1) = h_children(child_idx);
+      end
     end
   end
 end

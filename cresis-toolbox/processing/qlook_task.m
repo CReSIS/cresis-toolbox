@@ -7,7 +7,6 @@ function [success] = qlook_task(param)
 % param = struct controlling the loading, processing, surface tracking,
 %   and quick look generation
 %  .load = structure for which records to load
-%   .records_fn = filename of records file
 %   .recs = current records
 %   .imgs = cell vector of images to load, each image is Nx2 array of
 %     wf/adc pairs
@@ -42,10 +41,14 @@ function [success] = qlook_task(param)
 %  .roll_correction = boolean, whether or not to apply roll phase correction
 %  .lever_arm_fh = string containing function name
 %  .elev_correction = boolean, whether or not to apply elevation phase correction
-%  .B_filter = double vector, FIR filter coefficients to apply before
+%  .B_filter: double vector, FIR filter coefficients to apply before
 %    decimating, this function loads data before and after this frame
-%    (if available) to avoid transients at the beginning and end
-%  .dec = positive integer, decimation rate
+%    (if available) to avoid transients at the beginning and end of the
+%    processing block. This filter controls how coherent averaging is done
+%    (AKA stacking, presumming, or unfocused SAR). Default value is a
+%    boxcar filter of length equal to the decimation rate or
+%    ones(1,qlook.dec)/qlook.dec.
+%  .dec: positive integer, decimation rate
 %  .inc_B_filter: double vector, FIR filter coefficients to apply before
 %    incoherent average decimation. If not defined or empty, then
 %    inc_B_filter is set to ones(1,inc_dec)/inc_dec.
@@ -87,7 +90,6 @@ physical_constants;
 
 %% Load records file
 % =========================================================================
-records_fn = ct_filename_support(param,'','records');
 
 % Adjust the load records to account for filtering and decimation. Care is
 % taken to ensure that when blocks and frames are concatenated together,
@@ -116,21 +118,45 @@ output_recs_ps = output_recs_ps(output_recs_ps >= load_recs_ps(1));
 % Determine number of records before/after the start/stop output record
 % that are needed for the filtering
 start_buffer_ps = (length(param.qlook.inc_B_filter)-1)/2*param.qlook.dec + (length(param.qlook.B_filter)-1)/2;
-stop_buffer_ps = (length(param.qlook.inc_B_filter)-1)/2*param.qlook.dec + (length(param.qlook.B_filter)-1)/2;
+stop_buffer_ps = start_buffer_ps;
+
+% If do Doppler spikes nulling, set the default parameters for the equivalent adaptive notch filter
+% at the end of data_pulse_compress.m. These parameters include the extra buffers at the start and 
+% end of the data blocks in terms of a factor of the data block size to avoid bounary artifact 
+% from fft and ifft transforms, and range bins to filt through, thresholds for Doppler noise and surface signals.
+% (see more detailed descriptions in data_pulse_compress.m)
+if isfield(param.radar.wfs,'DSN') && param.radar.wfs.DSN.en
+  if ~isfield(param.radar.wfs.DSN,'rbin_clusters') || isempty(param.radar.wfs.DSN.rbin_clusters)
+    param.radar.wfs.DSN.rbin_clusters = [1,inf];
+  end
+  if ~isfield(param.radar.wfs.DSN,'theshold') || isempty(param.radar.wfs.DSN.threshold)
+    param.radar.wfs.DSN.threshold = 10;
+  end
+  if ~isfield(param.radar.wfs.DSN,'surf_theshold') || isempty(param.radar.wfs.DSN.threshold)
+    param.radar.wfs.DSN.surf_threshold = 20;
+  end
+  if ~isfield(param.radar.wfs.DSN,'block_overlap_factor') || isempty(param.radar.wfs.DSN.block_overlap_factor)
+    param.radar.wfs.DSN.block_overlap_factor = 0.1;
+  end
+  start_buffer_ps = start_buffer_ps + round(param.radar.wfs.DSN.block_overlap_factor*param.qlook.block_size);
+  stop_buffer_ps = start_buffer_ps;
+end
 
 % Adjust start_buffer_ps in case at the beginning of the segment
 start_buffer_ps = start_buffer_ps - max(0,(1- (output_recs_ps(1) - start_buffer_ps) ));
 
 % These are the input records (in presummed record counts)
 input_recs_ps(1) = output_recs_ps(1) - start_buffer_ps;
-input_recs_ps(2) = output_recs_ps(end) + stop_buffer_ps + 1;
+% input_recs_ps(2) = output_recs_ps(end) + stop_buffer_ps + 1;
+input_recs_ps(2) = output_recs_ps(end) + stop_buffer_ps;
 
 % These are the input records in raw record counts
 param.load.recs(1) = param.qlook.presums * (input_recs_ps(1) - 1) + 1;
-param.load.recs(2) = param.qlook.presums * input_recs_ps(2);
+% param.load.recs(2) = param.qlook.presums * input_recs_ps(2);
+param.load.recs(2) = param.qlook.presums * (input_recs_ps(2)-1) + 1;
 
 % Load the records
-records = records_aux_files_read(records_fn,param.load.recs);
+records = records_load(param,param.load.recs);
 
 % Adjust stop_buffer_ps and loaded records in case at the end of the segment
 stop_buffer_ps = stop_buffer_ps + floor(length(records.gps_time)/param.qlook.presums) - (diff(input_recs_ps)+1);
@@ -173,12 +199,11 @@ param.radar.wfs = merge_structs(param.radar.wfs,wfs);
 % =========================================================================
 param.load.raw_data = false;
 param.load.presums = param.qlook.presums;
-param.load.bit_mask = 1; % Skip bad records marked in records.bit_mask
+param.load.bit_mask = param.qlook.bit_mask; % Skip bad records marked in records.bit_mask
 [hdr,data] = data_load(param,records,states);
 
 param.load.pulse_comp = true;
 [hdr,data,param] = data_pulse_compress(param,hdr,data);
-
 param.load.motion_comp = param.qlook.motion_comp;
 param.load.combine_rx = true;
 [hdr,data] = data_merge_combine(param,hdr,data);
@@ -216,9 +241,7 @@ for img = 1:length(param.load.imgs)
     nanmask = isnan(data{img});
     data{img}(nanmask) = 0;
     data{img} = fft(data{img},[],1);
-    for wf_adc = 1:size(param.load.imgs{img},1)
-      data{img} = data{img} .* exp(1j*2*pi*freq*relative_td);
-    end
+    data{img} = data{img} .* exp(1j*2*pi*freq*relative_td);
     data{img} = ifft(data{img},[],1);
     
     % Relative time delay to reference time delay in time bin units
@@ -237,7 +260,7 @@ for img = 1:length(param.load.imgs)
   
   if param.qlook.nan_dec
     data{img} = nan_fir_dec(data{img}, param.qlook.B_filter, ...
-      param.qlook.dec, rline0, Nidxs);
+      param.qlook.dec, rline0, Nidxs, [], [], param.qlook.nan_dec_normalize_threshold);
   else
     data{img} = fir_dec(data{img}, param.qlook.B_filter, ...
       param.qlook.dec, rline0, Nidxs);
@@ -251,9 +274,7 @@ for img = 1:length(param.load.imgs)
     nanmask = isnan(data{img});
     data{img}(nanmask) = 0;
     data{img} = fft(data{img},[],1);
-    for wf_adc = 1:size(param.load.imgs{img},1)
-      data{img} = data{img} .* exp(-1j*2*pi*freq*relative_td);
-    end
+    data{img} = data{img} .* exp(-1j*2*pi*freq*relative_td);
     data{img} = ifft(data{img},[],1);
     
     % Relative time delay to reference time delay in time bin units
@@ -309,6 +330,7 @@ if param.qlook.inc_dec >= 1
     % Remove elevation variations
     if param.load.motion_comp
       % Relative time delay to reference time delay in time bin units
+      dt = hdr.time{img}(2) - hdr.time{img}(1);
       relative_bins = round( relative_td / dt);
       % Add zero padding (NaNs)
       data{img} = [data{img}; nan(zero_pad,size(data{img},2))];
@@ -320,7 +342,7 @@ if param.qlook.inc_dec >= 1
     
     if param.qlook.nan_dec
       data{img} = nan_fir_dec(abs(data{img}).^2, param.qlook.inc_B_filter, ...
-        param.qlook.inc_dec, rline0, Nidxs);
+        param.qlook.inc_dec, rline0, Nidxs, [], [], param.qlook.nan_dec_normalize_threshold);
     else
       data{img} = fir_dec(abs(data{img}).^2, param.qlook.inc_B_filter, ...
         param.qlook.inc_dec, rline0, Nidxs);

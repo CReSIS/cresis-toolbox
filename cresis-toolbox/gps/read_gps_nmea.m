@@ -1,22 +1,23 @@
-function gps = read_gps_nmea(in_fn, param)
-% gps = read_gps_nmea(in_fn, param)
+function gps = read_gps_nmea(in_fns, param)
+% gps = read_gps_nmea(in_fns, param)
 %
 % Reads in NMEA files and modified NMEA files that include the MCRDS
-% radar time stamps.  GPS file must contain only GPGGA strings!!! If 
-% non-compatible strings are present you must remove them. In Linux:
-%   grep GPGGA OLD_FILENAME >NEW_FILENAME
+% radar time stamps.
 %
+% Example strings:
 % $GPGGA,120448.00,6952.4649165,N,03256.5105286,W,1,10,0.80,3135.1254,M,55.3383,M,,*7B
 % $GPGGA,221343.00,7928.1873712,S,11203.3163302,W,0,10,   ,1769.932,M,     , , ,*5e
+% $GPGGA,151922.00,4402.1108,N,10330.6311,W,1,08,0.0,2030.41,M,-14.10,M,,*69
+% $GPZDA,151923.00,02,03,2021,,*6B
+% $GPRMC,194325.010,A,3857.135037,N,09515.861757,W,0.000,0.00,121018,,,A*46
+%
+% Special MCRDS GPS string with radar timing at the end:
+% $GPGGA,163202.50,6909.94391,N,05045.73509,W,1,10,01.1,+00351,M,,M,,*6E,1216243966,190018,0,1204901900
 %
 % Input Args:
-%   in_fn = string containing input NMEA filename
-%     OR cell array of strings containging input NMEA filenames
-%     If the length of the cell array is one, then it operates on that one
-%     file as if just a string was passed in. If the length is more than
-%     one, then param.combine is set to true.
-%   param = tells the file GPS type and the year, month, day to determine
-%     absolute time (GGA NMEA files just give the time of day)
+%   in_fns: string containing input NMEA filename
+%     OR cell array of strings containing input NMEA filenames
+%   param: controls how the NMEA file is read
 %     .format = scalar integer from 1 to 4, default is 1
 %       1. Standard NMEA
 %       2. Standard NMEA comp_time_sec comp_time_usec
@@ -25,30 +26,25 @@ function gps = read_gps_nmea(in_fn, param)
 %       3. Standard NMEA comp_time_sec comp_time_usec radar_32MSB radar_32LSB
 %          radar_32MSB*2^32 + radar_32LSB (64 bit MCRDS radar time, 10 MHz clock)
 %       4. From reveal system
-%     .year
-%     .month
-%     .day
+%     .year: Optionally override the year (this field must be set if the
+%       NMEA strings do not include the date)
+%     .month: Optionally override the year (this field must be set if the
+%       NMEA strings do not include the date)
+%     .day: Optionally override the year (this field must be set if the
+%       NMEA strings do not include the date)
 %     .time_reference = 'gps' or 'utc' (should always be 'utc')
-%     .combine = logical (default is false)
-%        When enabled, all input files will be concatenated together
-%        in the temp directory and this file will be used.
-%        If in_fn is a string, then a search is done for all files in the
-%        directory specified by in_fn which have the string YYYYMMDD in
-%        their filename.
-%        If in_fn is a cell array, then these specific files will be used.
-%     .nmea_tag = NEMA string to identify good lines (e.g. '$GPGGA')
 %
 % Output Args:
-% gps = output structure with fields
-%  .time = GPS time in seconds since Jan 1, 1970 epoch (sec)
-%  .lat = latitude (deg)
-%  .lon = longitude (deg)
-%  .elev = elevation (m)
-%  .roll = roll (rad)
-%  .pitch = pitch (rad)
-%  .heading = true heading (rad)
-%  .comp_time = computer time in seconds since Jan 1, 1970 epoch (sec)
-%  .radar_time = radar time, 64 bit counter free-running at 10 MHz
+% gps: output structure with fields
+%  .gps_time: GPS time in seconds since Jan 1, 1970 epoch (sec)
+%  .lat: latitude (deg)
+%  .lon: longitude (deg)
+%  .elev: elevation (m)
+%  .roll: roll (rad)
+%  .pitch: pitch (rad)
+%  .heading: true heading (rad)
+%  .comp_time: computer time in seconds since Jan 1, 1970 epoch (sec)
+%  .radar_time: radar time, 64 bit counter free-running at 10 MHz
 %
 % Example:
 %   fn = '/cresis/data2/MCoRDS/2010_Antarctica/GPS_new/GGA/RevealGPS_20100103A';
@@ -58,255 +54,213 @@ function gps = read_gps_nmea(in_fn, param)
 %   gps.utc_time = gps.gps_time - utc_leap_seconds(gps.gps_time(1))
 %   gps_plot(gps)
 %
+%   fn = '/cresis/snfs1/dataproducts/metadata/2020_SouthDakota_N1KU/20210302/GPS_20210302_151952.txt';
+%   gps = read_gps_nmea(fn);
+%   gps_plot(gps);
+%
+%   fn = '/cresis/snfs1/dataproducts/metadata/2008_Greenland_TO/nmea.20080716163242.gps';
+%   gps = read_gps_nmea(fn,struct('year',2008,'month',7,'day',16));
+%   gps_plot(gps);
+%
 % Author: William Blake, John Paden, Anthony Hoch, Logan Smith
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
-global gRadar
+if ~exist('param','var')
+  param = [];
+end
 
-debug_level = 1;
+if ~isfield(param,'year') || isempty(param.year)
+  param.year = NaN;
+end
 
-if ~exist('param','var') || isempty(param)
-  error('Year, month, day must be specified in param struct');
+if ~isfield(param,'month') || isempty(param.month)
+  param.month = NaN;
 end
-if ~isfield(param,'format')
-  param.format = 1;
+
+if ~isfield(param,'day') || isempty(param.day)
+  param.day = NaN;
 end
-if ~isfield(param,'combine')
-  param.combine = 0;
+
+if ~isfield(param,'time_reference') || isempty(param.time_reference)
+  param.time_reference = 'utc';
 end
-if iscell(in_fn)
-  % If in_fn is a cell array of more than one file name, then we need
-  % to combined all of these files
-  if length(in_fn) == 1
-    in_fn = in_fn{1};
-  else
-    param.combine = 1;
+
+if ischar(in_fns)
+  in_fns = {in_fns};
+end
+
+for in_fns_idx = 1:length(in_fns)
+  in_fn = in_fns{in_fns_idx};
+  fprintf('Opening_file\t%s\n', in_fn);
+  if ~exist(in_fn,'file')
+    error('File does not exist %s\n', in_fn);
   end
-end
 
-if param.combine
-  date_str = sprintf('%04d%02d%02d',param.year,param.month,param.day);
-  if iscell(in_fn)
-    % in_fn is already of cell array of filenames
-    in_fns = in_fn;
-  else
-    in_fns = get_filenames(in_fn,'',date_str,'');
+  [fid,msg] = fopen(in_fn,'rb');
+  if fid < 0
+    error('Error opening %s: %s', in_fn, msg);
   end
-  tmp_nmea_path = fullfile(gRadar.tmp_path,sprintf('tmp_nmea_%s.txt',date_str));
-  syscmd = sprintf('cat %s > %s',in_fns{1},tmp_nmea_path);
-  system(syscmd);
-  for idx=2:length(in_fns)
-    syscmd = sprintf('cat %s >> %s',in_fns{idx},tmp_nmea_path);
-    system(syscmd);
-  end
-  in_fn = tmp_nmea_path;
-end
 
-if ~exist(in_fn,'file')
-  error('File does not exist %s\n', in_fn);
-end
-
-%   LOAD NMEA FILE
-
-switch param.format
-  case 1
-    format_str = '%s%f%f%c%f%c%u%u%f%f%c%f%c%s%s';
-  case 2
-    format_str = '%s%f%f%c%f%c%u%u%f%f%c%f%c%s%s%f%f';
-  case 3
-    format_str = '%s%f%f%c%f%c%u%u%f%f%c%f%c%s%s%f%f%f%f';
-  case 4
-    format_str = '%s%f%f%c%f%c%u%u%f%f%f%f%s';
-  case 5
-    format_str = '%s%f%f%c%f%c%u%u%f%f%c%f%c%s%s%f%f%f%f';
-end
-
-[fid,msg] = fopen(in_fn,'r');
-if fid < 0
-  error('Error opening %s: %s', in_fn, msg);
-end
-finfo = dir(in_fn);
-C_final = {};
-num_lines = 0;
-while ftell(fid) < finfo.bytes
-  % This reader uses textscan to read in the file. If textscan finds a bad
-  % line, it stops reading before the end of the file
-  C = textscan(fid,format_str,'delimiter',', ','emptyvalue',NaN);
-  good_lines = length(C{end});
-  num_lines = num_lines + good_lines+1;
-  if ftell(fid) < finfo.bytes
-    readchar = fread(fid,1,'uint8');
-    while readchar ~= 10 && ftell(fid) > 1
-      fseek(fid,-2,0);
-      readchar = fread(fid,1,'uint8');
+  file_contents = fread(fid,inf,'char=>char').';
+  fclose(fid);
+  
+  line_start_idxs = [find(file_contents=='$') numel(file_contents)+1];
+  gps_idx = 0;
+  gps.gps_time = nan(1,length(line_start_idxs));
+  gps.lat = nan(1,length(line_start_idxs));
+  gps.lon = nan(1,length(line_start_idxs));
+  gps.elev= nan(1,length(line_start_idxs));
+  gps.comp_time = nan(1,length(line_start_idxs));
+  gps.radar_time = nan(1,length(line_start_idxs));
+  cur_hour = NaN;
+  cur_min = NaN;
+  cur_sec = NaN;
+  start_time = -inf;
+  for line = 1:length(line_start_idxs)-1
+    if now > start_time+1/86400
+      fprintf('File_line\t%d\tof\t%d\t%s\n', line, length(line_start_idxs), datestr(now,'yyyymmdd_HHMMSS'));
+      start_time = now;
     end
-    readline = fgets(fid);
-    if readline(end) ~= 10
-      readline(end+1) = 10;
-    end
-    fprintf('Bad line %d: %s', num_lines, readline);
-  end
-  Clength = cellfun(@length,C);
-  if good_lines > 0
-    for field_idx = 1:length(C)
-      if length(C_final) < field_idx
-        C_final{field_idx} = C{field_idx}(1:good_lines,1);
-      else
-        C_final{field_idx} = cat(1,C_final{field_idx}, C{field_idx}(1:good_lines));
+    line_str = file_contents(line_start_idxs(line) : line_start_idxs(line+1)-1);
+    
+    comma_idxs = find(line_str == ',');
+    star_idx = find(line_str == '*');
+    
+    if length(comma_idxs) > 1 && ~isempty(star_idx) && length(line_str) >= star_idx(end)+2
+      line_uint8 = uint8(line_str);
+      
+      % This is a simple calculator to compute the checksum field for the
+      % NMEA protocol. The checksum is simple, just an XOR of all the bytes
+      % between the $ and the * (not including the delimiters themselves),
+      % and written in hexadecimal.
+      check_sum = line_uint8(2);
+      for idx = 3:star_idx-1
+        check_sum = bitxor(check_sum,line_uint8(idx));
+      end
+      
+      if check_sum == sscanf(line_str(star_idx(end)+(1:2)),'%x')
+        % Checksum is correct
+        
+        if strcmp('GPGGA',line_str(2:comma_idxs(1)-1)) && length(comma_idxs) >= 10 ...
+            && comma_idxs(2) - comma_idxs(1) >= 2 ...
+            && comma_idxs(3) - comma_idxs(2) >= 2 ...
+            && comma_idxs(4) - comma_idxs(3) >= 2 ...
+            && comma_idxs(5) - comma_idxs(4) >= 2 ...
+            && comma_idxs(6) - comma_idxs(5) >= 2 ...
+            && comma_idxs(10) - comma_idxs(9) >= 2
+          
+          try
+            [~,~,~,cur_hour,cur_min,cur_sec] = datevec(datenum(line_str(comma_idxs(1)+1 : comma_idxs(2)-1), 'HHMMSS.FFF'));
+          end
+          
+          lat = 10*(line_str(comma_idxs(2)+1)-48) + (line_str(comma_idxs(2)+2)-48) ...
+            + sscanf(line_str(comma_idxs(2)+3:comma_idxs(3)-1),'%f')/60;
+          if line_str(comma_idxs(3)+1) == 'S'
+            lat = -lat;
+          end
+          lon = 100*(line_str(comma_idxs(4)+1)-48) + 10*(line_str(comma_idxs(4)+2)-48) + (line_str(comma_idxs(4)+3)-48) ...
+            + sscanf(line_str(comma_idxs(4)+4:comma_idxs(5)-1),'%f')/60;
+          if line_str(comma_idxs(5)+1) == 'W'
+            lon = -lon;
+          end
+          elev = sscanf(line_str(comma_idxs(9)+1:comma_idxs(10)-1),'%f');
+          
+          gps_idx = gps_idx + 1;
+          gps.gps_time(gps_idx) = datenum(param.year,param.month,param.day,cur_hour,cur_min,cur_sec);
+          if isnan(gps.gps_time(gps_idx))
+            warning('NaN gps_time.');
+          end
+          gps.lat(gps_idx) = lat;
+          gps.lon(gps_idx) = lon;
+          gps.elev(gps_idx) = elev;
+          
+          if length(comma_idxs) == 16 ...
+            && comma_idxs(16) - comma_idxs(15) >= 2 ...
+            && length(line_str) - comma_idxs(16) >= 2
+            % NMEA file with computer time stamps at end
+            
+            [time_fields,count] = sscanf(line_str(comma_idxs(15)+1:end),'%f,%f');
+            if count == 2
+              gps.comp_time(gps_idx) = time_fields(1) + time_fields(2)/10e6;
+            end
+            
+          elseif length(comma_idxs) == 18 ...
+            && comma_idxs(16) - comma_idxs(15) >= 2 ...
+            && comma_idxs(17) - comma_idxs(16) >= 2 ...
+            && comma_idxs(18) - comma_idxs(17) >= 2 ...
+            && length(line_str) - comma_idxs(18) >= 2
+            % MCRDS NMEA file (computer and radar time stamps at the end)
+          
+            [time_fields,count] = sscanf(line_str(comma_idxs(15)+1:end),'%f,%f,%f,%f');
+            if count == 4
+              gps.comp_time(gps_idx) = time_fields(1) + time_fields(2)/1e6;
+              gps.radar_time(gps_idx) = time_fields(3) + time_fields(4)/10e6;
+            end
+          end
+          
+        elseif strcmp('GPZDA',line_str(2:comma_idxs(1)-1)) && length(comma_idxs) >= 5 ...
+            && comma_idxs(2) - comma_idxs(1) >= 2 ...
+            && comma_idxs(3) - comma_idxs(2) >= 2 ...
+            && comma_idxs(4) - comma_idxs(3) >= 2 ...
+            && comma_idxs(5) - comma_idxs(4) >= 2
+          
+          try
+            gps_time = datenum(line_str(comma_idxs(1)+1 : comma_idxs(5)-1), 'HHMMSS.FFF,dd,mm,yyyy');
+            [param.year,param.month,param.day,test_hour,test_min,test_sec] = datevec(gps_time);
+          end
+          
+          if test_hour == cur_hour && test_min == cur_min && test_sec == cur_sec
+            gps.gps_time(gps_idx) = gps_time;
+          end
+          
+        elseif strcmp('GPRMC',line_str(2:comma_idxs(1)-1)) && length(comma_idxs) >= 10 ...
+            && comma_idxs(2) - comma_idxs(1) >= 2 ...
+            && comma_idxs(10) - comma_idxs(9) >= 2
+          
+          try
+            gps_time = datenum(line_str([comma_idxs(1)+1 : comma_idxs(2)-1,comma_idxs(9) : comma_idxs(10)-1]), 'HHMMSS.FFF,ddmmyy');
+            [param.year,param.month,param.day,test_hour,test_min,test_sec] = datevec(gps_time);
+          end
+          
+          if test_hour == cur_hour && test_min == cur_min && test_sec == cur_sec
+            gps.gps_time(gps_idx) = gps_time;
+          end
+        end
       end
     end
-  end
-end
-fclose(fid);
-
-if isempty(C_final)
-  C_final = cell(1,sum(format_str=='%'));
-end
-
-switch param.format
-  case 1
-    [tag,UTC_time_file,latitude,N_S,longitude,E_W,fix,NoSatelite,dilution,...
-      altitude,alt_unit,geode_ref,geode_unit,dgps,checksum] = deal(C_final{:});
-  case 2
-    [tag,UTC_time_file,latitude,N_S,longitude,E_W,fix,NoSatelite,dilution,...
-      altitude,alt_unit,geode_ref,geode_unit,dgps,checksum,time1,time2] = deal(C_final{:});
-  case 3
-    [tag,UTC_time_file,latitude,N_S,longitude,E_W,fix,NoSatelite,dilution,...
-      altitude,alt_unit,geode_ref,geode_unit,dgps,checksum,time1,time2,time3,time4] = deal(C_final{:});
-  case 4
-    [tag,UTC_time_file,latitude,N_S,longitude,E_W,fix,NoSatelite,dilution,...
-      altitude,alt_unit,geode_ref,checksum] = deal(C_final{:});
-  case 5
-    [tag,UTC_time_file,latitude,N_S,longitude,E_W,fix,NoSatelite,dilution,...
-      altitude,alt_unit,geode_ref,geode_unit,dgps,checksum,time1,time2,time3,time4] = deal(C_final{:});
-end
-
-if param.format == 2 || param.format == 3
-  comp_time = time1 + time2/1e6;
-end
-if param.format == 3
-  radar_time = (time3*2^32 + time4)/10e6;
-end
-
-if isfield(param,'nmea_tag')
-  good_idxs = strmatch(param.nmea_tag,tag);
-  tag = tag(good_idxs);
-  UTC_time_file = UTC_time_file(good_idxs);
-  latitude = latitude(good_idxs);
-  N_S = N_S(good_idxs);
-  longitude = longitude(good_idxs);
-  E_W = E_W(good_idxs);
-  altitude = altitude(good_idxs);
-  if param.format == 2 || param.format == 3
-    comp_time = comp_time(good_idxs);
-  end
-  if param.format == 3
-    radar_time = radar_time(good_idxs);
+    
   end
 end
 
-%   CONVERT LATITUDE AND LONGITUDE TO [DD.DDD] FROM [DDDMM.MMM]
-lat_MM = mod(latitude,100);
-lat_DD = (latitude - lat_MM)./100;
-lat = lat_DD + lat_MM./60;
-lon_MM = mod(longitude,100);
-lon_DD = (longitude - lon_MM)./100;
-lon = lon_DD + lon_MM./60;
-
-%   IMPLY NEGATIVE LATITUDE AND LONGITUDE TO SOUTH AND WEST COORDINATES
-lat(N_S == 'S') = -1 * lat(N_S == 'S');
-lon(E_W == 'W') = -1 * lon(E_W == 'W');
-
-%   CREATE NEW ELEVATION VARIABLE
-elev = altitude;
-
-% Convert HHMMSS format to ANSI-C standard, seconds since Jan 1 1970
-sec = mod(UTC_time_file,100);
-min = mod([UTC_time_file-sec]./100,100);
-hour = [[UTC_time_file-sec]./100 - min]./100;
-UTC_time = datenum_to_epoch(datenum(param.year,param.month,param.day,hour,min,sec));
-
-% ENSURE ALL VECTORS IN 1xN FORMAT
-UTC_time = reshape(UTC_time,[1 length(UTC_time)]);
-lat = reshape(lat,[1 length(lat)]);
-lon = reshape(lon,[1 length(lon)]);
-elev = reshape(elev,[1 length(elev)]);
-if param.format == 2 || param.format == 3
-  comp_time = reshape(comp_time,[1 length(comp_time)]);
-end
-if param.format == 3
-  radar_time = reshape(radar_time,[1 length(radar_time)]);
-end
-
-
-goodIdxs = find(~isnan(lat));
-UTC_time = UTC_time(goodIdxs);
-lat = lat(goodIdxs);
-lon = lon(goodIdxs);
-elev = elev(goodIdxs);
-if param.format == 2 || param.format == 3
-  comp_time = comp_time(goodIdxs);
-end
-if param.format == 3
-  radar_time = radar_time(goodIdxs);
-end
-
-if param.format == 4
-  % Reveal file tends to have a lot of problems... this catches some
-  bad_idxs = find(abs(diff(lat)) > 0.005);
-  if ~isempty(bad_idxs)
-    plot(diff(lat(:)));
-    fprintf('Some likely bad indices found.  Set bad_idxs in the code and run.\n')
-    keyboard
-    % For example, two bad ranges: bad_idxs = [12690:12768, 16608:16643];
-    bad_idxs = [];  % SET THIS TO APPROPRIATE VALUE EACH TIME
-    good_idxs = setdiff(1:length(lat), bad_idxs);
-    plot(diff(lat(good_idxs)),'.');
-    keyboard
-    UTC_time = UTC_time(good_idxs);
-    lat = lat(good_idxs);
-    lon = lon(good_idxs);
-    elev = elev(good_idxs);    
-  end
-end
-
-% ===================================================================
-% Find jumps in the GPS time that are probably due to day interval
-% 86400 seconds.
-day_jumps = find(diff(UTC_time) < -60000);
-for jump_idx = day_jumps
-  UTC_time(jump_idx+1:end) = UTC_time(jump_idx+1:end) + 86400;
-end
-
-% ===================================================================
-% Store outputs in structure
-% ===================================================================
-if strcmpi(param.time_reference,'utc')
-  % UTC time stored in file, so need to add leap seconds back in
-  if ~isempty(UTC_time)
-    gps.gps_time = UTC_time + utc_leap_seconds(UTC_time(1));
-  else
-    gps.gps_time = [];
-  end
-else
-  warning('NMEA files are usually always UTC time, but GPS time has been specified.');
-  gps.gps_time = UTC_time;
-end
-
-gps.lat = lat;
-gps.lon = lon;
-gps.elev = elev;
+good_mask = ~isnan(gps.gps_time);
+gps.gps_time = gps.gps_time(good_mask);
+gps.lat = gps.lat(good_mask);
+gps.lon = gps.lon(good_mask);
+gps.elev = gps.elev(good_mask);
+gps.comp_time = gps.comp_time(good_mask);
+gps.radar_time = gps.radar_time(good_mask);
 
 gps.roll = zeros(size(gps.lat));
 gps.pitch = zeros(size(gps.lat));
 gps.heading = zeros(size(gps.lat));
 
-if param.format == 2 || param.format == 3
-  gps.comp_time = comp_time;
-end
-if param.format == 3
-  gps.radar_time = radar_time;
+%% Day Jumps
+% =========================================================================
+% Find negative jumps in the GPS time of more than 75% of a day that are
+% probably due to day wraps of 1.
+day_jumps = find(diff(gps.gps_time) < -0.75);
+for jump_idx = day_jumps
+  gps.gps_time(jump_idx+1:end) = gps.gps_time(jump_idx+1:end) + 1;
 end
 
-return;
+%% UTC or GPS time reference
+% =========================================================================
+% Convert gps_time into ANSI-C standard (seconds since 1970)
+gps.gps_time = datenum_to_epoch(gps.gps_time);
+if strcmpi(param.time_reference,'utc')
+  % UTC time stored in file, so need to add leap seconds back in
+  gps.gps_time = gps.gps_time + utc_leap_seconds(gps.gps_time(1));
+else
+  warning('NMEA files are usually always UTC time, but GPS time has been specified.');
+end

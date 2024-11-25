@@ -7,7 +7,7 @@ function update_layer_plots(obj)
 layer_y_curUnit = obj.eg.layers.y_curUnit;
 
 for idx = 1:length(layer_y_curUnit)
-  layer_x_curUnit = obj.eg.layers.x_curUnit{idx};
+  layer_x_curUnit = obj.eg.layers.x_curUnit;
   
   % get manual/auto pts (use them for layer handles)
   layer_manual = obj.eg.layers.type{idx} == 1;

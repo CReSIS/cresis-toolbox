@@ -32,7 +32,12 @@ if visible_flag
 else
   fig_visible = 'off';
 end
-h_figs = get(0,'Children');
+try
+  h_figs = get(0,'Children');
+catch ME
+  warning(ME.getReport);
+  h_figs = [];
+end
 
 if num_figs <= 0
   h_fig = [];

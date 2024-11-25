@@ -38,6 +38,10 @@ elseif strcmpi(get(obj.map_panel.h_axes,'Visible'),'on')
   if (obj.map.source == 1)
     [lat, lon] = google_map.world_to_latlon(x*obj.map.scale, 256-y*obj.map.scale);
     set(obj.status_panel.mouseCoordText,'String',sprintf('%8.3fN %8.3fW; X=%8.3f Y=%8.3f  ',lat,lon,x,y));
+  elseif (obj.map.source == 3)
+    lat = y;
+    lon = x;
+    set(obj.status_panel.mouseCoordText,'String',sprintf('%8.3fN %8.3fW; X=%8.3f Y=%8.3f  ',lat,lon,x,y));
   else
     [lat,lon] = projinv(obj.map.proj,x*obj.map.scale,y*obj.map.scale);
     set(obj.status_panel.mouseCoordText,'String',sprintf('%8.3fN %8.3fW; X=%8.3fkm Y=%8.3fkm  ',lat,lon,x,y));

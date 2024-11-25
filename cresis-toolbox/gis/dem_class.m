@@ -15,7 +15,10 @@ classdef dem_class < handle
     dem_info
     % res: Resolution (m)
     res
-    % ocean_mask_mode: 'shapefile' (default) or 'landdem'
+    % ocean_mask_mode: string containing 'shapefile' (default) or
+    % 'landdem'. shapefile uses NOAA coastline. landdem marks everything
+    % above 5 m as land; the latter may be necessary if the NOAA coastline
+    % filtering misses a land feature.
     ocean_mask_mode
     % ocean_mask_dec: default is 100, positive integer decimation rate
     ocean_mask_dec
@@ -74,21 +77,25 @@ classdef dem_class < handle
       % Setup DEM List
       % ===================================================================
       obj.dem_info = {};
+      proj_load_standard; % Load standard projections
       
       % Arctic DEM
       % -------------------------------------------------------------------
+      % http://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v3.0/500m/arcticdem_mosaic_500m_v3.0.tif
       % http://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v3.0/10m/11_41/11_41_10m_v3.0.tar.gz
       % http://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v3.0/2m/48_63/48_63_1_1_2m_v3.0.tar.gz
       % http://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v3.0/2m/48_63/48_63_2_2_2m_v3.0.tar.gz
+      % 
       try
         new_dem_info.url = 'http://data.pgc.umn.edu/elev/dem/setsm/ArcticDEM/mosaic/v3.0/';
         new_dem_info.res = [2 10 32 100 500 1000];
         new_dem_info.res_str = {'2m' '10m' '32m' '100m' '500m' '1km'};
         new_dem_info.tile_en = [1 1 1 0 0 0];
         new_dem_info.subtile_en = [1 0 0 0 0 0];
+        new_dem_info.tile_fn_ext = '_reg_dem.tif';
         new_dem_info.mosaic_fn_fh = @(res_str) sprintf('%s/arcticdem_mosaic_%s_v3.0.tif',res_str,res_str);
-        new_dem_info.tile_fn_fh = @(x,y,res_str) sprintf('%s/%d_%d/%d_%d_%s_v3.0.tar.gz',res_str,y,x,y,x,res_str);
-        new_dem_info.subtile_fn_fh = @(x,y,x_sub,y_sub,res_str) sprintf('%s/%d_%d/%d_%d_%d_%d_%s_v3.0.tar.gz',res_str,y,x,y,x,y_sub,x_sub,res_str);
+        new_dem_info.tile_fn_fh = @(x,y,res_str) sprintf('%s/%02d_%02d/%02d_%02d_%s_v3.0.tar.gz',res_str,y,x,y,x,res_str);
+        new_dem_info.subtile_fn_fh = @(x,y,x_sub,y_sub,res_str) sprintf('%s/%02d_%02d/%02d_%02d_%d_%d_%s_v3.0.tar.gz',res_str,y,x,y,x,y_sub,x_sub,res_str);
         new_dem_info.acknowledge = 'Geospatial support for this work provided by the Polar Geospatial Center under NSF-OPP awards 1043681 and 1559691. DEMs provided by the Polar Geospatial Center under NSF-OPP awards 1043681, 1559691, and 1542736.';
         new_dem_info.citation = 'Porter, Claire; Morin, Paul; Howat, Ian; Noh, Myoung-Jon; Bates, Brian; Peterman, Kenneth; Keesey, Scott; Schlenk, Matthew; Gardiner, Judith; Tomko, Karen; Willis, Michael; Kelleher, Cole; Cloutier, Michael; Husby, Eric; Foga, Steven; Nakamura, Hitomi; Platson, Melisa; Wethington, Michael, Jr.; Williamson, Cathleen; Bauer, Gregory; Enos, Jeremy; Arnold, Galen; Kramer, William; Becker, Peter; Doshi, Abhijit; D?Souza, Cristelle; Cummens, Pat; Laurier, Fabien; Bojesen, Mikkel, 2018, "ArcticDEM", https://doi.org/10.7910/DVN/OHHUKH, Harvard Dataverse, V1, [Date Accessed]';
         new_dem_info.y_tile_origin = 41;
@@ -98,7 +105,7 @@ classdef dem_class < handle
         new_dem_info.y_subtile_size = 50e3;
         new_dem_info.x_subtile_size = 50e3;
         new_dem_info.no_data = -9999;
-        new_dem_info.proj = geotiffinfo(ct_filename_gis(obj.param,fullfile('greenland','DEM','GIMP','gimpdem_90m.tif')));
+        new_dem_info.proj = arctic_proj; % Loaded from proj_load_standard.m
         new_dem_info.out_path = ct_filename_gis(obj.param,fullfile('arctic','ArcticDEM'));
         obj.dem_info{end+1} = new_dem_info;
       catch ME
@@ -107,6 +114,7 @@ classdef dem_class < handle
       
       % REMA
       % -------------------------------------------------------------------
+      % http://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v1.1/100m/REMA_100m_dem.tif
       % http://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v1.1/8m/09_38/09_38_8m.tar.gz
       try
         new_dem_info.url = 'http://data.pgc.umn.edu/elev/dem/setsm/REMA/mosaic/v1.1/';
@@ -114,8 +122,9 @@ classdef dem_class < handle
         new_dem_info.res_str = {'8m' '100m' '200m' '1km'};
         new_dem_info.tile_en = [1 0 0 0];
         new_dem_info.subtile_en = [0 0 0 0];
+        new_dem_info.tile_fn_ext = '_dem.tif';
         new_dem_info.mosaic_fn_fh = @(res_str) sprintf('%s/REMA_%s_dem.tif',res_str,res_str);
-        new_dem_info.tile_fn_fh = @(x,y,res_str) sprintf('%s/%d_%d/%d_%d_%s.tar.gz',res_str,y,x,y,x,res_str);
+        new_dem_info.tile_fn_fh = @(x,y,res_str) sprintf('%s/%02d_%02d/%02d_%02d_%s.tar.gz',res_str,y,x,y,x,res_str);
         new_dem_info.acknowledge = 'Geospatial support for this work provided by the Polar Geospatial Center under NSF-OPP awards 1043681 and 1559691. DEMs provided by the Byrd Polar and Climate Research Center and the Polar Geospatial Center under NSF-OPP awards 1543501, 1810976, 1542736, 1559691, 1043681, 1541332, 0753663, 1548562, 1238993 and NASA award NNX10AN61G. Computer time provided through a Blue Waters Innovation Initiative. DEMs produced using data from DigitalGlobe, Inc.';
         new_dem_info.citation = 'Howat, Ian; Morin, Paul; Porter, Claire; Noh, Myong-Jong, 2018, "The Reference Elevation Model of Antarctica", https://doi.org/10.7910/DVN/SAIK8B, Harvard Dataverse, V1';
         new_dem_info.y_tile_origin = 31;
@@ -123,12 +132,44 @@ classdef dem_class < handle
         new_dem_info.y_tile_size = 100e3;
         new_dem_info.x_tile_size = 100e3;
         new_dem_info.no_data = -9999;
-        new_dem_info.proj = geotiffinfo(ct_filename_gis(obj.param,fullfile('antarctica','DEM','BEDMAP2','original_data','bedmap2_tiff','bedmap2_surface.tif')));
+        new_dem_info.proj = antarctic_proj; % Loaded from proj_load_standard.m
         new_dem_info.out_path = ct_filename_gis(obj.param,fullfile('antarctica','DEM','REMA'));
         obj.dem_info{end+1} = new_dem_info;
       catch ME
         warning(ME.getReport);
       end
+      
+      % /cresis/snfs1/dataproducts/GIS_data/usa/DEM/NED/National_Elevation_Data_DEM_10m.tif
+      % USGS National Elevation Dataset (NED)
+      % 1/3 arc-seconds: 10 m resolution
+      % https://www.usgs.gov/core-science-systems/ngp/3dep/data-tools
+      % https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/n44w104/USGS_13_n44w104.tif <-- I think this URL can be automatically generated to grab the tiles that are needed for a specific region
+      % 
+      try
+        new_dem_info.url = '';
+        new_dem_info.res = [10];
+        new_dem_info.res_str = {'10m'};
+        new_dem_info.tile_en = [0 0 0 0];
+        new_dem_info.subtile_en = [0 0 0 0];
+        new_dem_info.tile_fn_ext = '';
+        new_dem_info.mosaic_fn_fh = @(res_str) sprintf('National_Elevation_Data_DEM_%s.tif',res_str);
+        new_dem_info.tile_fn_fh = @(x,y,res_str) sprintf('',res_str,y,x,y,x,res_str);
+        new_dem_info.acknowledge = 'USGS National Elevation Dataset (NED)';
+        new_dem_info.citation = 'USGS National Elevation Dataset (NED)';
+        new_dem_info.y_tile_origin = NaN;
+        new_dem_info.x_tile_origin = NaN;
+        new_dem_info.y_tile_size = NaN;
+        new_dem_info.x_tile_size = NaN;
+        new_dem_info.no_data = -9999;
+        new_dem_info.proj = usa_ned_proj; % Loaded from proj_load_standard.m
+        new_dem_info.out_path = ct_filename_gis(obj.param,fullfile('usa','DEM','NED'));
+        obj.dem_info{end+1} = new_dem_info;
+      catch ME
+        warning(ME.getReport);
+      end
+      
+      % NOAA Shoreline:
+      % Wessel, P., and W. H. F. Smith (1996), A global, self-consistent, hierarchical, high-resolution shoreline database, J. Geophys. Res., 101(B4), 8741-8743, doi:10.1029/96JB00104.
       
       % Prepare DEM fields
       % -------------------------------------------------------------------
@@ -158,9 +199,12 @@ classdef dem_class < handle
         obj.x = nan(size(lat));
         obj.y = nan(size(lat));
         obj.di = nan(size(lat));
-        % Northern hemisphere
-        obj.di(lat>0) = 1;
-        % Southern hemisphere
+        % For each input determine the dem index to use
+        % Northern hemisphere, ArcticDEM
+        obj.di(lat>49.0024) = 1;
+        % USGS NED Dem
+        obj.di(lat<=49.0024 & lat >= 25.4483) = 3;
+        % Southern hemisphere, REMA
         obj.di(lat<0) = 2;
         
         for di = unique(obj.di)
@@ -194,7 +238,9 @@ classdef dem_class < handle
       obj.load_ocean();
       
       % If the whole region fits into a single tile, then this tile is
-      % loaded and truncated to the region of interest
+      % loaded and truncated to the region of interest. If the region does
+      % not fit into a single tile, then the tiles will be loaded later on
+      % an as needed basis.
       obj.load_dem();
     end
     
@@ -263,8 +309,14 @@ classdef dem_class < handle
       % -------------------------------------------------------------------
       if ~isfield(obj.ocean,'shp_all')
         ocean_mask_fn = ct_filename_gis(obj.param,fullfile('world','land_mask','Land_Mask_IDL_jharbeck','GSHHS_f_L1.shp'));
+        ocean_mask_fn_antarctica = ct_filename_gis(obj.param,fullfile('world','land_mask','Land_Mask_IDL_jharbeck','GSHHS_f_L5.shp'));
         warning off;
         obj.ocean.shp_all = shaperead(ocean_mask_fn);
+        if isfield(obj.param,'post') && isfield(obj.param.post,'ops') ...
+            && isfield(obj.param.post.ops,'location') && strcmp(obj.param.post.ops.location,'antarctic')
+          shp_antarctica = shaperead(ocean_mask_fn_antarctica);
+          obj.ocean.shp_all = cat(1,obj.ocean.shp_all,shp_antarctica);
+        end
         warning on;
         obj.ocean.bb_all = [obj.ocean.shp_all(:).BoundingBox];
       end
@@ -432,6 +484,7 @@ classdef dem_class < handle
                 for sub_y_idx = 1:2
                   if any(tile_x >= tiles(tiles_idx,1) & tile_x <= tiles(tiles_idx,1)+1 ...
                       & tile_y >= tiles(tiles_idx,2) & tile_y <= tiles(tiles_idx,2)+1)
+                    % Create URL for subtile file and add to url_list to download
                     url_list{end+1} = [obj.dem_info{di}.url,obj.dem_info{di}.subtile_fn_fh(tiles(tiles_idx,1),tiles(tiles_idx,2),sub_x_idx,sub_y_idx,obj.dem_info{di}.res_str{ri})];
                     xi_list(end+1) = 2*tiles(tiles_idx,1) + sub_x_idx - 2;
                     yi_list(end+1) = 2*tiles(tiles_idx,2) + sub_y_idx - 2;
@@ -443,6 +496,7 @@ classdef dem_class < handle
                 end
               end
             else
+              % Create URL for tile file and add to url_list to download
               url_list{end+1} = [obj.dem_info{di}.url,obj.dem_info{di}.tile_fn_fh(tiles(tiles_idx,1),tiles(tiles_idx,2),obj.dem_info{di}.res_str{ri})];
               xi_list(end+1) = tiles(tiles_idx,1);
               yi_list(end+1) = tiles(tiles_idx,2);
@@ -460,9 +514,12 @@ classdef dem_class < handle
               
               [~,url_name,url_ext1] = fileparts(url);
               [~,url_name,url_ext2] = fileparts(url_name);
+              % fn: archive file to be downloaded (will be deleted after we are done extracting the tif file)
               fn = fullfile(obj.dem_info{di}.out_path,[url_name,url_ext2,url_ext1]);
-              tif_fn = fullfile(obj.dem_info{di}.out_path,[url_name '_reg_dem.tif']);
+              % tif_fn: tif file inside the archive file that we want
+              tif_fn = fullfile(obj.dem_info{di}.out_path,[url_name obj.dem_info{di}.tile_fn_ext]);
               
+              % Check to see if download file AND tif file do not exist
               if ~exist(fn,'file') && ~exist(tif_fn,'file')
                 cmd = sprintf('wget -P %s %s', obj.dem_info{di}.out_path, url);
                 fprintf('  %s\n', cmd);
@@ -473,14 +530,16 @@ classdef dem_class < handle
                 end
               end
               
+              % 
               if ~exist(tif_fn,'file')
-                fprintf('Untar %s\n  %s\n', fn, obj.dem_info{di}.out_path);
+                fprintf('Untar tar file %s\n  to tif file: %s\n', fn, tif_fn);
                 untar(fn, obj.dem_info{di}.out_path);
                 if ~exist(tif_fn,'file')
-                  error('Failed to untar file or file not found in tar archive.');
+                  error('Failed to find tif file after untar. If tar file is corrupted, try deleting the tar file and starting over so that it will be downloaded again.');
                 end
               end
               
+              % Delete tar file, but keep tif file
               if exist(fn,'file')
                 delete(fn);
               end

@@ -43,7 +43,7 @@ function gps = read_gps_csv(in_fn, param)
 %
 % Author: John Paden
 %
-% See also read_gps_*.m, gps_plot.m, gps_make.m
+% See also read_gps_*.m, gps_plot.m, gps_create.m
 
 debug_level = 1;
 

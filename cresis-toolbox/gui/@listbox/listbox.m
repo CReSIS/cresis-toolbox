@@ -96,6 +96,9 @@ classdef listbox < handle
     function list_callback(obj, h_obj, event)
       list_string = get(obj.h_list,'String');
       cur_entry = get(obj.h_list,'Value');
+      if isempty(cur_entry)
+        cur_entry = length(list_string);
+      end
       if h_obj == obj.h_list
         % User selected a value in the list
         if strcmpi(get(gcf,'SelectionType'),'Open')
@@ -108,17 +111,16 @@ classdef listbox < handle
         if strcmpi(obj.cur_entry_mode,'add')
           % Add entry to the list
           new_entry = get(obj.h_LE,'String');
-          [list_string,sort_idxs] = sort({list_string{:}, new_entry});
+          list_string = {list_string{1:cur_entry}, new_entry, list_string{cur_entry+1:end}};
           set(obj.h_list,'String',list_string);
-          set(obj.h_list,'Value',find(sort_idxs==length(list_string)));
+          set(obj.h_list,'Value',cur_entry+1);
           obj.cur_entry_mode = 'edit';
-        elseif strcmpi(obj.cur_entry_mode,'edit')
+        elseif strcmpi(obj.cur_entry_mode,'edit') && cur_entry > 0
           % Replace an entry in the list
           new_entry = get(obj.h_LE,'String');
           list_string{cur_entry} = new_entry;
-          [list_string,sort_idxs] = sort(list_string);
           set(obj.h_list,'String',list_string);
-          set(obj.h_list,'Value',find(sort_idxs==cur_entry));
+          set(obj.h_list,'Value',cur_entry);
         end
       end
     end

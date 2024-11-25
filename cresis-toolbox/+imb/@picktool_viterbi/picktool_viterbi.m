@@ -4,20 +4,9 @@ classdef picktool_viterbi < imb.picktool
     top_panel
     bottom_panel
     table
-    last_tool;
-    last_layers;
-    last_range_gps;
-    first_time;    
-    cur_mode;    
-    
-    % properties to preserve tool values across deletions
-    in_rng_sv;
-    sn_rng_sv;
-    top_sm_sv;
-    bot_sm_sv;
-    top_pk_sv;
-    bot_pk_sv;
-    rep_sv;
+    last_tool
+    last_layers
+    last_range_gps
   end
   
   properties (SetAccess = immutable, GetAccess = public) %constants
@@ -27,16 +16,12 @@ classdef picktool_viterbi < imb.picktool
   
   methods
     function obj = picktool_viterbi(h_fig)
-      %%% Pre Initialization %%%
-      % Any code not using output argument (obj)
       if nargin == 0 || isempty(h_fig)
         h_fig = figure('Visible','off');
       else
         figure(h_fig,'Visible','off');
       end
       
-      %%% Post Initialization %%%
-      % Any code, including access to object
       obj.h_fig = h_fig;
       obj.tool_name = '(v)iterbi';
       obj.tool_name_title = 'viterbi';
@@ -45,22 +30,10 @@ classdef picktool_viterbi < imb.picktool
       obj.bottom_panel = [];
       obj.top_panel = [];
       obj.table = [];
-      obj.w = 200;
-      obj.h = 475;  
-      obj.first_time = true;
-
-      obj.in_rng_sv = 5;
-      obj.sn_rng_sv = 5;
-      obj.top_sm_sv = .5;
-      obj.bot_sm_sv = .5;
-      obj.top_pk_sv = .5;
-      obj.bot_pk_sv = .5;
-      obj.rep_sv = .5;
-      obj.cur_mode = 1;      
+      obj.w = 350;
+      obj.h = 300;
       
-      obj.create_ui_components();
-      obj.create_ui_basic(0,0);
-
+      obj.create_ui();
     end
         
    function cmd = apply_PB_callback(obj,sb,slices)
@@ -191,147 +164,147 @@ classdef picktool_viterbi < imb.picktool
       obj.custom_data.sigma = mean(custom_data.sigma);
     end
     
-    function create_option_ui(obj)
-      obj.h_fig = figure('Visible','off','DockControls','off', ...
-        'NumberTitle','off','ToolBar','none','MenuBar','none','Resize','off');
-      if strcmpi(class(obj.h_fig),'double')
-        set(obj.h_fig,'Name',sprintf('%d: viterbi tool prefs',obj.h_fig));
-      else
-        set(obj.h_fig,'Name',sprintf('%d: viterbi tool prefs',obj.h_fig.Number));
-      end
-      set(obj.h_fig,'CloseRequestFcn',@obj.close_win);
-      pos = get(obj.h_fig,'Position');
-      pos(3) = 200;
-      pos(4) = 130;
-      set(obj.h_fig,'Position',pos);
-      
-      % Slice range
-      obj.gui.slice_rangeTXT = uicontrol('Style','text','string','Slice range');
-      set(obj.gui.slice_rangeTXT,'TooltipString','Enter a vector specifying relative range in slices. E.g. "-5:5".');
-      
-      obj.gui.slice_rangeLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.slice_rangeLE,'style','edit')
-      set(obj.gui.slice_rangeLE,'string','0')
-      set(obj.gui.slice_rangeLE,'TooltipString','Enter a vector specifying relative range in slices. E.g. "-5:5".');
-      
-      % Threshold
-      obj.gui.thresholdTXT = uicontrol('Style','text','string','Threshold');
-      set(obj.gui.thresholdTXT,'TooltipString','Specify an image threshold.');
-      
-      obj.gui.thresholdLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.thresholdLE,'style','edit')
-      set(obj.gui.thresholdLE,'string','13.5')
-      set(obj.gui.thresholdLE,'TooltipString','Specify an image threshold.');
-       
-      % Ground Truth Weight
-      obj.gui.gt_weightTXT = uicontrol('Style','text','string','GT weight');
-      set(obj.gui.gt_weightTXT,'TooltipString','Specify weighting of ground truth.');
-      
-      obj.gui.gt_weightLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.gt_weightLE,'style','edit')
-      set(obj.gui.gt_weightLE,'string','10')
-      set(obj.gui.gt_weightLE,'TooltipString','Specify weighting of ground truth.');
-      
-      obj.gui.slopeTXT = uicontrol('Style','text','string','Slope');
-      obj.gui.slopeLE = uicontrol('parent',obj.h_fig);
-      set(obj.gui.slopeLE,'style','edit')
-      set(obj.gui.slopeLE,'string','zeros(1,63)')
-      
-      % Select mask
-      obj.gui.select_maskCB = uicontrol('parent',obj.h_fig);
-      set(obj.gui.select_maskCB,'style','checkbox')
-      set(obj.gui.select_maskCB,'string','Select')
-      set(obj.gui.select_maskCB,'value',1)
-      set(obj.gui.select_maskCB,'TooltipString','Check to operate only on the selected region.');
-      
-      % Previous ground truth
-      obj.gui.previousCB = uicontrol('parent',obj.h_fig);
-      set(obj.gui.previousCB,'style','checkbox')
-      set(obj.gui.previousCB,'string','Previous')
-      set(obj.gui.previousCB,'value',1)
-      set(obj.gui.previousCB,'TooltipString','Use previous slice as ground truth.');
-      
-      % GUI container table
-      obj.gui.table.ui = obj.h_fig;
-      obj.gui.table.width_margin = NaN*zeros(30,30); % Just make these bigger than they have to be
-      obj.gui.table.height_margin = NaN*zeros(30,30);
-      obj.gui.table.false_width = NaN*zeros(30,30);
-      obj.gui.table.false_height = NaN*zeros(30,30);
-      obj.gui.table.offset = [0 0];
-      row = 1;
-      col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.slice_rangeTXT;
-      obj.gui.table.width(row,col)     = 70;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.slice_rangeLE;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      
-      row = row + 1;
-      col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.thresholdTXT;
-      obj.gui.table.width(row,col)     = 70;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.thresholdLE;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      
-      
-      row = row + 1;
-      col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.gt_weightTXT;
-      obj.gui.table.width(row,col)     = 70;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.gt_weightLE;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      
-      row = row + 1;
-      col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.slopeTXT;
-      obj.gui.table.width(row,col)     = 70;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.slopeLE;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      
-      row = row + 1;
-      col = 1;
-      obj.gui.table.handles{row,col}   = obj.gui.select_maskCB;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      col = 2;
-      obj.gui.table.handles{row,col}   = obj.gui.previousCB;
-      obj.gui.table.width(row,col)     = inf;
-      obj.gui.table.height(row,col)    = 20;
-      obj.gui.table.width_margin(row,col) = 1;
-      obj.gui.table.height_margin(row,col) = 1;
-      
-      clear row col
-      table_draw(obj.gui.table);     
-    end
+%     function create_option_ui(obj)
+%       obj.h_fig = figure('Visible','off','DockControls','off', ...
+%         'NumberTitle','off','ToolBar','none','MenuBar','none','Resize','off');
+%       if strcmpi(class(obj.h_fig),'double')
+%         set(obj.h_fig,'Name',sprintf('%d: viterbi tool prefs',obj.h_fig));
+%       else
+%         set(obj.h_fig,'Name',sprintf('%d: viterbi tool prefs',obj.h_fig.Number));
+%       end
+%       set(obj.h_fig,'CloseRequestFcn',@obj.close_win);
+%       pos = get(obj.h_fig,'Position');
+%       pos(3) = 200;
+%       pos(4) = 130;
+%       set(obj.h_fig,'Position',pos);
+%       
+%       % Slice range
+%       obj.gui.slice_rangeTXT = uicontrol('Style','text','string','Slice range');
+%       set(obj.gui.slice_rangeTXT,'TooltipString','Enter a vector specifying relative range in slices. E.g. "-5:5".');
+%       
+%       obj.gui.slice_rangeLE = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.slice_rangeLE,'style','edit')
+%       set(obj.gui.slice_rangeLE,'string','0')
+%       set(obj.gui.slice_rangeLE,'TooltipString','Enter a vector specifying relative range in slices. E.g. "-5:5".');
+%       
+%       % Threshold
+%       obj.gui.thresholdTXT = uicontrol('Style','text','string','Threshold');
+%       set(obj.gui.thresholdTXT,'TooltipString','Specify an image threshold.');
+%       
+%       obj.gui.thresholdLE = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.thresholdLE,'style','edit')
+%       set(obj.gui.thresholdLE,'string','13.5')
+%       set(obj.gui.thresholdLE,'TooltipString','Specify an image threshold.');
+%        
+%       % Ground Truth Weight
+%       obj.gui.gt_weightTXT = uicontrol('Style','text','string','GT weight');
+%       set(obj.gui.gt_weightTXT,'TooltipString','Specify weighting of ground truth.');
+%       
+%       obj.gui.gt_weightLE = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.gt_weightLE,'style','edit')
+%       set(obj.gui.gt_weightLE,'string','10')
+%       set(obj.gui.gt_weightLE,'TooltipString','Specify weighting of ground truth.');
+%       
+%       obj.gui.slopeTXT = uicontrol('Style','text','string','Slope');
+%       obj.gui.slopeLE = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.slopeLE,'style','edit')
+%       set(obj.gui.slopeLE,'string','zeros(1,63)')
+%       
+%       % Select mask
+%       obj.gui.select_maskCB = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.select_maskCB,'style','checkbox')
+%       set(obj.gui.select_maskCB,'string','Select')
+%       set(obj.gui.select_maskCB,'value',1)
+%       set(obj.gui.select_maskCB,'TooltipString','Check to operate only on the selected region.');
+%       
+%       % Previous ground truth
+%       obj.gui.previousCB = uicontrol('parent',obj.h_fig);
+%       set(obj.gui.previousCB,'style','checkbox')
+%       set(obj.gui.previousCB,'string','Previous')
+%       set(obj.gui.previousCB,'value',1)
+%       set(obj.gui.previousCB,'TooltipString','Use previous slice as ground truth.');
+%       
+%       % GUI container table
+%       obj.gui.table.ui = obj.h_fig;
+%       obj.gui.table.width_margin = NaN*zeros(30,30); % Just make these bigger than they have to be
+%       obj.gui.table.height_margin = NaN*zeros(30,30);
+%       obj.gui.table.false_width = NaN*zeros(30,30);
+%       obj.gui.table.false_height = NaN*zeros(30,30);
+%       obj.gui.table.offset = [0 0];
+%       row = 1;
+%       col = 1;
+%       obj.gui.table.handles{row,col}   = obj.gui.slice_rangeTXT;
+%       obj.gui.table.width(row,col)     = 70;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       col = 2;
+%       obj.gui.table.handles{row,col}   = obj.gui.slice_rangeLE;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       
+%       row = row + 1;
+%       col = 1;
+%       obj.gui.table.handles{row,col}   = obj.gui.thresholdTXT;
+%       obj.gui.table.width(row,col)     = 70;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       col = 2;
+%       obj.gui.table.handles{row,col}   = obj.gui.thresholdLE;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       
+%       
+%       row = row + 1;
+%       col = 1;
+%       obj.gui.table.handles{row,col}   = obj.gui.gt_weightTXT;
+%       obj.gui.table.width(row,col)     = 70;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       col = 2;
+%       obj.gui.table.handles{row,col}   = obj.gui.gt_weightLE;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       
+%       row = row + 1;
+%       col = 1;
+%       obj.gui.table.handles{row,col}   = obj.gui.slopeTXT;
+%       obj.gui.table.width(row,col)     = 70;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       col = 2;
+%       obj.gui.table.handles{row,col}   = obj.gui.slopeLE;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       
+%       row = row + 1;
+%       col = 1;
+%       obj.gui.table.handles{row,col}   = obj.gui.select_maskCB;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       col = 2;
+%       obj.gui.table.handles{row,col}   = obj.gui.previousCB;
+%       obj.gui.table.width(row,col)     = inf;
+%       obj.gui.table.height(row,col)    = 20;
+%       obj.gui.table.width_margin(row,col) = 1;
+%       obj.gui.table.height_margin(row,col) = 1;
+%       
+%       clear row col
+%       table_draw(obj.gui.table);     
+%     end
 
   end
   

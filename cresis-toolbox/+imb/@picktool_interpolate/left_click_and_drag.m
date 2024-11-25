@@ -13,8 +13,8 @@ cmds = [];
 fprintf('Interpolate points %f to %f, %f to %f\n', x, y);
 
 %% Get tool interpolate method
-interp_idx = get(obj.panel.interp_mode_pdmenu,'Value');
-interp_type = get(obj.panel.interp_mode_pdmenu,'String');
+interp_idx = get(obj.panel.interp_modePM,'Value');
+interp_type = get(obj.panel.interp_modePM,'String');
 interp_type = interp_type{interp_idx};
 
 param.x_bounds = 3;
@@ -23,7 +23,7 @@ param.y_bounds = 1;
 for layer_idx = 1:length(cur_layers)
   cur_layer = cur_layers(layer_idx);
   
-  [manual_idxs,auto_idxs,point_idxs] = find_matching_pnts(obj,param,cur_layer);
+  [manual_idxs,auto_idxs,~] = find_matching_pnts(obj,param,cur_layer);
   
   if length(manual_idxs) < 2
     warning('Insufficient points to interpolate');

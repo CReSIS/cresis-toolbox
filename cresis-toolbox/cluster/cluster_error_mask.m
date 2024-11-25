@@ -12,11 +12,17 @@ function cluster_error_mask(error_mask)
 %
 % Author: John Paden
 %
-% See also: cluster_chain_stage, cluster_cleanup, cluster_compile
-%   cluster_exec_job, cluster_get_batch, cluster_get_batch_list, 
-%   cluster_hold, cluster_job, cluster_new_batch, cluster_new_task,
-%   cluster_print, cluster_run, cluster_submit_batch, cluster_submit_task,
-%   cluster_update_batch, cluster_update_task
+% See also: cluster_chain_stage.m, cluster_cleanup.m, cluster_compile.m,
+% cluster_cpu_affinity.m, cluster_error_mask.m, cluster_exec_task.m,
+% cluster_file_success.m, cluster_get_batch_list.m, cluster_get_batch.m,
+% cluster_get_chain_list.m, cluster_hold.m, cluster_job_check.m,
+% cluster_job.m, cluster_job.sh, cluster_load_chain.m, cluster_new_batch.m,
+% cluster_new_task.m, cluster_print_chain.m, cluster_print.m,
+% cluster_reset.m, cluster_run.m, cluster_save_chain.m,
+% cluster_save_dparam.m, cluster_save_sparam.m, cluster_set_chain.m,
+% cluster_set_dparam.m, cluster_set_sparam.m, cluster_stop.m,
+% cluster_submit_batch.m, cluster_submit_job.m, cluster_update_batch.m,
+% cluster_update_task.m
 
 if nargin == 0
   assignin('caller','out_fn_exist_error',1);
@@ -33,6 +39,7 @@ if nargin == 0
   assignin('caller','walltime_exceeded_error',2048);
   assignin('caller','max_mem_exceeded_error',4096);
   assignin('caller','insufficient_mcr_space',8192);
+  assignin('caller','matlab_task_out_of_memory',16384);
   assignin('caller','critical_error',2^10-1);
   
 elseif error_mask == 0
@@ -82,5 +89,8 @@ else
   end
   if bitand(error_mask,insufficient_mcr_space)
     fprintf('insufficient_mcr_space: Job failed because there was insufficient space for the Matlab Compiler Runtime files.\n'); 
+  end
+  if bitand(error_mask,matlab_task_out_of_memory)
+    fprintf('matlab_task_out_of_memory: Matlab returned out of memory error for this task.\n'); 
   end
 end

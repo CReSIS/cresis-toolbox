@@ -20,17 +20,16 @@ fprintf('=====================================================================\n
 fprintf('%s: %s (%s)\n', dbstack_info(1).name, param.day_seg, datestr(now,'HH:MM:SS'));
 fprintf('=====================================================================\n');
 
-%% Input checks
-
-% save_changes: Logical, For debugging purposes, you can turn the file save on/off
-save_changes = true;
-
 %% Prep (load records and gps files)
 records_fn = ct_filename_support(param,'','records');
+if cluster_job_check()
+  error('records_update may not be called from cluster_job (gRadar.cluster.is_cluster_job is currently set to true). To remove this error, run records_update on: %s', records_fn);
+end
 if ~exist(records_fn,'file')
   warning('Records file does not exist: %s (%s).\n', records_fn, datestr(now));
   return;
 end
+
 records = load(records_fn);
 if isfield(records,'settings') && isfield(records.settings,'wfs') && isfield(records.settings.wfs,'wfs')
   warning('Old records.settings format with "settings.wfs.wfs" field found in records file. Updating format.');
@@ -38,6 +37,16 @@ if isfield(records,'settings') && isfield(records.settings,'wfs') && isfield(rec
   if isfield(records.settings,'wfs_records')
     records.settings = rmfield(records.settings,'wfs_records');
   end
+end
+if isfield(records,'settings') && isfield(records.settings,'nyquist_zone_hw')
+  warning('Old records.settings format with "settings.nyquist_zone_hw" field found in records file. Updating format.');
+  records.nyquist_zone_hw = records.settings.nyquist_zone_hw;
+  records.settings = rmfield(records.settings,'nyquist_zone_hw');
+end
+if isfield(records,'settings') && isfield(records.settings,'nyquist_zone')
+  warning('Old records.settings format with "settings.nyquist_zone" field found in records file. Updating format.');
+  records.nyquist_zone_sig = records.settings.nyquist_zone;
+  records.settings = rmfield(records.settings,'nyquist_zone');
 end
 if isfield(records.param_records,'vectors')
   warning('Old parameter format with "vectors" field found in records file. Updating format.');
@@ -135,6 +144,22 @@ if any(strcmpi(param.radar_name,{'accum2','mcrds'}))
   records.gps_source = gps.gps_source;
 else
   % Determine time offset delta and apply to radar time
+  if ~isfinite(param.records.gps.time_offset)
+    warning('param.records.gps.time_offset must be finite. Trying to load value from spreadsheet.');
+    try
+      new_param = read_param_xls(param);
+      param.records.gps.time_offset = new_param.records.gps.time_offset;
+    catch ME
+      error('param.records.gps.time_offset must be finite. Call records_update with a finite value.');
+    end
+    if ~isfinite(param.records.gps.time_offset)
+      error('param.records.gps.time_offset must be finite. Call records_update with a finite value.');
+    end
+  end
+  if ~isfinite(records.param_records.records.gps.time_offset)
+    warning('records.param_records.records.gps.time_offset must be finite. Assuming that it is equal to param.records.gps.time_offset.');
+    records.param_records.records.gps.time_offset = param.records.gps.time_offset;
+  end
   delta_offset = max(param.records.gps.time_offset) - max(records.param_records.records.gps.time_offset);
   records.param_records.records.gps.time_offset = param.records.gps.time_offset;
   records.gps_time = records.gps_time + delta_offset;
@@ -156,17 +181,21 @@ if isfield(records,'surface')
   records = rmfield(records,'surface');
 end
 
-if save_changes
-  % Save outputs
-  fprintf('  Saving records %s\n', records_fn);
-  if param.ct_file_lock
-    records.file_version = '1L';
-  else
-    records.file_version = '1';
-  end
-  records.file_type = 'records';
-  ct_save(records_fn,'-v7.3','-struct','records');
-  records_aux_files_create(records_fn);
+%% Save outputs
+fprintf('  Saving records %s\n', records_fn);
+if isfield(param,'ct_file_lock') && param.ct_file_lock
+  records.file_version = '1L';
 else
-  fprintf('  Not saving information (TEST MODE)\n');
+  records.file_version = '1';
+end
+records.file_type = 'records';
+ct_save(records_fn,'-v7.3','-struct','records');
+
+%% Update reference trajectory
+ref_fn_dir = ct_filename_out(param,'reference_trajectory','',1);
+ref_fn = fullfile(ref_fn_dir,sprintf('ref_%s.mat', param.day_seg));
+% Only update the file if it exists
+if exist(ref_fn,'file')
+  fprintf('  Updating reference trajectory %s\n', ref_fn);
+  records_reference_trajectory(param,param_override);
 end

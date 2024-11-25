@@ -126,21 +126,17 @@ elseif param.type == 4 || param.type == 5
   % ==================================================================
   % Leverarm and attitude compensation
   % ==================================================================
-
-  % For readability we change the units of lat/lon from degrees to radians
-  lat = lat/180*pi;
-  lon = lon/180*pi;
   
   % -----------------------------------------------
   % Create flight coordinate system
   
   % Determine local up vector at starting point
-  physical_constants;
-  [x_ecef,y_ecef,z_ecef] = geodetic2ecef(lat,lon,elev,WGS84.ellipsoid);
-  [x_local,y_local,z_local] = ecef2lv(x_ecef([1 end]),y_ecef([1 end]),z_ecef([1 end]), ...
-    lat(1),lon(1),elev(1),WGS84.ellipsoid);
-  [x_ecef_up,y_ecef_up,z_ecef_up] = lv2ecef(x_local(1),y_local(1),z_local(1)+1, ...
-    lat(1),lon(1),elev(1),WGS84.ellipsoid);
+  physical_constants; % Load WGS84.spheroid
+  [x_ecef,y_ecef,z_ecef] = geodetic2ecef(WGS84.spheroid,lat,lon,elev);
+  [x_local,y_local,z_local] = ecef2enu(x_ecef([1 end]),y_ecef([1 end]),z_ecef([1 end]), ...
+    lat(1),lon(1),elev(1),WGS84.spheroid);
+  [x_ecef_up,y_ecef_up,z_ecef_up] = enu2ecef(x_local(1),y_local(1),z_local(1)+1, ...
+    lat(1),lon(1),elev(1),WGS84.spheroid);
   local_up = [x_ecef_up-x_ecef(1); y_ecef_up-y_ecef(1); z_ecef_up-z_ecef(1)];
   local_up = local_up / sqrt(dot(local_up,local_up));
   % origin
@@ -191,8 +187,8 @@ elseif param.type == 4 || param.type == 5
       % Assume that flightpath is ideal straight-line and only correct
       % for attitude (ECEF)
       [mid_phase_center(1,1),mid_phase_center(2,1),mid_phase_center(3,1)] ...
-        = lv2ecef(mid_phase_center(2),mid_phase_center(1),-mid_phase_center(3), ...
-        lat(rline),lon(rline),elev(rline),WGS84.ellipsoid);
+        = enu2ecef(mid_phase_center(2),mid_phase_center(1),-mid_phase_center(3), ...
+        lat(rline),lon(rline),elev(rline),WGS84.spheroid);
     else
       % Determine ideal straight-line flight path phase center position
       % (ECEF)
@@ -200,18 +196,18 @@ elseif param.type == 4 || param.type == 5
         [x_ecef(rline) - fcs_origin(1); y_ecef(rline) - fcs_origin(2); z_ecef(rline) - fcs_origin(3)]);
       % Convert from ECEF to Geodetic
       [ideal(1,rline),ideal(2,rline),ideal(3,rline)] ...
-        = ecef2geodetic(ideal(1,rline),ideal(2,rline),ideal(3,rline),WGS84.ellipsoid);
+        = ecef2geodetic(WGS84.spheroid, ideal(1,rline),ideal(2,rline),ideal(3,rline));
       % Determine mid_phase_center offset from ideal trajectory (ECEF)
       [mid_phase_center(1),mid_phase_center(2),mid_phase_center(3)] ...
-        = lv2ecef(mid_phase_center(2),mid_phase_center(1),-mid_phase_center(3), ...
-        ideal(1,rline),ideal(2,rline),ideal(3,rline),WGS84.ellipsoid);
+        = enu2ecef(mid_phase_center(2),mid_phase_center(1),-mid_phase_center(3), ...
+        ideal(1,rline),ideal(2,rline),ideal(3,rline),WGS84.spheroid);
       ideal(:,rline) = mid_phase_center;
     end
     
     % Convert from NED to ECEF
     [phase_center(1),phase_center(2),phase_center(3)] ...
-      = lv2ecef(phase_center(2),phase_center(1),-phase_center(3), ...
-      lat(rline),lon(rline),elev(rline),WGS84.ellipsoid);
+      = enu2ecef(phase_center(2),phase_center(1),-phase_center(3), ...
+      lat(rline),lon(rline),elev(rline),WGS84.spheroid);
     
     % Determine offset in ECEF coordinate system
     phase_center = mid_phase_center - phase_center;
@@ -228,9 +224,7 @@ else
 end
 
 if param.type == 5
-  [ideal(1,:),ideal(2,:),ideal(3,:)] = ecef2geodetic(ideal(1,:),ideal(2,:),ideal(3,:),WGS84.ellipsoid);
-  ideal(1,:) = ideal(1,:)*180/pi;
-  ideal(2,:) = ideal(2,:)*180/pi;
+  [ideal(1,:),ideal(2,:),ideal(3,:)] = ecef2geodetic(WGS84.spheroid,ideal(1,:),ideal(2,:),ideal(3,:));
 end
 
 return;

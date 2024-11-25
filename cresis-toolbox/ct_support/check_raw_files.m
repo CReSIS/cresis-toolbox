@@ -66,7 +66,7 @@ end
 
 records_fn = ct_filename_support(param,'','records');
 if exist(records_fn,'file')
-  records = load(records_fn);
+  records = records_load(param);
 else
   records = [];
 end

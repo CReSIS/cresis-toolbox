@@ -8,7 +8,7 @@
 % 3. Outputs a CSV file with mass conservation, radar parameters, and
 %    best-fit radar thickness [NOT DONE YET]
 %
-% Authors: John Paden, Levi Sedlock
+% Authors: John Paden, Levi Sedlock, Leigh Stearns
 
 %% User Settings
 

@@ -25,6 +25,8 @@ elseif strcmpi(param.config.daq_type,'utua')
   success = preprocess_task_utua(param);
 elseif strcmpi(param.config.daq_type,'bas')
   success = preprocess_task_bas(param);
+elseif strcmpi(param.config.daq_type,'utig')
+  success = preprocess_task_utig(param);
 else
   error('Invalid param.config.daq_type %s\n', param.config.daq_type);
 end

@@ -52,6 +52,6 @@ if param.load.combine_rx
   %% Combine images into a single image
   % =========================================================================
   for img = 1:length(param.load.imgs)
-    data{img} = mean(data{img},3);
+    data{img} = nanmean(data{img},3);
   end
 end

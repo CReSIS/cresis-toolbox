@@ -22,7 +22,9 @@ function ctrl_chain = sar(param,param_override)
 
 %% General Setup
 % =====================================================================
-param = merge_structs(param, param_override);
+if exist('param_override','var')
+  param = merge_structs(param, param_override);
+end
 
 fprintf('=====================================================================\n');
 fprintf('%s: %s (%s)\n', mfilename, param.day_seg, datestr(now));
@@ -49,8 +51,9 @@ if length(valid_frms) ~= length(param.cmd.frms)
 end
 
 if ~isfield(param.sar,'bit_mask') || isempty(param.sar.bit_mask)
-  % Remove bad records (bit_mask==1) and stationary records (bit_mask==2)
-  param.sar.bit_mask = 3;
+  % Remove bad records (bit_mask==1), remove stationary records
+  % (bit_mask==2), and remove bad records (bit_mask==4)
+  param.sar.bit_mask = 1 + 2 + 4;
 end
 
 if ~isfield(param.sar,'combine_rx') || isempty(param.sar.combine_rx)
@@ -292,8 +295,8 @@ if ~exist(sar_fn,'file') ...
   sparam.cpu_time = 60 + Nx*cpu_time_mult;
   records_var = whos('records');
   sparam.mem = 250e6 + records_var.bytes*mem_mult;
-  sparam.notes = sprintf('%s:%s:%s %s', ...
-    sparam.task_function, param.radar_name, param.season_name, param.day_seg);
+  sparam.notes = sprintf('%s %s:%s:%s %s', ...
+    sparam.task_function, param.sar.out_path, param.radar_name, param.season_name, param.day_seg);
     
   % Create success condition
   success_error = 64;
@@ -390,7 +393,7 @@ else
       for wf_adc = 1:size(param.sar.imgs{img},1)
         wf = param.sar.imgs{img}(wf_adc,1);
         adc = param.sar.imgs{img}(wf_adc,2);
-        [board,board_idx,profile] = wf_adc_to_board(param,[wf adc]);
+        [board,board_idx,~] = wf_adc_to_board(param,[wf adc]);
         
         if length(imgs_list) < board_idx
           imgs_list{board_idx} = {};
@@ -509,6 +512,7 @@ for frm_idx = 1:length(param.cmd.frms)
   % Estimate number of input range lines per chunk
   num_rlines_per_chunk = round((stop_rec-start_rec) / num_chunks);
   
+  cur_rec = start_rec;
   for chunk_idx = 1:num_chunks
     % Setup dynamic params
     % =====================================================================
@@ -520,6 +524,14 @@ for frm_idx = 1:length(param.cmd.frms)
     else
       dparam.argsin{1}.load.recs = start_rec + num_rlines_per_chunk*(chunk_idx-1) + [0, num_rlines_per_chunk-1];
     end
+    if chunk_idx == num_chunks
+      dparam.argsin{1}.load.recs = [cur_rec, stop_rec];
+    else
+      dparam.argsin{1}.load.recs = cur_rec-1+[find(along_track_approx(cur_rec:end)-along_track_approx(start_rec) >= (chunk_idx-1)*param.sar.chunk_len,1), ...
+        find(along_track_approx(cur_rec:end)-along_track_approx(start_rec) < chunk_idx*param.sar.chunk_len,1,'last')];
+    end
+    dparam.argsin{1}.load.recs
+    cur_rec = dparam.argsin{1}.load.recs(2)+1;
     
     for imgs_idx = 1:length(imgs_list)
       if isempty(imgs_list{imgs_idx})
@@ -601,8 +613,8 @@ for frm_idx = 1:length(param.cmd.frms)
       
       % Rerun only mode: Test to see if we need to run this task
       % =================================================================
-      dparam.notes = sprintf('%s:%s:%s %s_%03d (%d of %d)/%d of %d %s %.0f to %.0f recs', ...
-        sparam.task_function, param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
+      dparam.notes = sprintf('%s %s:%s:%s %s_%03d (%d of %d)/%d of %d %s %.0f to %.0f recs', ...
+        sparam.task_function, param.sar.out_path, param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
         chunk_idx, num_chunks, wf_adc_str, (dparam.argsin{1}.load.recs(1)-1)*param.sar.presums+1, ...
         dparam.argsin{1}.load.recs(2)*param.sar.presums);
       if ctrl.cluster.rerun_only
@@ -685,8 +697,8 @@ for frm_idx = 1:length(param.cmd.frms)
           wf = tmp_dparam.argsin{1}.load.imgs{1}(1,1);
           adc = tmp_dparam.argsin{1}.load.imgs{1}(1,2);
           wf_adc_str = sprintf('%d,%d', wf, adc);
-          tmp_dparam.notes = sprintf('%s:%s:%s %s_%03d (%d of %d)/%d of %d %s %.0f to %.0f recs', ...
-            sparam.task_function, param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
+          tmp_dparam.notes = sprintf('%s %s:%s:%s %s_%03d (%d of %d)/%d of %d %s %.0f to %.0f recs', ...
+            sparam.task_function, param.sar.out_path, param.radar_name, param.season_name, param.day_seg, frm, frm_idx, length(param.cmd.frms), ...
             chunk_idx, num_chunks, wf_adc_str, (dparam.argsin{1}.load.recs(1)-1)*param.sar.presums+1, ...
             dparam.argsin{1}.load.recs(2)*param.sar.presums);
           

@@ -45,8 +45,13 @@ if isempty(fn)
   else
     % Generate the default filename
     [tmp name ext] = fileparts(filename);
-    fn = fullfile(param.ct_tmp_path, type, output_dir, ...
-      param.season_name, sprintf('%s_%s%s', name, param.day_seg, ext));
+    if isempty(name) && isempty(ext)
+      fn = fullfile(param.ct_tmp_path, type, output_dir, ...
+        param.season_name, param.day_seg);
+    else
+      fn = fullfile(param.ct_tmp_path, type, output_dir, ...
+        param.season_name, sprintf('%s_%s%s', name, param.day_seg, ext));
+    end
   end
 elseif fn(1) == filesep || (ispc && (~isempty(strfind(fn,':\')) || ~isempty(strfind(fn,':/'))))
   % This is already an absolute path
