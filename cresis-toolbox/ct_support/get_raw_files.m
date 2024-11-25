@@ -1,4 +1,4 @@
-function [load_info,gps_time,recs] = get_raw_files(param,frm_id,imgs,rec_range,rec_range_type,out_dir)
+function [load_info,gps_time,recs] = get_raw_files(param,frm_id,imgs,rec_range,rec_range_type,out_dir,tape_list, small_file_archives)
 % [load_info,gps_time,recs]= get_raw_files(param,frm_id,imgs,rec_range,rec_range_type)
 %
 % Get a list of raw data filenames for particular frames and images or
@@ -41,12 +41,28 @@ function [load_info,gps_time,recs] = get_raw_files(param,frm_id,imgs,rec_range,r
 % out_dir: Optional. May be left empty or not defined. Specifies an output
 % directory to copy raw files to.
 %
+% tape_list: The name of a file containing mappings between files and tapes.
+% Or a matrix containing this mapping. The matrix must be presorted, formatted
+% in the same manner as is done at the TAPE_LIST SORT comment below. See run_get_raw_files.
+% If provided and not empty, load_info will contain a field, tapes,
+% containing the name of the tape each corresponding file is present in as
+% well as a field, stored_filenames, with the name of the file on the tape.
+%
+% small_file_archives: A mapping between directories and the name of the
+% corresponding small file archive. See run_get_raw_files.
+%
 % Outputs
 % =========================================================================
 %
 % load_info: struct with file information for the range of data specified
 %
 %  .filenames: cell array of cells which contain the raw data filenames
+%
+%  .tapes: cell array of tapes corresponding to the filenames when
+%  tape_list is given
+%
+%  .stored_filenames: cell array of filenames on tapes corresponding to the
+%  filenames array when tape_list is given
 %
 %  .file_idx: cell array of integers which specify an index into .filenames
 %  for each record
@@ -122,6 +138,14 @@ end
 global gRadar;
 param = merge_structs(gRadar,param);
 
+for wf = 1:length(param.radar.wfs)
+  if isfield(param.radar.wfs(wf),'rx_paths') && ~isempty(param.radar.wfs(wf).rx_paths)
+    param.radar.wfs(wf).rx_paths   = param.radar.wfs(wf).rx_paths;
+  else
+    param.radar.wfs(wf).rx_paths   = 1;
+  end
+end
+
 % Populate imgs cell array with all wf-adc pairs if not specified
 if ~exist('imgs','var') || isempty(imgs)
   for wf = 1:length(param.radar.wfs)
@@ -170,7 +194,7 @@ if exist('rec_range','var') && ~isempty(rec_range)
 
 else
   % Use the provided frame ID to determine the records to get
-  
+
   param.cmd.frms = frm;
   frms = frames_param_cmd_frms(param,frames);
   recs = false(size(records.gps_time));
@@ -214,3 +238,103 @@ for idx = 1:length(load_info.filenames)
   end
 end
 
+%% Find Tape Locations
+% Determine the tape in which each file is present from the given tape_list
+
+% TAPE_LIST SORT
+if exist('tape_list', 'var') && ~isempty(tape_list) && size(tape_list, 1) == 1
+  % Given a string as input, load the matrix
+  tape_list = readmatrix(tape_list, 'Delimiter', ' ', 'OutputType', 'string');
+  [~, file, ext] = fileparts(tape_list(:, 2));
+  tape_list = [tape_list file + ext];
+  tape_list = sortrows(tape_list, 3);
+end
+
+if exist('tape_list', 'var') && ~isempty(tape_list) && size(tape_list, 1) > 1
+
+  % SMALL_FILE_ARCHIVES CONSTRUCTION
+  % Map directories to the corresponding small file archives
+  if ~exist('small_file_archives', 'var') || isempty(small_file_archives)
+    small_file_archives = string();
+    for file_idx = 1:size(tape_list, 1)
+        filepath = tape_list{file_idx, 2};
+        tapes = tape_list(file_idx, 1);
+        if endsWith(filepath, "small_file_archive.tar")
+            [parent, file_name, ext] = fileparts(filepath);
+            file_name = [file_name ext];
+            archive_idx = size(small_file_archives, 1) + 1;
+            small_file_archives(archive_idx, 1) = tapes;
+            small_file_archives(archive_idx, 2) = convertCharsToStrings(parent);
+            small_file_archives(archive_idx, 3) = convertCharsToStrings(file_name);
+        end
+    end
+    small_file_archives = sortrows(small_file_archives, 2);
+  end
+
+  % We have a matrix of tape locations, match to filenames
+
+  load_info.stored_filenames = {};
+  load_info.tapes = {};
+  for filename_group_idx=1:length(load_info.filenames)
+    filename_group = load_info.filenames{filename_group_idx};
+    load_info.stored_filenames{filename_group_idx} = {};
+    load_info.tapes{filename_group_idx} = {};
+
+    for filename_idx=1:length(filename_group)
+      filepath = filename_group{filename_idx};
+      [~, file, ext] = fileparts(filepath);
+      filename = [file ext];
+
+      % Perform binary search to find filename in sorted tape_list
+      [lia, locb] = ismember(filename, tape_list(:, 3));
+
+      if ~lia
+        load_info.stored_filenames{filename_group_idx}{filename_idx} = nan;
+        load_info.tapes{filename_group_idx}{filename_idx} = nan;
+      else
+
+        % Check if next file in list has same filename and warn user that a duplicate exists
+        if strcmp(tape_list{locb + 1, 3}, filename)
+          disp 'duplicate filenames in tape_list';
+          keyboard;
+        end
+        load_info.stored_filenames{filename_group_idx}{filename_idx} = tape_list{locb, 2};
+        load_info.tapes{filename_group_idx}{filename_idx} = tape_list{locb, 1};
+      end
+    end
+
+    % Find corresponding small_file_archive
+    filepath = load_info.stored_filenames{filename_group_idx}{1};  % All files in group should have same parent
+    while true
+      % Iterate up the file path and see if any directory is in the small_file_archives mapping
+      [filepath, ~, ~] = fileparts(filepath);
+      if strcmp(filepath, "/")
+        break;
+      end
+      [~, locb] = ismember(convertCharsToStrings(filepath), small_file_archives(:, 2));
+      if locb ~= 0
+        load_info.stored_filenames{filename_group_idx}{end + 1} = fullfile(small_file_archives{locb, 2}, small_file_archives{locb, 3});
+        load_info.tapes{filename_group_idx}{end + 1} = small_file_archives{locb, 1};
+
+        % Find original path
+        [~, parent , ~] = fileparts(small_file_archives{locb, 2});
+        original_path = filename_group{filename_idx};
+        found = false;
+        while ~found
+          [original_path, ~, ~] = fileparts(original_path);
+          if endsWith(original_path, parent)
+            found = true;
+            break;
+          end
+        end
+        if ~found
+          % Original path could not be determined
+          original_path = nan;
+        end
+        load_info.filenames{filename_group_idx}{end + 1} = fullfile(original_path, small_file_archives{locb, 3});
+
+        break;
+      end
+    end
+  end
+end
