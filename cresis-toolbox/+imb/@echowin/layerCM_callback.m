@@ -252,6 +252,8 @@ elseif source == obj.left_panel.layerCM_new || source == obj.left_panel.layerCM_
         end
       end
     end
+  else
+    error('Create new layer in OPS via the prefs window.');
   end
   
 elseif source == obj.left_panel.layerCM_edit
